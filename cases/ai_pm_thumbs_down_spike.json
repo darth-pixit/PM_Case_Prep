@@ -1,0 +1,41 @@
+{
+  "id": "ai-pm-thumbs-down-spike",
+  "archetype": "ai-pm",
+  "company_persona": "a consumer AI writing assistant",
+  "interviewer_name": "Maya",
+  "title": "The thumbs-down spike",
+  "type": "execution",
+  "prompt": "You're a PM on Quill, an AI writing assistant that drafts emails, blog posts, and code comments. Over the last week, the thumbs-down rate on generated drafts jumped from about 4% to about 9%. Leadership wants to know what's going on and what you'd do about it. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "onset": "The spike started 3 days ago, not gradually — it was a step change.",
+    "segment_usecase": "It's concentrated in the 'email' use case. Blog and code drafts are unchanged.",
+    "segment_cohort": "Thumbs-down for users on model version v4.2 is ~14%; users still on v4.1 are ~4%.",
+    "release": "A new model version, v4.2, shipped 3 days ago to 50% of users as an A/B test.",
+    "instrumentation": "No logging or metric-definition changes were made in this period.",
+    "latency": "p95 latency on v4.2 is ~400ms higher than v4.1.",
+    "volume": "Overall usage volume is flat; no traffic-mix change.",
+    "pricing_ui": "No pricing or UI changes shipped in this window.",
+    "external": "No known competitor launch or seasonality effect."
+  },
+  "ideal_answer_notes": [
+    "Define the metric precisely first: what counts as a thumbs-down, per draft vs per session, and over what denominator.",
+    "Characterize the pattern before hypothesizing: sudden step change (points at a release/experiment, not seasonality), and check whether it's segment-wide or isolated.",
+    "Segment aggressively — by use case (email vs blog vs code), by model arm (v4.1 vs v4.2), by platform/geo. The email + v4.2 concentration is the key signal.",
+    "Split causes MECE into internal (a release/experiment like v4.2, instrumentation bug, metric-definition change, pricing/UX change) vs external (seasonality, competitor, macro).",
+    "Use process of elimination, not a question dump: instrumentation unchanged, volume flat, no UI/pricing change -> internal release is the leading suspect.",
+    "Confirm via the A/B arm comparison (14% vs 4%) rather than declaring the cause — this is the experiment already running.",
+    "AI-specific: treat thumbs-down as a quality/guardrail metric; consider an eval-set regression, a tone/hallucination change in v4.2, and the quality-vs-latency tradeoff (v4.2 is slower AND worse here).",
+    "Short-term mitigation: roll back or hold v4.2 for the email use case; add thumbs-down and latency as launch-gate guardrail metrics.",
+    "Longer term: add a pre-launch eval suite segmented by use case so a regression like this is caught before a 50% rollout."
+  ],
+  "extra_checklist": [
+    "Isolates the regression to the v4.2 model arm using the running A/B rather than guessing",
+    "Frames thumbs-down as a model-quality guardrail and asks about recent model/version changes early",
+    "Recognizes v4.2 is worse on BOTH quality and latency (a real model tradeoff, not just a bug)"
+  ],
+  "anchors": {
+    "strong": "Defines the metric, immediately asks about recent releases and segments by use case and model arm, isolates it to email on v4.2 via the running experiment, proposes a rollback + guardrail metrics, and calls out the missing pre-launch eval suite — all as a structured elimination, not a guess.",
+    "at_bar": "Structures internal-vs-external causes and gets to 'a recent model change' with a couple of nudges, segments partially, and proposes a reasonable next step, but doesn't fully exploit the A/B arm or the eval/latency angle without prompting.",
+    "weak": "Jumps straight to hypotheses ('maybe the prompt is bad', 'users are pickier') without defining the metric, doesn't segment, dumps a list of possible causes without a way to confirm any, and never asks whether anything shipped."
+  }
+}
