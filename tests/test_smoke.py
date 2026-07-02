@@ -95,6 +95,43 @@ def test_transcribe_reports_missing_key(monkeypatch=None):
             os.environ["DEEPGRAM_API_KEY"] = saved
 
 
+def test_delivery_metrics():
+    from pmcaseprep.delivery import DeliveryTracker, Word, turn_metrics
+
+    # 4 words over 2.0s -> 120 wpm; one 1.0s pause; one hard filler ("um").
+    words = [
+        Word("So", 0.0, 0.3),
+        Word("um", 0.4, 0.6),
+        Word("retention", 1.6, 2.0),  # 1.0s gap before this word = a pause
+        Word("dropped", 2.0, 2.0),
+    ]
+    m = turn_metrics(words)
+    assert m["words"] == 4
+    assert m["core_fillers"] == 1  # "um"
+    assert m["soft_fillers"] == 1  # "So"
+    assert m["pause_count"] == 1
+    assert m["longest_pause_s"] >= 1.0
+
+    tracker = DeliveryTracker()
+    snap = tracker.add_turn(words)
+    assert snap["words"] == 4
+    assert snap["filler_rate_per_100"] == 50.0  # 2 fillers / 4 words * 100
+    assert "wpm" in tracker.summary_text().lower() or "words" in tracker.summary_text().lower()
+
+
+def test_web_app_imports():
+    # Skip cleanly if web/runtime deps aren't installed in this environment.
+    try:
+        from pmcaseprep.web import app as webapp
+    except ImportError as exc:
+        print(f"  (skipped test_web_app_imports — missing dep: {exc.name})")
+        return
+    assert webapp.app is not None
+    assert (webapp.STATIC_DIR / "index.html").exists()
+    for f in ("index.html", "app.js", "worklet.js", "styles.css"):
+        assert (webapp.STATIC_DIR / f).exists(), f"missing static file {f}"
+
+
 def test_weighted_result_is_deterministic():
     case = load_case(default_case_path())
     card = ScoreCard(

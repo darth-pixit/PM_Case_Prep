@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PM Case Prep</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header>
+    <h1>PM Case Prep</h1>
+    <div id="status" class="status">connecting…</div>
+  </header>
+
+  <main>
+    <section class="col conversation-col">
+      <div id="case" class="case-card">
+        <div class="case-meta"><span id="caseArchetype"></span></div>
+        <h2 id="caseTitle">Loading case…</h2>
+        <p id="casePrompt"></p>
+      </div>
+
+      <div id="log" class="log" aria-live="polite"></div>
+
+      <div id="partial" class="partial" hidden></div>
+
+      <div class="composer">
+        <textarea id="textInput" rows="2"
+          placeholder="Type your thinking… (or just talk — the mic is always on)"></textarea>
+        <div class="composer-actions">
+          <button id="sendBtn">Send</button>
+          <button id="micBtn" class="toggle">🎤 Mic: on</button>
+          <button id="hintBtn" class="ghost">Hint</button>
+          <button id="doneBtn" class="ghost">Done &amp; grade</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="col meters-col">
+      <h3>Delivery (live)</h3>
+      <div class="meters">
+        <div class="meter"><span class="k">Pace</span><span id="mWpm" class="v">–</span><span class="u">wpm</span></div>
+        <div class="meter"><span class="k">Words</span><span id="mWords" class="v">0</span></div>
+        <div class="meter"><span class="k">Fillers /100</span><span id="mFiller" class="v">0</span></div>
+        <div class="meter"><span class="k">Hard fillers</span><span id="mCore" class="v">0</span></div>
+        <div class="meter"><span class="k">Pauses</span><span id="mPauses" class="v">0</span></div>
+        <div class="meter"><span class="k">Longest pause</span><span id="mLongest" class="v">0.0</span><span class="u">s</span></div>
+      </div>
+      <p class="hint-text">Pace 140–160 wpm reads as calm and clear. The scorecard fuses this with your reasoning.</p>
+    </aside>
+  </main>
+
+  <div id="scorecard" class="scorecard" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

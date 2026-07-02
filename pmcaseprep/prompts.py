@@ -82,12 +82,18 @@ Method:
 6. Decide the overall band. Gate rule: if ANY dimension is <=2, the band is at
    best "no_hire".
 
+If a DELIVERY summary is provided (pace, pauses, filler words), factor it into
+the Communication dimension and you may cite it in the top improvement (e.g. a
+strong analysis buried under rambling or filler is a Communication ceiling).
+
 Every justification must reference something the candidate actually said. Do not
 reward padding or adjectives; reward defensible reasoning and explicit tradeoffs.
 """
 
 
-def build_grader_input(case: Case, transcript: str, observations_text: str) -> str:
+def build_grader_input(
+    case: Case, transcript: str, observations_text: str, delivery_summary: str = ""
+) -> str:
     checklist = CATEGORY_CHECKLISTS.get(case.type, [])
     checklist_lines = "\n".join(f"- {c}" for c in checklist + case.extra_checklist)
     ideal = "\n".join(f"- {n}" for n in case.ideal_answer_notes) or "- (none provided)"
@@ -114,6 +120,9 @@ CALIBRATION ANCHORS:
 
 INTERVIEWER'S PRIVATE OBSERVATIONS (logged live during the case):
 {observations_text or "(none logged)"}
+
+DELIVERY SUMMARY (spoken-answer analytics, if any):
+{delivery_summary or "(text-only session — no delivery data)"}
 
 FULL TRANSCRIPT:
 {transcript}

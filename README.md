@@ -4,9 +4,10 @@ An AI-first **product-manager case-interview tutor** — the counterpart to the 
 consulting-case tools (casewithai / casestudyprep / mbb.ai), built for the open-ended
 world of PM cases where there is no single right answer.
 
-This repo is a **runnable prototype scaffold** of the core loop. It implements the
-reasoning and grading end-to-end today; voice and whiteboard input are marked as
-seams (see [Roadmap](#roadmap)).
+This repo is a **runnable prototype** of the core loop. Two ways to run it: a text
+CLI, and a **live web app** with an always-on mic, live transcript, delivery
+meters (pace/pauses/fillers), and simultaneous typing. Spoken feedback (TTS) is
+the remaining voice piece (see [Roadmap](#roadmap)).
 
 ```
 clarify  ->  solve (candidate drives)  ->  graduated hints on demand
@@ -66,10 +67,57 @@ Offline wiring check (no API key needed):
 python -m pytest -q        # or: python tests/test_smoke.py
 ```
 
-## Voice & photo input
+## Live web app (voice + delivery + typing) — recommended
 
-The CLI announces the available input modes at the start of every case. You can
-answer three ways:
+The web app is the real surface: an **always-on mic**, a **live transcript**,
+**live delivery meters** (pace, pauses, filler rate), and a **text box that works
+at the same time** — type or talk, both feed one conversation. It reuses the same
+interviewer, grader, and skill graph as the CLI, and the final scorecard **fuses
+delivery (how you speak) with substance (the rubric)**.
+
+```bash
+pip install -r requirements.txt      # now includes fastapi / uvicorn / websockets
+# .env needs ANTHROPIC_API_KEY (required) and DEEPGRAM_API_KEY (for voice)
+python run_web.py
+# then open http://127.0.0.1:8000 in Chrome
+```
+
+- **Use Chrome** and allow the mic when prompted. `localhost` is a secure context,
+  so the mic works over plain http locally — no HTTPS needed for dev.
+- Voice uses **Deepgram streaming (Turn-based / endpointing)**: it transcribes live
+  *and* detects when you finish a thought, so Maya knows when to respond.
+- No Deepgram key? The app still runs — typing works, voice is just disabled.
+- Click **Done & grade** for the fused scorecard + your delivery summary.
+
+```
+browser mic ──audio──▶ FastAPI ──▶ Deepgram (live transcript + word timings)
+     │                    │                      │
+   text box ──────────────┤               delivery metrics
+                          ▼
+            Interviewer ─▶ Grader (rubric + delivery) ─▶ Skill graph
+```
+
+Files: `pmcaseprep/web/app.py` (backend + one WebSocket per session),
+`web/deepgram_live.py` (streaming client), `web/static/*` (the browser UI),
+`delivery.py` (pace/pause/filler metrics — pure and unit-tested).
+
+## Going online
+
+Nothing here is local-only by design — deploying is running the same app:
+
+- It's a standard FastAPI app (`pmcaseprep.web.app:app`). Host it anywhere that
+  runs Python (Render, Fly.io, Railway, a VM): `uvicorn pmcaseprep.web.app:app`.
+- Set `ANTHROPIC_API_KEY` and `DEEPGRAM_API_KEY` as environment variables on the
+  host — **keys stay server-side; the browser never sees them.**
+- Serve over **HTTPS** (any host provides it). Browsers require a secure context
+  for the mic off `localhost`; the frontend auto-switches to `wss://` on https.
+- The frontend is static; later you can move `web/static/` to a CDN or a separate
+  app pointing at the backend's `/ws` — the protocol doesn't change.
+
+## Voice & photo input (CLI)
+
+The text CLI (`python -m pmcaseprep.cli`) is the quick, no-browser option. It
+announces its input modes at the start of every case — you can answer three ways:
 
 | Mode | How | Key needed |
 |---|---|---|
@@ -118,11 +166,11 @@ wording is original — no copyrighted question/answer text is reproduced.
 
 Marked `# TODO` in the code where relevant:
 
-- **Voice** (your spec): input is wired — **Deepgram STT** via `/voice` and
-  `/record`. Still to do: spoken output (**ElevenLabs/Cartesia TTS**) and a
-  streaming, "feels-live" loop (Pipecat/Vapi/LiveKit). Text output for now.
-- **Whiteboard**: photo input works today (`/photo`, `vision.py`); the interactive
-  annotate-and-send-back canvas is the v2 web-client feature.
+- **Voice** (your spec): live streaming input is wired in the **web app**
+  (Deepgram Turn-based) with live **delivery analytics**. Still to do: spoken
+  output (**ElevenLabs/Cartesia TTS**) so the coach reads the scorecard aloud.
+- **Whiteboard**: photo input works in the CLI (`/photo`); the interactive
+  annotate-and-send-back canvas is the next web-client feature.
 - **Adaptive case selection**: the skill graph flags weak dimensions; wire it to
   pick the next case that drills them.
 - **Company personas**: "Meta Product Sense", "Google Generalist", "Amazon Bar
