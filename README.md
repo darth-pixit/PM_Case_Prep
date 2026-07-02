@@ -66,6 +66,34 @@ Offline wiring check (no API key needed):
 python -m pytest -q        # or: python tests/test_smoke.py
 ```
 
+## Voice & photo input
+
+The CLI announces the available input modes at the start of every case. You can
+answer three ways:
+
+| Mode | How | Key needed |
+|---|---|---|
+| **Type** | Just type and press Enter | — |
+| **Voice** | `/voice <audio-file>` — record on your phone (Voice Memos → `.m4a`) or QuickTime, then point to the file. Or `/record [seconds]` to capture from your mic. | **Deepgram** (speech-to-text) |
+| **Photo** | `/photo <image> [note]` — a whiteboard/sketch photo (funnel, 2×2, metric tree). Tip: drag the file into the terminal to paste its path. | Uses your **Anthropic** key (Claude vision) — nothing extra |
+
+Feedback is text for now (no spoken output yet — that's the TTS roadmap item).
+
+### API keys — what and where
+
+- **Anthropic** (required): reasoning, grading, and photo/whiteboard vision.
+  [console.anthropic.com](https://console.anthropic.com) → Settings → API keys.
+  Put it in `.env` as `ANTHROPIC_API_KEY`.
+- **Deepgram** (only for voice): speech-to-text. Free tier includes ~$200 credit.
+  [console.deepgram.com](https://console.deepgram.com) → API keys. Put it in
+  `.env` as `DEEPGRAM_API_KEY`. Leave it blank and typing/photo still work fully.
+
+`/record` additionally needs `pip install sounddevice numpy` (macOS: `brew install
+portaudio`). `/voice <file>` needs no audio libraries.
+
+> Swapping speech-to-text: `transcribe.py` uses Deepgram over plain HTTPS. Moving
+> to OpenAI Whisper or a local `faster-whisper` model is a small, isolated change.
+
 ## The sample case
 
 `cases/ai_pm_thumbs_down_spike.json` — an **AI-PM execution / root-cause** case
@@ -90,9 +118,10 @@ wording is original — no copyrighted question/answer text is reproduced.
 
 Marked `# TODO` in the code where relevant:
 
-- **Voice** (your spec): cascaded **Deepgram (STT) → Claude → ElevenLabs/Cartesia
-  (TTS)**, orchestrated by Pipecat/Vapi/LiveKit. Turn-based first, streaming later.
-- **Whiteboard**: `vision.py` handles photo input today; the interactive
+- **Voice** (your spec): input is wired — **Deepgram STT** via `/voice` and
+  `/record`. Still to do: spoken output (**ElevenLabs/Cartesia TTS**) and a
+  streaming, "feels-live" loop (Pipecat/Vapi/LiveKit). Text output for now.
+- **Whiteboard**: photo input works today (`/photo`, `vision.py`); the interactive
   annotate-and-send-back canvas is the v2 web-client feature.
 - **Adaptive case selection**: the skill graph flags weak dimensions; wire it to
   pick the next case that drills them.

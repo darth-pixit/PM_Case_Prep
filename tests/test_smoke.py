@@ -57,6 +57,44 @@ def test_prompts_omit_ideal_answer_from_interviewer():
     assert any(v in system for v in case.hidden_facts.values())
 
 
+def test_vision_builds_image_blocks(tmp_path=None):
+    import base64
+
+    from pmcaseprep import vision
+
+    # 1x1 transparent PNG
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    p = Path(__file__).resolve().parent / "_tmp_pixel.png"
+    p.write_bytes(png)
+    try:
+        blocks = vision.image_content(p, "my 2x2")
+        assert blocks[0]["type"] == "image"
+        assert blocks[0]["source"]["media_type"] == "image/png"
+        assert blocks[1] == {"type": "text", "text": "my 2x2"}
+    finally:
+        p.unlink()
+
+
+def test_transcribe_reports_missing_key(monkeypatch=None):
+    import os
+
+    from pmcaseprep import transcribe
+
+    saved = os.environ.pop("DEEPGRAM_API_KEY", None)
+    try:
+        assert transcribe.voice_configured() is False
+        try:
+            transcribe.transcribe("does-not-matter.wav")
+            assert False, "expected TranscriptionError without a key"
+        except transcribe.TranscriptionError:
+            pass
+    finally:
+        if saved is not None:
+            os.environ["DEEPGRAM_API_KEY"] = saved
+
+
 def test_weighted_result_is_deterministic():
     case = load_case(default_case_path())
     card = ScoreCard(

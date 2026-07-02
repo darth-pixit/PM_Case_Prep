@@ -4,3 +4,13 @@
 anthropic>=0.49.0
 pydantic>=2.6
 python-dotenv>=1.0
+
+# Test runner (offline smoke tests). Optional but makes `pytest` work.
+pytest>=8.0
+
+# --- Optional: microphone recording for /record --------------------------
+# Not installed by default (needs system audio libs). To enable /record:
+#   pip install sounddevice numpy      # on macOS also: brew install portaudio
+# Voice input via /voice <file> needs only a DEEPGRAM_API_KEY, not these.
+# sounddevice>=0.4
+# numpy>=1.24

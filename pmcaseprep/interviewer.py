@@ -75,8 +75,13 @@ class Interviewer:
         self.concluded = False
 
     def respond(self, user_text: str) -> str:
-        """Feed one candidate turn; run the tool loop; return the spoken reply."""
-        self.messages.append({"role": "user", "content": user_text})
+        """Feed one text candidate turn; run the tool loop; return the reply."""
+        return self.respond_content(user_text)
+
+    def respond_content(self, content: Any) -> str:
+        """Feed one candidate turn of any shape (text string or content blocks,
+        e.g. an image + text for a whiteboard photo); run the loop; return reply."""
+        self.messages.append({"role": "user", "content": content})
         return self._run_loop()
 
     def _run_loop(self) -> str:
