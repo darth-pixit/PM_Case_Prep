@@ -1,6 +1,8 @@
-// PM Case Prep — browser client. Real-interview feel: always-on mic, no echo of
-// your own words (just a "listening" pulse), interviewer speaks sparingly, no
-// live stats, stable window (only the conversation scrolls).
+// PM Case Prep — browser client. Real-interview feel:
+//  * only the interviewer's LATEST message stays on screen (no chat history),
+//  * a prominent presence indicator shows listening / responding / grading,
+//  * your own words are never echoed,
+//  * always-on mic + simultaneous typing.
 
 const $ = (id) => document.getElementById(id);
 const wsUrl = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "/ws";
@@ -10,33 +12,53 @@ let micOn = false;
 let voiceSupported = false;
 let audioCtx, micStream, workletNode, micSource;
 let ended = false;
-let listenTimer = null;
+let hearTimer = null;
+let currentState = "connecting";
 
-function setStatus(text, cls = "") {
+const STATE_LABELS = {
+  connecting: "connecting…",
+  listening: "Listening — take your time",
+  hearing: "Hearing you…",
+  responding: "Interviewer is responding…",
+  grading: "Grading your case…",
+  error: "problem — see top right",
+  done: "Interview complete",
+  textonly: "Ready (text only — no voice key)",
+};
+
+function setState(state) {
+  currentState = state;
+  const orb = $("orb");
+  orb.className = "orb " + (state === "textonly" || state === "done" ? "listening" : state);
+  $("stateLabel").textContent = STATE_LABELS[state] || state;
+  $("gradingOverlay").hidden = state !== "grading";
+}
+
+function setError(text) {
   const el = $("status");
   el.textContent = text;
-  el.className = "status " + cls;
+  el.className = "status err";
 }
 
-function addMaya(text) {
-  const log = $("log");
-  const div = document.createElement("div");
-  div.className = "msg maya";
-  const who = document.createElement("span");
-  who.className = "who";
-  who.textContent = "Interviewer";
-  div.appendChild(who);
-  div.appendChild(document.createTextNode(text));
-  log.appendChild(div);
-  // Scroll ONLY the log, not the page.
-  log.scrollTop = log.scrollHeight;
+function showMaya(text) {
+  $("mayaText").textContent = text;
+  const box = $("mayaMsg");
+  box.hidden = false;
+  // retrigger the fade-in
+  box.style.animation = "none";
+  void box.offsetWidth;
+  box.style.animation = "";
+  box.scrollTop = 0;
 }
 
-function pulseListening() {
-  const el = $("listening");
-  el.hidden = false;
-  if (listenTimer) clearTimeout(listenTimer);
-  listenTimer = setTimeout(() => { el.hidden = true; }, 1400);
+function pulseHearing() {
+  // Only override the idle state; never mask responding/grading.
+  if (currentState !== "listening" && currentState !== "hearing") return;
+  setState("hearing");
+  if (hearTimer) clearTimeout(hearTimer);
+  hearTimer = setTimeout(() => {
+    if (currentState === "hearing") setState("listening");
+  }, 1200);
 }
 
 // --- WebSocket ---------------------------------------------------------------
@@ -44,11 +66,12 @@ function pulseListening() {
 function connect() {
   ws = new WebSocket(wsUrl);
   ws.binaryType = "arraybuffer";
-  ws.onopen = () => setStatus("connected", "ok");
-  ws.onerror = () => setStatus("connection error", "err");
+  ws.onerror = () => setError("connection error");
   ws.onclose = () => {
-    setStatus("disconnected", "err");
-    if (!ended) $("reconnect").hidden = false; // session dropped mid-interview
+    if (!ended) {
+      setState("error");
+      $("reconnect").hidden = false;
+    }
   };
   ws.onmessage = (ev) => handle(JSON.parse(ev.data));
 }
@@ -59,27 +82,37 @@ function handle(m) {
       $("caseArchetype").textContent = `${m.archetype} · ${m.case_type}`;
       $("caseTitle").textContent = m.title;
       $("casePrompt").textContent = m.prompt;
-      addMaya(m.prompt);
+      showMaya(m.prompt);
       voiceSupported = !!m.voice;
       if (voiceSupported) startMic();
-      else { const b = $("micBtn"); b.textContent = "🎤 voice off (no key)"; b.classList.add("off"); b.disabled = true; }
+      else {
+        const b = $("micBtn");
+        b.textContent = "🎤 voice off (no key)";
+        b.classList.add("off");
+        b.disabled = true;
+        setState("textonly");
+      }
       break;
-    case "listening":
-      pulseListening();
+    case "state":
+      // Voice-off sessions keep their clearer "text only" idle label.
+      if (m.state === "listening" && !voiceSupported) setState("textonly");
+      else setState(m.state);
+      break;
+    case "listening": // audio activity pulse from the server
+      pulseHearing();
       break;
     case "reply":
-      addMaya(m.text);
+      showMaya(m.text);
       break;
     case "status":
-      setStatus(m.text === "grading" ? "grading your case…" : m.text, "ok");
+      if (m.text && m.text.includes("reconnect")) setError(m.text);
       break;
     case "scorecard":
       renderScorecard(m);
       break;
     case "error":
-      setStatus(m.text, "err");
+      setError(m.text);
       break;
-    // Note: we intentionally do NOT render the candidate's own transcript.
   }
 }
 
@@ -89,7 +122,7 @@ function sendText() {
   const t = $("textInput").value.trim();
   if (!t || ended || !ws || ws.readyState !== 1) return;
   ws.send(JSON.stringify({ type: "text", text: t }));
-  $("textInput").value = ""; // you typed it; we don't echo it back
+  $("textInput").value = ""; // your words aren't echoed — like speaking in the room
 }
 
 $("sendBtn").onclick = sendText;
@@ -98,7 +131,11 @@ $("textInput").addEventListener("keydown", (e) => {
 });
 $("hintBtn").onclick = () => { if (ws && ws.readyState === 1 && !ended) ws.send(JSON.stringify({ type: "hint" })); };
 $("doneBtn").onclick = () => {
-  if (ws && ws.readyState === 1 && !ended) { ws.send(JSON.stringify({ type: "done" })); ended = true; setStatus("grading your case…", "ok"); }
+  if (ws && ws.readyState === 1 && !ended) {
+    ws.send(JSON.stringify({ type: "done" }));
+    ended = true;
+    setState("grading");
+  }
 };
 $("micBtn").onclick = () => {
   if (!voiceSupported) return;
@@ -139,7 +176,7 @@ async function startMic() {
     micOn = false;
     $("micBtn").textContent = "🎤 mic blocked";
     $("micBtn").classList.add("off");
-    setStatus("mic permission needed — you can still type", "err");
+    setError("mic permission needed — you can still type");
   }
 }
 
@@ -185,13 +222,14 @@ function renderScorecard(m) {
       <small>(weighted ${m.weighted}/4)</small></h2>
     ${dims}
     <h3>Checklist</h3>${checks}
-    ${flags ? "<h3>Red flags</h3>" + flags : ""}
-    <h3>Top improvement</h3><p>${esc(c.top_improvement)}</p>
+    ${flags ? "<h3>Watch-outs</h3>" + flags : ""}
+    <h3>Your biggest opportunity</h3><p>${esc(c.top_improvement)}</p>
     <h3>Delivery</h3><p>${esc(m.delivery_summary)}</p>
     <p>${esc(c.summary)}</p>
     <h3>Skill graph</h3><pre class="graph">${esc(m.skill_graph)}</pre>`;
+  $("gradingOverlay").hidden = true;
   $("scorecard").hidden = false;
-  setStatus("done", "ok");
+  setState("done");
 }
 
 function esc(s) {
@@ -199,4 +237,5 @@ function esc(s) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+setState("connecting");
 connect();

@@ -185,6 +185,7 @@ async def session_ws(ws: WebSocket) -> None:
             "voice": voice_on,
         }
     )
+    await ws.send_json({"type": "state", "state": "listening"})
 
     turn_queue: asyncio.Queue = asyncio.Queue()
     stop = asyncio.Event()
@@ -255,7 +256,7 @@ async def session_ws(ws: WebSocket) -> None:
     # --- grading + interviewer worker ----------------------------------------
 
     async def do_grade() -> None:
-        await send_json({"type": "status", "text": "grading"})
+        await send_json({"type": "state", "state": "grading"})
         delivery_summary = tracker.summary_text()
         try:
             card = await asyncio.to_thread(
@@ -296,10 +297,12 @@ async def session_ws(ws: WebSocket) -> None:
             text = HINT_PROMPT if item.get("cmd") == "hint" else item.get("text", "")
             if not text.strip():
                 continue
+            await send_json({"type": "state", "state": "responding"})
             try:
                 reply = await asyncio.to_thread(interviewer.respond_content, text)
             except Exception as exc:  # noqa: BLE001
                 await send_json({"type": "error", "text": f"Model error: {exc}"})
+                await send_json({"type": "state", "state": "listening"})
                 continue
             if reply and not _is_silence(reply):
                 await send_json({"type": "reply", "text": reply})
@@ -307,6 +310,7 @@ async def session_ws(ws: WebSocket) -> None:
                 await do_grade()
                 stop.set()
                 break
+            await send_json({"type": "state", "state": "listening"})
 
     worker = asyncio.create_task(interviewer_worker())
     voice = None

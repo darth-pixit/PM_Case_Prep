@@ -9,21 +9,32 @@
 <body>
   <header>
     <h1>PM Case Prep</h1>
-    <span id="listening" class="pill" hidden>listening…</span>
-    <div id="status" class="status">connecting…</div>
+    <div id="status" class="status"></div>
   </header>
 
   <div id="reconnect" class="reconnect" hidden>
     Connection lost. <button id="reloadBtn">Reconnect</button>
   </div>
 
-  <div id="case" class="case-card">
-    <div class="case-meta"><span id="caseArchetype"></span></div>
-    <h2 id="caseTitle">Loading case…</h2>
-    <p id="casePrompt"></p>
-  </div>
+  <main class="stage">
+    <div id="case" class="case-card">
+      <div class="case-meta"><span id="caseArchetype"></span></div>
+      <h2 id="caseTitle">Loading case…</h2>
+      <p id="casePrompt"></p>
+    </div>
 
-  <div id="log" class="log" aria-live="polite"></div>
+    <!-- Prominent presence indicator: listening / responding / grading -->
+    <div id="presence" class="presence">
+      <span id="orb" class="orb connecting"></span>
+      <span id="stateLabel">connecting…</span>
+    </div>
+
+    <!-- Only the interviewer's LATEST message is shown — like a real interview. -->
+    <div id="mayaMsg" class="maya-current" hidden>
+      <span class="who">Interviewer</span>
+      <div id="mayaText"></div>
+    </div>
+  </main>
 
   <div class="composer">
     <textarea id="textInput" rows="2"
@@ -33,6 +44,13 @@
       <button id="micBtn" class="toggle">🎤 Mic: on</button>
       <button id="hintBtn" class="ghost">Ask for a hint</button>
       <button id="doneBtn" class="ghost">Done &amp; grade</button>
+    </div>
+  </div>
+
+  <div id="gradingOverlay" class="grading-overlay" hidden>
+    <div class="grading-box">
+      <span class="orb responding big"></span>
+      <p>Reviewing your full case and preparing your scorecard…</p>
     </div>
   </div>
 
