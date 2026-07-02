@@ -29,12 +29,25 @@
       <span id="stateLabel">connecting…</span>
     </div>
 
-    <!-- Only the interviewer's LATEST message is shown — like a real interview. -->
+    <!-- Only the interviewer's LATEST message is shown — like a real interview.
+         Everything said before is one click away, so an answer can never vanish. -->
     <div id="mayaMsg" class="maya-current" hidden>
-      <span class="who">Interviewer</span>
+      <span class="who">Interviewer
+        <button id="historyBtn" class="linkish" hidden>earlier replies</button>
+      </span>
       <div id="mayaText"></div>
     </div>
   </main>
+
+  <div id="historyPanel" class="history-panel" hidden>
+    <div class="history-card">
+      <div class="history-head">
+        <b>Earlier replies</b> <span class="sub">most recent first</span>
+        <button id="historyClose" class="ghost">Close</button>
+      </div>
+      <div id="historyList"></div>
+    </div>
+  </div>
 
   <div class="composer">
     <textarea id="textInput" rows="2"

@@ -20,7 +20,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import uuid
+from collections import deque
 from pathlib import Path
 from typing import Awaitable, Callable
 
@@ -37,16 +39,22 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..case_loader import default_case_path, load_case
-from ..delivery import DeliveryTracker, Word
+from ..delivery import FILLERS_CORE, DeliveryTracker, Word
 from ..grader import grade, weighted_result
 from ..interviewer import Interviewer
 from ..skill_graph import SkillGraph
 from .deepgram_live import DeepgramLive
 
 MODEL = os.environ.get("PMCP_MODEL", "claude-opus-4-8")
-# Pause length before a spoken turn commits. Generous on purpose: a thinking
-# candidate must never feel interrupted. Tune with PMCP_SILENCE_S.
-SILENCE_S = float(os.environ.get("PMCP_SILENCE_S", "8.0"))
+# Turn-taking is ADAPTIVE. An utterance that addresses the interviewer (a
+# question, "let's move on", "that's my answer") commits after QUESTION_S — you
+# shouldn't wait long for an answer you asked for. Anything else is treated as
+# thinking out loud and gets the patient SILENCE_S window.
+SILENCE_S = float(os.environ.get("PMCP_SILENCE_S", "6.0"))
+QUESTION_S = float(os.environ.get("PMCP_QUESTION_S", "1.5"))
+# Utterances below this Deepgram confidence are treated as noise (keyboard
+# clatter, coughs, background voices) and never become turns.
+MIN_CONFIDENCE = float(os.environ.get("PMCP_MIN_CONFIDENCE", "0.55"))
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HINT_PROMPT = (
     "[The candidate asks for a hint. Give ONE graduated nudge for where they are "
@@ -64,6 +72,38 @@ def _is_silence(reply: str) -> bool:
     if "(listening)" in reply.lower():
         return True
     return "".join(c for c in reply.lower() if c.isalpha()) in ("", "listening")
+
+
+# Signals that the candidate is talking TO the interviewer and expects a fast
+# response, rather than thinking out loud. Deepgram's smart_format adds "?" for
+# question phrasing, which catches most of these on its own.
+_ADDRESS_RE = re.compile(
+    r"(\?\s*$)"
+    r"|^(what|why|how|when|where|who|which|can|could|do|does|did|is|are|was|were|should|would|will)\b"
+    r"|\b(tell me|give me|do we know|do we have|what about|your thoughts|does that make sense"
+    r"|is that (right|fair|correct)|am i right|let'?s move on|i'?m done|i am done"
+    r"|that'?s my (answer|framework|plan|approach)|moving on|next question"
+    r"|any (data|numbers?|info|information)|clarify)\b",
+    re.IGNORECASE,
+)
+
+
+def _addresses_interviewer(text: str) -> bool:
+    return bool(_ADDRESS_RE.search(text.strip()))
+
+
+# Pure disfluencies — an utterance made only of these is a murmur, not a turn.
+_MURMURS = FILLERS_CORE | {"mm", "mhm", "hm", "huh"}
+
+
+def _is_noise(text: str, confidence: float) -> bool:
+    """Keyboard taps, coughs, murmurs, and cross-talk show up as short
+    low-confidence fragments or bare fillers. They must never become turns —
+    each junk turn is a model call that blocks the queue and can trip a
+    spurious reply."""
+    words = [w.lower() for w in re.findall(r"[a-zA-Z']+", text)]
+    real = [w for w in words if len(w) >= 2 and w not in _MURMURS]
+    return confidence < MIN_CONFIDENCE or not real
 
 
 @app.get("/")
@@ -202,6 +242,7 @@ async def session_ws(ws: WebSocket) -> None:
     turn_queue: asyncio.Queue = asyncio.Queue()
     stop = asyncio.Event()
     current_words: list[Word] = []  # words for the in-progress utterance
+    current_conf: list[float] = []  # Deepgram confidence per finalized chunk
     speech_buffer: list[str] = []  # finalized utterances awaiting the silence flush
     flush_task: asyncio.Task | None = None
 
@@ -223,39 +264,44 @@ async def session_ws(ws: WebSocket) -> None:
         if text:
             await turn_queue.put({"source": "voice", "text": text})
 
-    async def _delayed_flush() -> None:
+    async def _delayed_flush(delay: float) -> None:
         try:
-            await asyncio.sleep(SILENCE_S)
+            await asyncio.sleep(delay)
         except asyncio.CancelledError:
             return
         await flush_speech()
 
-    def schedule_flush() -> None:
+    def schedule_flush(delay: float) -> None:
         nonlocal flush_task
         if flush_task is not None and not flush_task.done():
             flush_task.cancel()
-        flush_task = asyncio.create_task(_delayed_flush())
+        flush_task = asyncio.create_task(_delayed_flush(delay))
 
     async def finalize_utterance() -> None:
-        nonlocal current_words
-        if not current_words:
+        nonlocal current_words, current_conf
+        words, confs = current_words, current_conf
+        current_words, current_conf = [], []
+        if not words:
             return
-        tracker.add_turn(current_words)  # metrics only — not shown live
-        text = " ".join(w.text for w in current_words).strip()
-        current_words = []
-        if text:
-            speech_buffer.append(text)
-            schedule_flush()
+        text = " ".join(w.text for w in words).strip()
+        if not text or _is_noise(text, max(confs) if confs else 0.0):
+            return  # background noise — no metrics, no turn, no reply
+        tracker.add_turn(words)  # metrics only — not shown live
+        speech_buffer.append(text)
+        # A question gets answered fast; thinking-out-loud gets patience.
+        schedule_flush(QUESTION_S if _addresses_interviewer(text) else SILENCE_S)
 
     async def handle_dg(evt: dict) -> None:
-        nonlocal current_words
+        nonlocal current_words, current_conf
         etype = evt.get("type")
         if etype == "Results":
             alt = evt.get("channel", {}).get("alternatives", [{}])[0]
             transcript = alt.get("transcript", "")
-            if transcript:
+            conf = float(alt.get("confidence") or 0.0)
+            if len(transcript.strip()) >= 3 and conf >= 0.45:
                 await send_json({"type": "listening"})  # pulse indicator, no words
-            if evt.get("is_final"):
+            if evt.get("is_final") and transcript:
+                current_conf.append(conf)
                 for w in alt.get("words", []):
                     current_words.append(
                         Word(w.get("word", ""), float(w.get("start", 0)), float(w.get("end", 0)))
@@ -298,15 +344,32 @@ async def session_ws(ws: WebSocket) -> None:
         )
 
     async def interviewer_worker() -> None:
+        # Turns can arrive faster than the model answers. Consecutive queued
+        # turns are MERGED into one model call — so asking twice while a reply
+        # is in flight yields one good answer, not a serial backlog of calls.
+        pending: deque = deque()
         while not stop.is_set():
-            item = await turn_queue.get()
+            if not pending:
+                pending.append(await turn_queue.get())
+            while True:
+                try:
+                    pending.append(turn_queue.get_nowait())
+                except asyncio.QueueEmpty:
+                    break
+            item = pending.popleft()
             if item.get("cmd") == "__stop__":
                 break
             if item.get("cmd") == "done":
                 await do_grade()
                 stop.set()
                 break
-            text = HINT_PROMPT if item.get("cmd") == "hint" else item.get("text", "")
+            if item.get("cmd") == "hint":
+                text = HINT_PROMPT
+            else:
+                texts = [item.get("text", "")]
+                while pending and "cmd" not in pending[0]:
+                    texts.append(pending.popleft().get("text", ""))
+                text = "\n".join(t for t in texts if t.strip())
             if not text.strip():
                 continue
             await send_json({"type": "state", "state": "responding"})

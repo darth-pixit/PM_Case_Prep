@@ -91,8 +91,41 @@ header h1 { font-size: 1.05rem; margin: 0; }
   padding: 1rem 1.1rem; white-space: pre-wrap; font-size: 1.02rem;
   animation: fadeIn 0.35s ease;
 }
-.maya-current .who { display: block; font-size: 0.7rem; color: var(--muted); margin-bottom: 0.3rem; }
+.maya-current .who {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem;
+  font-size: 0.7rem; color: var(--muted); margin-bottom: 0.3rem;
+}
 @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+button.linkish {
+  background: none; border: none; padding: 0; font: inherit;
+  color: var(--muted); text-decoration: underline; cursor: pointer;
+}
+button.linkish:hover { color: var(--ink); }
+
+/* --- Earlier replies: read-back without turning the stage into a chat log --- */
+.history-panel {
+  position: fixed; inset: 0; z-index: 18;
+  background: rgba(15, 17, 21, 0.7);
+  display: flex; align-items: center; justify-content: center; padding: 2rem 1rem;
+}
+.history-card {
+  width: 100%; max-width: 640px; max-height: 80vh;
+  display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+}
+.history-head {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.8rem 1rem; border-bottom: 1px solid var(--border);
+}
+.history-head .sub { color: var(--muted); font-size: 0.8rem; }
+.history-head button { margin-left: auto; }
+#historyList { overflow-y: auto; padding: 0.4rem 1rem 0.8rem; }
+.history-item {
+  padding: 0.7rem 0; border-bottom: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+.history-item:last-child { border-bottom: none; }
 
 .composer { flex: 0 0 auto; padding: 0.6rem 1.2rem 0.9rem; border-top: 1px solid var(--border); width: 100%; max-width: 860px; margin: 0 auto; }
 textarea {

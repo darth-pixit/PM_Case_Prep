@@ -43,7 +43,14 @@ function setError(text) {
   el.className = "status err";
 }
 
+// Every reply the interviewer has made, oldest first. The stage still shows only
+// the latest one, but nothing is ever lost — "earlier replies" opens the rest.
+const replyHistory = [];
+
 function showMaya(text) {
+  const prev = $("mayaText").textContent;
+  if (!$("mayaMsg").hidden && prev) replyHistory.push(prev);
+  $("historyBtn").hidden = replyHistory.length === 0;
   $("mayaText").textContent = text;
   const box = $("mayaMsg");
   box.hidden = false;
@@ -53,6 +60,19 @@ function showMaya(text) {
   box.style.animation = "";
   box.scrollTop = 0;
 }
+
+$("historyBtn").onclick = () => {
+  $("historyList").innerHTML = replyHistory
+    .slice()
+    .reverse()
+    .map((t) => `<div class="history-item">${esc(t)}</div>`)
+    .join("");
+  $("historyPanel").hidden = false;
+};
+$("historyClose").onclick = () => { $("historyPanel").hidden = true; };
+$("historyPanel").addEventListener("click", (e) => {
+  if (e.target === $("historyPanel")) $("historyPanel").hidden = true;
+});
 
 // Voice activity only brightens the orb; the label stays "Listening".
 function pulseVoice() {
