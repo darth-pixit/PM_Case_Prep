@@ -11,6 +11,8 @@
   --border: #2a2f3a;
 }
 * { box-sizing: border-box; }
+/* The hidden attribute must always win, even over display:flex rules below. */
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   margin: 0;

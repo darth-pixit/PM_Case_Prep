@@ -82,7 +82,8 @@ function handle(m) {
       $("caseArchetype").textContent = `${m.archetype} · ${m.case_type}`;
       $("caseTitle").textContent = m.title;
       $("casePrompt").textContent = m.prompt;
-      showMaya(m.prompt);
+      // The case card already shows the prompt; the message panel stays hidden
+      // until the interviewer actually says something.
       voiceSupported = !!m.voice;
       if (voiceSupported) startMic();
       else {
