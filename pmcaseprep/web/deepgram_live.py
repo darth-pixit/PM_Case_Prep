@@ -59,6 +59,12 @@ class DeepgramLive:
         if self.ws is not None:
             await self.ws.send(data)
 
+    async def keepalive(self) -> None:
+        """Deepgram closes an idle stream after ~10s of no audio; a periodic
+        KeepAlive holds it open while the candidate is silent/thinking."""
+        if self.ws is not None:
+            await self.ws.send(json.dumps({"type": "KeepAlive"}))
+
     async def finish(self) -> None:
         if self.ws is not None:
             try:

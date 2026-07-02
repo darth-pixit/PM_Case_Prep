@@ -9,46 +9,32 @@
 <body>
   <header>
     <h1>PM Case Prep</h1>
+    <span id="listening" class="pill" hidden>listening…</span>
     <div id="status" class="status">connecting…</div>
   </header>
 
-  <main>
-    <section class="col conversation-col">
-      <div id="case" class="case-card">
-        <div class="case-meta"><span id="caseArchetype"></span></div>
-        <h2 id="caseTitle">Loading case…</h2>
-        <p id="casePrompt"></p>
-      </div>
+  <div id="reconnect" class="reconnect" hidden>
+    Connection lost. <button id="reloadBtn">Reconnect</button>
+  </div>
 
-      <div id="log" class="log" aria-live="polite"></div>
+  <div id="case" class="case-card">
+    <div class="case-meta"><span id="caseArchetype"></span></div>
+    <h2 id="caseTitle">Loading case…</h2>
+    <p id="casePrompt"></p>
+  </div>
 
-      <div id="partial" class="partial" hidden></div>
+  <div id="log" class="log" aria-live="polite"></div>
 
-      <div class="composer">
-        <textarea id="textInput" rows="2"
-          placeholder="Type your thinking… (or just talk — the mic is always on)"></textarea>
-        <div class="composer-actions">
-          <button id="sendBtn">Send</button>
-          <button id="micBtn" class="toggle">🎤 Mic: on</button>
-          <button id="hintBtn" class="ghost">Hint</button>
-          <button id="doneBtn" class="ghost">Done &amp; grade</button>
-        </div>
-      </div>
-    </section>
-
-    <aside class="col meters-col">
-      <h3>Delivery (live)</h3>
-      <div class="meters">
-        <div class="meter"><span class="k">Pace</span><span id="mWpm" class="v">–</span><span class="u">wpm</span></div>
-        <div class="meter"><span class="k">Words</span><span id="mWords" class="v">0</span></div>
-        <div class="meter"><span class="k">Fillers /100</span><span id="mFiller" class="v">0</span></div>
-        <div class="meter"><span class="k">Hard fillers</span><span id="mCore" class="v">0</span></div>
-        <div class="meter"><span class="k">Pauses</span><span id="mPauses" class="v">0</span></div>
-        <div class="meter"><span class="k">Longest pause</span><span id="mLongest" class="v">0.0</span><span class="u">s</span></div>
-      </div>
-      <p class="hint-text">Pace 140–160 wpm reads as calm and clear. The scorecard fuses this with your reasoning.</p>
-    </aside>
-  </main>
+  <div class="composer">
+    <textarea id="textInput" rows="2"
+      placeholder="Think out loud — talk (mic is always on) or type. The interviewer stays quiet unless you ask or finish."></textarea>
+    <div class="composer-actions">
+      <button id="sendBtn">Send</button>
+      <button id="micBtn" class="toggle">🎤 Mic: on</button>
+      <button id="hintBtn" class="ghost">Ask for a hint</button>
+      <button id="doneBtn" class="ghost">Done &amp; grade</button>
+    </div>
+  </div>
 
   <div id="scorecard" class="scorecard" hidden></div>
 
