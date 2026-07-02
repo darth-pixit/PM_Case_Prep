@@ -44,7 +44,9 @@ from ..skill_graph import SkillGraph
 from .deepgram_live import DeepgramLive
 
 MODEL = os.environ.get("PMCP_MODEL", "claude-opus-4-8")
-SILENCE_S = float(os.environ.get("PMCP_SILENCE_S", "4.0"))  # pause before a spoken turn commits
+# Pause length before a spoken turn commits. Generous on purpose: a thinking
+# candidate must never feel interrupted. Tune with PMCP_SILENCE_S.
+SILENCE_S = float(os.environ.get("PMCP_SILENCE_S", "8.0"))
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HINT_PROMPT = (
     "[The candidate asks for a hint. Give ONE graduated nudge for where they are "
@@ -56,7 +58,11 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 def _is_silence(reply: str) -> bool:
-    """True if the interviewer chose to stay quiet (its "(listening)" sentinel)."""
+    """True if the interviewer chose to stay quiet. If the "(listening)" sentinel
+    appears ANYWHERE, treat the whole turn as silence — any text around it is the
+    model narrating to itself, never something for the candidate to read."""
+    if "(listening)" in reply.lower():
+        return True
     return "".join(c for c in reply.lower() if c.isalpha()) in ("", "listening")
 
 
@@ -133,14 +139,20 @@ class Voice:
             backoff *= 2
 
     async def _keepalive(self) -> None:
-        try:
-            while not self._closed:
+        # Deepgram closes an idle stream ~10s after audio stops; this heartbeat is
+        # what keeps "always listening" true through long thinking pauses. One
+        # failed send must NOT kill the loop — skip the tick and keep beating.
+        while not self._closed:
+            try:
                 await asyncio.sleep(5)
-                dg = self._dg
-                if dg is not None:
+            except asyncio.CancelledError:
+                return
+            dg = self._dg
+            if dg is not None:
+                try:
                     await dg.keepalive()
-        except (asyncio.CancelledError, Exception):  # noqa: BLE001
-            pass
+                except Exception:  # noqa: BLE001 - supervisor reconnects; keep ticking
+                    pass
 
     async def send(self, data: bytes) -> None:
         dg = self._dg

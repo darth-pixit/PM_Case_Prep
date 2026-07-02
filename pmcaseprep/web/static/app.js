@@ -1,8 +1,10 @@
 // PM Case Prep — browser client. Real-interview feel:
 //  * only the interviewer's LATEST message stays on screen (no chat history),
-//  * a prominent presence indicator shows listening / responding / grading,
+//  * exactly two labeled states: Listening and Interviewer is responding
+//    (voice activity just brightens the orb — no third label),
 //  * your own words are never echoed,
-//  * always-on mic + simultaneous typing.
+//  * always-on mic + simultaneous typing,
+//  * grading shows a progress bar, and the scorecard ends with "Do another case".
 
 const $ = (id) => document.getElementById(id);
 const wsUrl = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "/ws";
@@ -12,13 +14,12 @@ let micOn = false;
 let voiceSupported = false;
 let audioCtx, micStream, workletNode, micSource;
 let ended = false;
-let hearTimer = null;
+let voiceTimer = null;
 let currentState = "connecting";
 
 const STATE_LABELS = {
   connecting: "connecting…",
   listening: "Listening — take your time",
-  hearing: "Hearing you…",
   responding: "Interviewer is responding…",
   grading: "Grading your case…",
   error: "problem — see top right",
@@ -32,6 +33,8 @@ function setState(state) {
   orb.className = "orb " + (state === "textonly" || state === "done" ? "listening" : state);
   $("stateLabel").textContent = STATE_LABELS[state] || state;
   $("gradingOverlay").hidden = state !== "grading";
+  if (state === "grading") startGradeProgress();
+  else stopGradeProgress();
 }
 
 function setError(text) {
@@ -51,14 +54,50 @@ function showMaya(text) {
   box.scrollTop = 0;
 }
 
-function pulseHearing() {
-  // Only override the idle state; never mask responding/grading.
-  if (currentState !== "listening" && currentState !== "hearing") return;
-  setState("hearing");
-  if (hearTimer) clearTimeout(hearTimer);
-  hearTimer = setTimeout(() => {
-    if (currentState === "hearing") setState("listening");
-  }, 1200);
+// Voice activity only brightens the orb; the label stays "Listening".
+function pulseVoice() {
+  if (currentState !== "listening") return;
+  $("orb").classList.add("voiced");
+  if (voiceTimer) clearTimeout(voiceTimer);
+  voiceTimer = setTimeout(() => $("orb").classList.remove("voiced"), 1200);
+}
+
+// --- Grading progress -----------------------------------------------------
+// The server can't stream real percentages out of one long model call, so we
+// animate toward (never past) 95% and jump to 100% when the scorecard lands.
+// Better a bar that's honest-ish and moving than a spinner that looks hung.
+
+const GRADE_STAGES = [
+  [0, "Re-reading your full transcript…"],
+  [22, "Scoring the six dimensions against the rubric…"],
+  [45, "Working through the case checklist…"],
+  [65, "Weighing red flags and your spoken delivery…"],
+  [82, "Writing your coaching notes…"],
+];
+let gradeTimer = null;
+let gradeStart = 0;
+
+function startGradeProgress() {
+  if (gradeTimer) return;
+  gradeStart = Date.now();
+  setGradePct(0);
+  gradeTimer = setInterval(() => {
+    const t = (Date.now() - gradeStart) / 1000;
+    setGradePct(Math.min(95, 100 * (1 - Math.exp(-t / 24))));
+  }, 250);
+}
+
+function stopGradeProgress() {
+  if (gradeTimer) { clearInterval(gradeTimer); gradeTimer = null; }
+}
+
+function setGradePct(pct) {
+  const p = Math.round(pct);
+  $("gradeFill").style.width = p + "%";
+  $("gradePct").textContent = p + "%";
+  for (const [at, label] of GRADE_STAGES) {
+    if (p >= at) $("gradeStage").textContent = label;
+  }
 }
 
 // --- WebSocket ---------------------------------------------------------------
@@ -100,7 +139,7 @@ function handle(m) {
       else setState(m.state);
       break;
     case "listening": // audio activity pulse from the server
-      pulseHearing();
+      pulseVoice();
       break;
     case "reply":
       showMaya(m.text);
@@ -109,6 +148,7 @@ function handle(m) {
       if (m.text && m.text.includes("reconnect")) setError(m.text);
       break;
     case "scorecard":
+      setGradePct(100);
       renderScorecard(m);
       break;
     case "error":
@@ -207,29 +247,99 @@ function floatTo16(f32) {
 
 // --- Scorecard ---------------------------------------------------------------
 
+const DIM_NAMES = {
+  structure: "Structure",
+  user_empathy: "User empathy",
+  prioritization: "Prioritization",
+  creativity: "Creativity",
+  communication: "Communication",
+  data_business: "Data & business",
+};
+
+function dimName(key) {
+  if (DIM_NAMES[key]) return DIM_NAMES[key];
+  const s = String(key).replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function renderScorecard(m) {
   const c = m.card;
-  const dims = c.dimension_scores.map(
-    (d) => `<div class="dim"><span class="score s${d.score}">${d.score}/4</span>
-      <span><b>${d.dimension}</b> — ${esc(d.justification)}</span></div>`
-  ).join("");
+
+  // Dimension meters: fill = score severity, track = same hue lighter.
+  const dims = c.dimension_scores.map((d) => {
+    const tone = d.score <= 2 ? "m-low" : d.score === 3 ? "m-mid" : "m-high";
+    return `<div class="sc-dim">
+      <div class="sc-dim-head"><b>${esc(dimName(d.dimension))}</b>
+        <span class="sc-dim-score">${d.score} / 4</span></div>
+      <div class="sc-meter ${tone}"><i style="width:${(d.score / 4) * 100}%"></i></div>
+      <p class="sc-dim-note">${esc(d.justification)}</p>
+    </div>`;
+  }).join("");
+
+  const met = c.category_checklist.filter((i) => i.met).length;
   const checks = c.category_checklist.map(
-    (i) => `<div class="check"><span class="${i.met ? "pass" : "miss"}">${i.met ? "✓" : "✗"}</span>
-      ${esc(i.criterion)}${i.note ? " — <i>" + esc(i.note) + "</i>" : ""}</div>`
+    (i) => `<div class="sc-check">
+      <span class="icon ${i.met ? "pass" : "miss"}">${i.met ? "✓" : "✗"}</span>
+      <span>${esc(i.criterion)}${i.note ? `<small>${esc(i.note)}</small>` : ""}</span>
+    </div>`
   ).join("");
-  const flags = (c.red_flags || []).map((f) => `<div class="flag">⚑ ${esc(f)}</div>`).join("");
+
+  const flags = (c.red_flags || []).map(
+    (f) => `<div class="sc-flag"><b>⚑ Watch-out</b><p>${esc(f)}</p></div>`
+  ).join("");
+
+  const dv = m.delivery || {};
+  const delivery = dv.words > 0
+    ? `<div class="sc-card"><h3>How you sounded</h3>
+        <div class="sc-tiles">
+          <div class="sc-tile"><div class="label">Pace</div><div class="value">${esc(dv.wpm)} <small>wpm</small></div></div>
+          <div class="sc-tile"><div class="label">Hard fillers (um/uh)</div><div class="value">${esc(dv.core_fillers)}</div></div>
+          <div class="sc-tile"><div class="label">Fillers per 100 words</div><div class="value">${esc(dv.filler_rate_per_100)}</div></div>
+          <div class="sc-tile"><div class="label">Longest pause</div><div class="value">${esc(dv.longest_pause_s)} <small>s</small></div></div>
+        </div>
+        <p class="sc-dim-note">${esc(m.delivery_summary)}</p></div>`
+    : "";
+
+  const band = String(m.band);
   $("scorecard").innerHTML = `
-    <h2>Scorecard — <span class="band ${m.band}">${m.band.replace(/_/g, " ").toUpperCase()}</span>
-      <small>(weighted ${m.weighted}/4)</small></h2>
-    ${dims}
-    <h3>Checklist</h3>${checks}
-    ${flags ? "<h3>Watch-outs</h3>" + flags : ""}
-    <h3>Your biggest opportunity</h3><p>${esc(c.top_improvement)}</p>
-    <h3>Delivery</h3><p>${esc(m.delivery_summary)}</p>
-    <p>${esc(c.summary)}</p>
-    <h3>Skill graph</h3><pre class="graph">${esc(m.skill_graph)}</pre>`;
+    <div class="sc-wrap">
+      <header class="sc-hero">
+        <div class="sc-hero-left">
+          <h2>Your scorecard</h2>
+          <span class="sc-band ${esc(band)}">${esc(band.replace(/_/g, " ").toUpperCase())}</span>
+        </div>
+        <div class="sc-score"><span class="sc-num">${esc(m.weighted)}</span>
+          <span class="sc-den">weighted score out of 4</span></div>
+      </header>
+
+      <div class="sc-card sc-opp"><h3>💡 Your biggest opportunity</h3>
+        <p class="lede">${esc(c.top_improvement)}</p></div>
+
+      <div class="sc-dims">${dims}</div>
+
+      <details class="sc-fold">
+        <summary>What the rubric looked for <span class="sc-count">${met} of ${c.category_checklist.length} met</span></summary>
+        ${checks}
+      </details>
+
+      ${flags}
+      ${delivery}
+
+      <div class="sc-card"><h3>Coach's note</h3><p>${esc(c.summary)}</p></div>
+
+      <details class="sc-fold">
+        <summary>Your progress across cases</summary>
+        <pre class="graph">${esc(m.skill_graph)}</pre>
+      </details>
+
+      <div class="sc-actions">
+        <button id="newCaseBtn">Do another case →</button>
+        <span class="sub">Starts a fresh interview</span>
+      </div>
+    </div>`;
   $("gradingOverlay").hidden = true;
   $("scorecard").hidden = false;
+  $("newCaseBtn").onclick = () => location.reload();
   setState("done");
 }
 

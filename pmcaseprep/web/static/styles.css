@@ -75,11 +75,9 @@ header h1 { font-size: 1.05rem; margin: 0; }
   animation: breathe 2.6s ease-in-out infinite;
   box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.35);
 }
-.orb.hearing {
-  background: var(--good);
-  animation: hear 0.6s ease-in-out infinite;
-  box-shadow: 0 0 14px rgba(74, 222, 128, 0.8);
-}
+/* Voice activity: the orb glows brighter while your words come in, but the
+   label stays "Listening" — one state, just visibly alive. */
+.orb.voiced { box-shadow: 0 0 16px rgba(74, 222, 128, 0.9); }
 .orb.responding { background: var(--accent); animation: hear 0.9s ease-in-out infinite; box-shadow: 0 0 12px rgba(110, 168, 254, 0.7); }
 .orb.error { background: var(--bad); animation: none; }
 @keyframes breathe { 0%,100% { transform: scale(0.85); opacity: 0.6; } 50% { transform: scale(1.15); opacity: 1; } }
@@ -111,29 +109,126 @@ button.toggle { background: var(--good); color: #06210f; }
 button.toggle.off { background: var(--panel-2); color: var(--muted); }
 button:disabled { opacity: 0.5; cursor: default; }
 
-/* --- Grading overlay ------------------------------------------------------- */
+/* --- Grading overlay: progress bar so the wait never feels stuck ----------- */
 .grading-overlay {
   position: fixed; inset: 0; z-index: 15;
-  background: rgba(15, 17, 21, 0.92);
+  background: rgba(15, 17, 21, 0.94);
   display: flex; align-items: center; justify-content: center;
 }
-.grading-box { display: flex; flex-direction: column; align-items: center; gap: 1rem; font-size: 1.1rem; color: var(--ink); }
+.grading-box {
+  display: flex; flex-direction: column; align-items: center; gap: 1rem;
+  font-size: 1.1rem; color: var(--ink); text-align: center; padding: 0 1.5rem;
+}
+.progress-track {
+  width: min(420px, 76vw); height: 8px; border-radius: 999px;
+  background: rgba(110, 168, 254, 0.18); /* lighter step of the fill's own hue */
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%; width: 0%; border-radius: 999px;
+  background: var(--accent); transition: width 0.25s linear;
+}
+.grade-pct { margin: 0; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
 
-/* --- Scorecard: full-screen scrollable overlay at the end ------------------ */
+/* --- Scorecard: full-screen results view ----------------------------------- */
 .scorecard {
   position: fixed; inset: 0; overflow-y: auto; z-index: 20;
-  background: var(--bg); padding: 1.5rem 1.5rem 3rem;
+  background: var(--bg);
 }
-.scorecard h2 { margin-top: 0; }
-.band { font-weight: 800; letter-spacing: 0.04em; }
-.band.strong_hire, .band.hire { color: var(--good); }
-.band.no_hire, .band.strong_no_hire { color: var(--bad); }
-.dim { display: flex; gap: 0.6rem; padding: 0.35rem 0; border-bottom: 1px solid var(--border); }
-.dim .score { font-weight: 700; min-width: 2.6rem; }
-.score.s1, .score.s2 { color: var(--bad); }
-.score.s3 { color: var(--warn); }
-.score.s4 { color: var(--good); }
-.check { padding: 0.15rem 0; }
-.check .pass { color: var(--good); } .check .miss { color: var(--bad); }
-.flag { color: var(--warn); }
-pre.graph { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 0.8rem; overflow-x: auto; font-size: 0.8rem; }
+.sc-wrap { max-width: 780px; margin: 0 auto; padding: 1.6rem 1.2rem 0; }
+
+.sc-hero {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  flex-wrap: wrap; margin-bottom: 1.1rem;
+}
+.sc-hero-left h2 { margin: 0 0 0.5rem; font-size: 1.15rem; color: var(--muted); font-weight: 600; }
+.sc-band {
+  display: inline-block; padding: 0.35rem 0.9rem; border-radius: 999px;
+  font-weight: 800; letter-spacing: 0.05em; font-size: 0.95rem;
+}
+.sc-band.strong_hire, .sc-band.hire { background: rgba(74, 222, 128, 0.15); color: var(--good); border: 1px solid rgba(74, 222, 128, 0.4); }
+.sc-band.no_hire, .sc-band.strong_no_hire { background: rgba(248, 113, 113, 0.12); color: var(--bad); border: 1px solid rgba(248, 113, 113, 0.4); }
+.sc-score { text-align: right; }
+.sc-num { font-size: 3.2rem; font-weight: 650; line-height: 1; }
+.sc-den { display: block; color: var(--muted); font-size: 0.85rem; margin-top: 0.2rem; }
+
+.sc-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 0.95rem 1.1rem; margin-bottom: 0.9rem;
+}
+.sc-card h3 { margin: 0 0 0.6rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 700; }
+.sc-card p { margin: 0; }
+
+.sc-opp { border-left: 3px solid var(--accent); }
+.sc-opp .lede { font-size: 1.05rem; }
+
+/* Dimension meters: fill carries the score; track is the same hue, lighter. */
+.sc-dims { display: grid; grid-template-columns: 1fr; gap: 0.7rem; margin-bottom: 0.9rem; }
+@media (min-width: 640px) { .sc-dims { grid-template-columns: 1fr 1fr; } }
+.sc-dim {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 0.8rem 0.95rem;
+}
+.sc-dim-head { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
+.sc-dim-head b { font-size: 0.95rem; }
+.sc-dim-score { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
+.sc-meter { height: 8px; border-radius: 999px; margin: 0.5rem 0 0.55rem; overflow: hidden; }
+.sc-meter > i { display: block; height: 100%; border-radius: 999px; }
+.sc-meter.m-low  { background: rgba(248, 113, 113, 0.16); } .sc-meter.m-low  > i { background: var(--bad); }
+.sc-meter.m-mid  { background: rgba(251, 191, 36, 0.16); }  .sc-meter.m-mid  > i { background: var(--warn); }
+.sc-meter.m-high { background: rgba(74, 222, 128, 0.16); }  .sc-meter.m-high > i { background: var(--good); }
+.sc-dim-note { color: var(--muted); font-size: 0.86rem; margin: 0; }
+
+/* Compact rows for the checklist (inside a collapsible) */
+details.sc-fold {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  padding: 0.7rem 1.1rem; margin-bottom: 0.9rem;
+}
+details.sc-fold summary {
+  cursor: pointer; font-weight: 600; list-style: none;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+}
+details.sc-fold summary::-webkit-details-marker { display: none; }
+details.sc-fold summary::after { content: "▸"; color: var(--muted); transition: transform 0.15s; }
+details.sc-fold[open] summary::after { transform: rotate(90deg); }
+.sc-count { color: var(--muted); font-weight: 500; font-size: 0.85rem; margin-left: auto; }
+.sc-check { display: flex; gap: 0.55rem; padding: 0.45rem 0; border-top: 1px solid var(--border); }
+.sc-check:first-of-type { margin-top: 0.6rem; }
+.sc-check .icon { flex: 0 0 auto; font-weight: 700; }
+.sc-check .icon.pass { color: var(--good); } .sc-check .icon.miss { color: var(--bad); }
+.sc-check small { display: block; color: var(--muted); }
+
+.sc-flag {
+  border-left: 3px solid var(--warn); background: var(--panel);
+  border-radius: 0 12px 12px 0; border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  padding: 0.7rem 1rem; margin-bottom: 0.6rem;
+}
+.sc-flag b { color: var(--warn); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.sc-flag p { margin: 0.15rem 0 0; }
+
+/* Delivery stat tiles */
+.sc-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.7rem; margin-bottom: 0.6rem; }
+.sc-tile {
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+}
+.sc-tile .label { color: var(--muted); font-size: 0.75rem; }
+.sc-tile .value { font-size: 1.35rem; font-weight: 650; }
+.sc-tile .value small { font-size: 0.8rem; color: var(--muted); font-weight: 500; }
+
+pre.graph {
+  background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+  padding: 0.8rem; overflow-x: auto; font-size: 0.8rem; margin: 0.6rem 0 0;
+}
+
+/* Sticky exit: always one obvious way back to a fresh interview. */
+.sc-actions {
+  position: sticky; bottom: 0; margin-top: 1.2rem;
+  padding: 1rem 1.2rem 1.4rem; text-align: center;
+  background: linear-gradient(to top, var(--bg) 65%, transparent);
+}
+.sc-actions button {
+  font-size: 1.05rem; padding: 0.75rem 2.2rem; border-radius: 999px;
+}
+.sc-actions .sub { display: block; margin-top: 0.45rem; color: var(--muted); font-size: 0.8rem; }

@@ -85,7 +85,12 @@ class Interviewer:
         return self._run_loop()
 
     def _run_loop(self) -> str:
-        reply_parts: list[str] = []
+        # Text emitted ALONGSIDE tool calls is usually the model narrating to
+        # itself ("I'll note that...") — never meant for the candidate. So the
+        # reply is the text of the FINAL response only; earlier text is kept as
+        # a fallback in case the model front-loaded its whole answer.
+        all_text: list[str] = []
+        last_text: list[str] = []
         while True:
             resp = self.client.messages.create(
                 model=self.model,
@@ -97,10 +102,12 @@ class Interviewer:
             )
             self.messages.append({"role": "assistant", "content": resp.content})
 
+            last_text = []
             tool_results = []
             for block in resp.content:
                 if block.type == "text":
-                    reply_parts.append(block.text)
+                    last_text.append(block.text)
+                    all_text.append(block.text)
                 elif block.type == "tool_use":
                     tool_results.append(self._handle_tool(block))
 
@@ -109,7 +116,8 @@ class Interviewer:
                 continue
             break
 
-        return "\n".join(p for p in reply_parts if p.strip())
+        parts = last_text if any(p.strip() for p in last_text) else all_text
+        return "\n".join(p for p in parts if p.strip())
 
     def _handle_tool(self, block: Any) -> dict[str, Any]:
         result = "ok"
