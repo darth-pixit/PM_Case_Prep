@@ -222,6 +222,30 @@ def test_resources_selection():
     assert perfect["dimensions"] == {}
 
 
+def test_flux_word_timing_synthesis():
+    """Flux omits per-word timestamps; we synthesize them from the turn window
+    so words-per-minute stays meaningful."""
+    try:
+        from pmcaseprep.web.app import _flux_words
+    except ImportError as exc:
+        print(f"  (skipped test_flux_word_timing_synthesis — missing dep: {exc.name})")
+        return
+    # No per-word timing, only a 3s window over 6 words -> ~120 wpm.
+    evt = {
+        "audio_window_start": 10.0,
+        "audio_window_end": 13.0,
+        "words": [{"word": w, "confidence": 0.9} for w in "one two three four five six".split()],
+    }
+    words = _flux_words(evt)
+    assert len(words) == 6
+    assert abs((words[-1].end - words[0].start) - 3.0) < 1e-6
+    from pmcaseprep.delivery import turn_metrics
+    assert abs(turn_metrics(words)["wpm"] - 120.0) < 1.0
+    # Real per-word timing is honored when present.
+    evt2 = {"words": [{"word": "hi", "start": 0.0, "end": 0.5, "confidence": 0.9}]}
+    assert _flux_words(evt2)[0].end == 0.5
+
+
 def test_interviewer_memory_matches_screen():
     """After align_shown, the model's memory (and the grader's transcript) must
     contain exactly what the candidate saw — never suppressed narration."""

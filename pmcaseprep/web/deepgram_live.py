@@ -39,17 +39,25 @@ NOVA_URL = (
     "&channels=1"
 )
 
-# Flux: eot_threshold is the confidence the model needs before declaring the
-# turn over — higher = more patient with thinking pauses.
+# Flux turn detection, tuned for a candidate who thinks out loud:
+#  * eot_threshold (0.5-0.9): semantic confidence needed to END a turn. Higher =
+#    more certain they're done = fewer mid-thought interruptions. We use 0.8.
+#  * eot_timeout_ms: hard backstop that forces a turn-end after this much
+#    post-speech silence REGARDLESS of confidence. Deepgram's default 5000 would
+#    cut off anyone pausing >5s to think, so we raise it to 10s for patience.
 FLUX_URL = (
     "wss://api.deepgram.com/v2/listen"
     "?model=flux-general-en"
     "&encoding=linear16"
     "&sample_rate=16000"
     f"&eot_threshold={os.environ.get('PMCP_FLUX_EOT', '0.8')}"
+    f"&eot_timeout_ms={os.environ.get('PMCP_FLUX_EOT_TIMEOUT_MS', '10000')}"
 )
 
-DG_URL = FLUX_URL if os.environ.get("PMCP_STT", "").lower() == "flux" else NOVA_URL
+# Flux (semantic turn detection) is the default — it's the right tool for
+# thinking-out-loud interviews. Set PMCP_STT=nova to force the classic model.
+DG_URL = NOVA_URL if os.environ.get("PMCP_STT", "").lower() in ("nova", "nova-3") else FLUX_URL
+FLUX_ACTIVE = DG_URL == FLUX_URL
 
 
 async def _connect(url: str, api_key: str):

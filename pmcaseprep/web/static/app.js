@@ -301,51 +301,37 @@ function meter(frame) {
   $("orb").style.setProperty("--lvl", level.toFixed(2));
 }
 
-// --- Noise gate: only YOUR voice is streamed, not the room -------------------
-// An adaptive floor tracks the ambient level from quiet moments; the gate opens
-// when the signal rises clearly above it (your near-field voice), hangs open
-// 1.5s so word tails and short intra-sentence dips survive, and flushes a 0.4s
-// pre-roll on open so the first syllable isn't clipped. Background chatter and
-// keyboard noise stay below the moving threshold and never leave the browser.
-// Disable for debugging with ?gate=off in the URL.
+// --- Noise gate: mute the room, keep YOUR voice ------------------------------
+// Streams a CONTINUOUS 16kHz stream (never drops frames) so the server's turn
+// detection — especially Flux, which reads your pauses to know if you're done —
+// always sees an unbroken timeline. Below-threshold frames are replaced with
+// digital SILENCE, so background chatter and keyboard clatter are removed while
+// your pauses are preserved as real silence. An adaptive floor learns the room
+// from quiet moments; the gate hangs open 2s so word tails and short pauses
+// aren't clipped. Disable for debugging with ?gate=off in the URL.
 const GATE_ENABLED = !location.search.includes("gate=off");
 let emaRms = 0;
 let noiseFloor = 0.006;
 let gateOpenUntil = 0;
-let preroll = [];
-let prerollSamples = 0;
-let prerollMax = 0;
+let silenceFrame = null;
 
-function gate(frame, inRate) {
-  if (!GATE_ENABLED) return [frame];
-  if (!prerollMax) prerollMax = Math.round(inRate * 0.4);
+function gate(frame) {
+  if (!GATE_ENABLED) return frame;
   let sum = 0;
   for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
-  emaRms = emaRms * 0.7 + Math.sqrt(sum / frame.length) * 0.3;
+  emaRms = emaRms * 0.6 + Math.sqrt(sum / frame.length) * 0.4; // fast attack
   const now = performance.now();
-  const wasOpen = now < gateOpenUntil;
-  const speakThresh = Math.max(noiseFloor * 2.5, 0.01);
-  if (emaRms < speakThresh) {
-    // Quiet moment: let the ambient floor drift (slowly, and never too high —
-    // a loud cafe must not teach the gate to ignore your voice entirely).
-    noiseFloor = Math.min(0.02, noiseFloor * 0.998 + emaRms * 0.002);
+  const speakThresh = Math.max(noiseFloor * 2.2, 0.009);
+  if (emaRms >= speakThresh) {
+    gateOpenUntil = now + 2000; // hang time: keep passing audio through dips
   } else {
-    gateOpenUntil = now + 1500;
-    if (!wasOpen) {
-      const flush = preroll;
-      preroll = [];
-      prerollSamples = 0;
-      return [...flush, frame];
-    }
-    return [frame];
+    noiseFloor = Math.min(0.02, noiseFloor * 0.997 + emaRms * 0.003); // learn room
   }
-  if (wasOpen) return [frame]; // hang time — keep streaming through the dip
-  preroll.push(frame);
-  prerollSamples += frame.length;
-  while (prerollSamples > prerollMax && preroll.length) {
-    prerollSamples -= preroll.shift().length;
+  if (now < gateOpenUntil) return frame; // open → your voice, verbatim
+  if (!silenceFrame || silenceFrame.length !== frame.length) {
+    silenceFrame = new Float32Array(frame.length); // muted, but the stream flows
   }
-  return [];
+  return silenceFrame;
 }
 
 async function startMic() {

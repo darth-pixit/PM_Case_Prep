@@ -138,16 +138,21 @@ it. This is deliberately password-less for now — fine for a prep tool MVP,
 but add real auth (Google OAuth / magic links via Clerk or Auth0) before
 promoting it widely, since anyone who knows an email could claim it.
 
-### Turn detection: nova-3 vs Flux
+### Turn detection: Flux (default) vs nova-3
 
-By default the app streams to Deepgram **nova-3** and detects turns itself
-(endpointing + a tunable pause window, `PMCP_SILENCE_S`/`PMCP_QUESTION_S`).
-Deepgram's **Flux** model goes further: it's a conversational model that
-detects end-of-turn *semantically* — it can tell a mid-thought pause from a
-finished answer from the speech itself, not just silence length. Enable it
-with `PMCP_STT=flux` (and tune patience via `PMCP_FLUX_EOT`, default 0.8).
-Experimental: if the Flux connection fails, the voice channel automatically
-falls back to nova-3, so it's safe to try.
+Knowing *when the candidate is done talking* is the hardest part of a
+thinking-out-loud interview, and pure silence timers can't tell a pause from a
+finished thought. So the app defaults to Deepgram **Flux**, a conversational
+model with **native semantic end-of-turn detection** — it reads the speech
+itself (words + prosody + pauses) to decide the turn is over, and we commit
+immediately when it says so (no timer). Tune its patience with `PMCP_FLUX_EOT`
+(0–1, higher = waits longer; default 0.8).
+
+If Flux is unavailable on your account the channel **auto-falls back to nova-3**,
+which uses a single *debounced* pause timer (`PMCP_SILENCE_S`, default 2.5s):
+the turn commits only after that much true silence, and any speech re-arms it,
+so an answer with internal pauses stays one turn and never fires mid-thought.
+Force nova-3 with `PMCP_STT=nova`. `/health` reports which is active.
 
 ### Visitor analytics (PostHog)
 

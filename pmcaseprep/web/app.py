@@ -44,7 +44,7 @@ from ..grader import grade, weighted_result
 from ..interviewer import Interviewer
 from ..resources import resources_for
 from ..skill_graph import SkillGraph
-from .deepgram_live import DG_URL, FLUX_URL, NOVA_URL, DeepgramLive
+from .deepgram_live import DG_URL, FLUX_ACTIVE, FLUX_URL, NOVA_URL, DeepgramLive
 
 # Two model tiers: the interviewer runs on a FAST model (conversational turns,
 # snappy replies); the grader runs on the deepest model (one careful call at
@@ -54,12 +54,13 @@ INTERVIEWER_MODEL = os.environ.get(
     "PMCP_INTERVIEWER_MODEL", _MODEL_OVERRIDE or "claude-sonnet-5"
 )
 GRADER_MODEL = os.environ.get("PMCP_GRADER_MODEL", _MODEL_OVERRIDE or "claude-opus-4-8")
-# Turn-taking is ADAPTIVE. An utterance that addresses the interviewer (a
-# question, "let's move on", "that's my answer") commits after QUESTION_S — you
-# shouldn't wait long for an answer you asked for. Anything else is treated as
-# thinking out loud and gets the patient SILENCE_S window.
-SILENCE_S = float(os.environ.get("PMCP_SILENCE_S", "5.0"))
-QUESTION_S = float(os.environ.get("PMCP_QUESTION_S", "1.5"))
+# Turn-taking. With Flux (the default STT), turn boundaries come from Deepgram's
+# SEMANTIC end-of-turn model and we commit immediately — no timer. With nova-3
+# we fall back to a single DEBOUNCED pause timer: the turn commits only after
+# PAUSE_S of true silence since your last words, and any speech RE-ARMS it, so a
+# whole answer (with internal thinking pauses) is one turn and it never fires
+# mid-thought. One clock, not the old two-timer split that interrupted people.
+PAUSE_S = float(os.environ.get("PMCP_SILENCE_S", "2.5"))
 # Utterances below this Deepgram confidence are treated as noise (keyboard
 # clatter, coughs, background voices) and never become turns.
 MIN_CONFIDENCE = float(os.environ.get("PMCP_MIN_CONFIDENCE", "0.6"))
@@ -102,22 +103,28 @@ def _visible_reply(reply: str) -> str:
     return reply.strip()
 
 
-# Signals that the candidate is talking TO the interviewer and expects a fast
-# response, rather than thinking out loud. Deepgram's smart_format adds "?" for
-# question phrasing, which catches most of these on its own.
-_ADDRESS_RE = re.compile(
-    r"(\?\s*$)"
-    r"|^(what|why|how|when|where|who|which|can|could|do|does|did|is|are|was|were|should|would|will)\b"
-    r"|\b(tell me|give me|do we know|do we have|what about|your thoughts|does that make sense"
-    r"|is that (right|fair|correct)|am i right|let'?s move on|i'?m done|i am done"
-    r"|that'?s my (answer|framework|plan|approach)|moving on|next question"
-    r"|any (data|numbers?|info|information)|clarify)\b",
-    re.IGNORECASE,
-)
+def _flux_words(evt: dict) -> list[Word]:
+    """Build Word objects from a Flux EndOfTurn event.
 
-
-def _addresses_interviewer(text: str) -> bool:
-    return bool(_ADDRESS_RE.search(text.strip()))
+    Flux returns word text + confidence but (unlike nova-3) NO per-word
+    start/end times — only a turn-level audio window. So when timing is absent,
+    spread the words evenly across [audio_window_start, audio_window_end]. That
+    keeps words-per-minute honest (total duration is real); per-word pause
+    detection is necessarily coarser on Flux, which we accept for its far
+    better turn-taking."""
+    raw = [w for w in (evt.get("words") or []) if isinstance(w, dict)]
+    tokens = [w.get("word", "") for w in raw]
+    if raw and all(("start" in w and "end" in w) for w in raw):
+        return [Word(w["word"], float(w["start"] or 0), float(w["end"] or 0)) for w in raw]
+    if not tokens:
+        tokens = (evt.get("transcript") or "").split()
+    start = float(evt.get("audio_window_start") or 0)
+    end = float(evt.get("audio_window_end") or 0)
+    n = len(tokens)
+    if n == 0:
+        return []
+    step = (end - start) / n if end > start else 0.0
+    return [Word(t, start + i * step, start + (i + 1) * step) for i, t in enumerate(tokens)]
 
 
 # Pure disfluencies — an utterance made only of these is a murmur, not a turn.
@@ -203,6 +210,7 @@ async def health() -> JSONResponse:
         {
             "ok": True,
             "voice": bool(os.environ.get("DEEPGRAM_API_KEY")),
+            "stt": "flux" if FLUX_ACTIVE else "nova-3",
             "anthropic_key": bool(
                 os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
             ),
@@ -345,10 +353,9 @@ async def session_ws(ws: WebSocket) -> None:
 
     turn_queue: asyncio.Queue = asyncio.Queue()
     stop = asyncio.Event()
-    current_words: list[Word] = []  # words for the in-progress utterance
+    current_words: list[Word] = []  # words accumulated for the in-progress turn
     current_conf: list[float] = []  # Deepgram confidence per finalized chunk
-    speech_buffer: list[str] = []  # finalized utterances awaiting the silence flush
-    flush_task: asyncio.Task | None = None
+    commit_task: asyncio.Task | None = None
 
     async def send_json(payload: dict) -> None:
         try:
@@ -356,33 +363,16 @@ async def session_ws(ws: WebSocket) -> None:
         except Exception:  # noqa: BLE001
             pass
 
-    # --- turn coalescing (pause before a spoken turn commits) ----------------
+    # --- turn commit ---------------------------------------------------------
+    # ONE clock. commit_pending() hands the accumulated turn to the interviewer.
+    # nova-3 arms a debounce (re-armed by any speech) so it fires only after a
+    # real pause; Flux calls it directly from its semantic end-of-turn.
 
-    async def flush_speech() -> None:
-        nonlocal speech_buffer, flush_task
-        if flush_task is not None and not flush_task.done():
-            flush_task.cancel()
-        flush_task = None
-        text = " ".join(speech_buffer).strip()
-        speech_buffer = []
-        if text:
-            await turn_queue.put({"source": "voice", "text": text})
-
-    async def _delayed_flush(delay: float) -> None:
-        try:
-            await asyncio.sleep(delay)
-        except asyncio.CancelledError:
-            return
-        await flush_speech()
-
-    def schedule_flush(delay: float) -> None:
-        nonlocal flush_task
-        if flush_task is not None and not flush_task.done():
-            flush_task.cancel()
-        flush_task = asyncio.create_task(_delayed_flush(delay))
-
-    async def finalize_utterance() -> None:
-        nonlocal current_words, current_conf
+    async def commit_pending() -> None:
+        nonlocal current_words, current_conf, commit_task
+        if commit_task is not None and not commit_task.done():
+            commit_task.cancel()
+        commit_task = None
         words, confs = current_words, current_conf
         current_words, current_conf = [], []
         if not words:
@@ -391,54 +381,52 @@ async def session_ws(ws: WebSocket) -> None:
         if not text or _is_noise(text, max(confs) if confs else 0.0):
             return  # background noise — no metrics, no turn, no reply
         tracker.add_turn(words)  # metrics only — not shown live
-        speech_buffer.append(text)
-        # A question gets answered fast; thinking-out-loud gets patience.
-        schedule_flush(QUESTION_S if _addresses_interviewer(text) else SILENCE_S)
+        await turn_queue.put({"source": "voice", "text": text})
+
+    async def _debounced_commit() -> None:
+        try:
+            await asyncio.sleep(PAUSE_S)
+        except asyncio.CancelledError:
+            return
+        await commit_pending()
+
+    def arm_commit() -> None:
+        """(Re)start the pause countdown. Called on every bit of speech, so the
+        turn commits only once you've genuinely stopped for PAUSE_S."""
+        nonlocal commit_task
+        if commit_task is not None and not commit_task.done():
+            commit_task.cancel()
+        commit_task = asyncio.create_task(_debounced_commit())
 
     async def handle_dg(evt: dict) -> None:
         nonlocal current_words, current_conf
         etype = evt.get("type")
         if etype == "Results":
+            # nova-3 path: accumulate words; the pause timer decides the turn.
             alt = evt.get("channel", {}).get("alternatives", [{}])[0]
             transcript = alt.get("transcript", "")
             conf = float(alt.get("confidence") or 0.0)
             if len(transcript.strip()) >= 3 and conf >= 0.45:
-                await send_json({"type": "listening"})  # pulse indicator, no words
+                await send_json({"type": "listening"})  # pulse indicator
+                arm_commit()  # still talking → push the commit later
             if evt.get("is_final") and transcript:
                 current_conf.append(conf)
                 for w in alt.get("words", []):
                     current_words.append(
                         Word(w.get("word", ""), float(w.get("start", 0)), float(w.get("end", 0)))
                     )
-            if evt.get("speech_final"):
-                await finalize_utterance()
-        elif etype == "UtteranceEnd":
-            await finalize_utterance()
+                arm_commit()
         elif etype == "TurnInfo":
-            # Flux native turn detection. Parsed defensively — if fields are
-            # missing we still deliver the text, just with degraded metrics.
+            # Flux path: the model tells us when the turn is semantically over —
+            # commit immediately, no timer. This is the whole point of Flux.
             event = evt.get("event", "")
             transcript = (evt.get("transcript") or "").strip()
             if transcript and event in ("Update", "StartOfTurn", "EagerEndOfTurn"):
                 await send_json({"type": "listening"})
             if event == "EndOfTurn" and transcript:
-                words = evt.get("words") or []
-                parsed = [
-                    Word(
-                        w.get("word", ""),
-                        float(w.get("start", 0) or 0),
-                        float(w.get("end", 0) or 0),
-                    )
-                    for w in words
-                    if isinstance(w, dict)
-                ]
-                current_words.extend(
-                    parsed or [Word(t, 0.0, 0.0) for t in transcript.split()]
-                )
-                current_conf.append(
-                    float(evt.get("end_of_turn_confidence") or 1.0)
-                )
-                await finalize_utterance()
+                current_words.extend(_flux_words(evt))
+                current_conf.append(float(evt.get("end_of_turn_confidence") or 1.0))
+                await commit_pending()
 
     # --- grading + interviewer worker ----------------------------------------
 
@@ -543,12 +531,12 @@ async def session_ws(ws: WebSocket) -> None:
                 data = json.loads(msg["text"])
                 mtype = data.get("type")
                 if mtype == "text" and data.get("text", "").strip():
-                    await flush_speech()  # commit any pending spoken thoughts first
+                    await commit_pending()  # commit any pending spoken thoughts first
                     await turn_queue.put({"source": "text", "text": data["text"].strip()})
                 elif mtype == "hint":
                     await turn_queue.put({"cmd": "hint"})
                 elif mtype == "done":
-                    await flush_speech()
+                    await commit_pending()
                     await turn_queue.put({"cmd": "done"})
     except WebSocketDisconnect:
         pass
@@ -556,8 +544,8 @@ async def session_ws(ws: WebSocket) -> None:
         await send_json({"type": "error", "text": str(exc)})
     finally:
         stop.set()
-        if flush_task is not None:
-            flush_task.cancel()
+        if commit_task is not None:
+            commit_task.cancel()
         if voice is not None:
             await voice.stop()
         await turn_queue.put({"cmd": "__stop__"})
