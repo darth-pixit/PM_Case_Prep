@@ -73,6 +73,7 @@ class Interviewer:
         self.messages: list[dict[str, Any]] = []
         self.observations: list[Observation] = []
         self.concluded = False
+        self._turn_start = 0  # index of the first message of the current turn
 
     def respond(self, user_text: str) -> str:
         """Feed one text candidate turn; run the tool loop; return the reply."""
@@ -82,7 +83,37 @@ class Interviewer:
         """Feed one candidate turn of any shape (text string or content blocks,
         e.g. an image + text for a whiteboard photo); run the loop; return reply."""
         self.messages.append({"role": "user", "content": content})
+        self._turn_start = len(self.messages)
         return self._run_loop()
+
+    def align_shown(self, shown_text: str) -> None:
+        """Rewrite this turn's assistant messages so the model's memory contains
+        EXACTLY what the candidate saw (or "(listening)" when nothing was shown).
+
+        Without this, suppressed narration and swallowed replies stay in the
+        conversation — the model then believes it said things that never reached
+        the screen ("as I already mentioned…"), and the grader reads a transcript
+        that differs from the candidate's actual experience."""
+        last_assistant = None
+        for i in range(self._turn_start, len(self.messages)):
+            if self.messages[i]["role"] == "assistant":
+                last_assistant = i
+        if last_assistant is None:
+            return
+        for i in range(self._turn_start, len(self.messages)):
+            msg = self.messages[i]
+            if msg["role"] != "assistant":
+                continue
+            blocks: list[Any] = [
+                {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+                for b in msg["content"]
+                if getattr(b, "type", "") == "tool_use"
+            ]
+            if i == last_assistant:
+                blocks.insert(0, {"type": "text", "text": shown_text})
+            elif not blocks:
+                blocks = [{"type": "text", "text": shown_text}]
+            msg["content"] = blocks
 
     def _run_loop(self) -> str:
         # Text emitted ALONGSIDE tool calls is usually the model narrating to

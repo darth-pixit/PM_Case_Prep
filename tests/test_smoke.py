@@ -222,6 +222,63 @@ def test_resources_selection():
     assert perfect["dimensions"] == {}
 
 
+def test_interviewer_memory_matches_screen():
+    """After align_shown, the model's memory (and the grader's transcript) must
+    contain exactly what the candidate saw — never suppressed narration."""
+    from types import SimpleNamespace
+
+    from pmcaseprep.interviewer import Interviewer
+
+    case = load_case(default_case_path())
+    responses = [
+        SimpleNamespace(
+            stop_reason="tool_use",
+            content=[
+                SimpleNamespace(type="text", text="They're structuring well — noting it."),
+                SimpleNamespace(
+                    type="tool_use",
+                    name="log_observation",
+                    id="t1",
+                    input={"dimension": "structure", "note": "tree", "polarity": "positive"},
+                ),
+            ],
+        ),
+        SimpleNamespace(
+            stop_reason="end_turn",
+            content=[SimpleNamespace(type="text", text="Private narration. (listening)")],
+        ),
+    ]
+
+    class FakeMessages:
+        @staticmethod
+        def create(**kw):
+            return responses.pop(0)
+
+    class FakeClient:
+        messages = FakeMessages()
+
+    iv = Interviewer(FakeClient(), case, "test-model")
+    iv.respond("thinking out loud about the funnel")
+    iv.align_shown("(listening)")
+    t = iv.transcript()
+    assert "structuring well" not in t and "narration" not in t.lower()
+    assert "(listening)" in t
+    assert len(iv.observations) == 1  # tool effects survive the rewrite
+
+
+def test_visible_reply_salvage():
+    try:
+        from pmcaseprep.web.app import _visible_reply
+    except ImportError as exc:
+        print(f"  (skipped test_visible_reply_salvage — missing dep: {exc.name})")
+        return
+    assert _visible_reply("(listening)") == ""
+    assert _visible_reply("Noted. (listening)") == ""  # short remainder = narration
+    answer = "The spike started three days ago and is concentrated in the email use case on v4.2."
+    assert _visible_reply(answer + " (listening)") == answer  # real answer salvaged
+    assert _visible_reply("Sure — what would you like to know?") == "Sure — what would you like to know?"
+
+
 def test_weighted_result_is_deterministic():
     case = load_case(default_case_path())
     card = ScoreCard(

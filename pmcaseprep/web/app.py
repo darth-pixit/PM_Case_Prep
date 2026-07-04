@@ -46,16 +46,23 @@ from ..resources import resources_for
 from ..skill_graph import SkillGraph
 from .deepgram_live import DG_URL, FLUX_URL, NOVA_URL, DeepgramLive
 
-MODEL = os.environ.get("PMCP_MODEL", "claude-opus-4-8")
+# Two model tiers: the interviewer runs on a FAST model (conversational turns,
+# snappy replies); the grader runs on the deepest model (one careful call at
+# the end). PMCP_MODEL overrides both; the specific vars override per-role.
+_MODEL_OVERRIDE = os.environ.get("PMCP_MODEL")
+INTERVIEWER_MODEL = os.environ.get(
+    "PMCP_INTERVIEWER_MODEL", _MODEL_OVERRIDE or "claude-sonnet-5"
+)
+GRADER_MODEL = os.environ.get("PMCP_GRADER_MODEL", _MODEL_OVERRIDE or "claude-opus-4-8")
 # Turn-taking is ADAPTIVE. An utterance that addresses the interviewer (a
 # question, "let's move on", "that's my answer") commits after QUESTION_S — you
 # shouldn't wait long for an answer you asked for. Anything else is treated as
 # thinking out loud and gets the patient SILENCE_S window.
-SILENCE_S = float(os.environ.get("PMCP_SILENCE_S", "6.0"))
+SILENCE_S = float(os.environ.get("PMCP_SILENCE_S", "5.0"))
 QUESTION_S = float(os.environ.get("PMCP_QUESTION_S", "1.5"))
 # Utterances below this Deepgram confidence are treated as noise (keyboard
 # clatter, coughs, background voices) and never become turns.
-MIN_CONFIDENCE = float(os.environ.get("PMCP_MIN_CONFIDENCE", "0.55"))
+MIN_CONFIDENCE = float(os.environ.get("PMCP_MIN_CONFIDENCE", "0.6"))
 # Product analytics (PostHog). The project key is publishable by design — it can
 # only ingest events, never read them — so serving it to the browser is safe.
 POSTHOG_KEY = os.environ.get("PMCP_POSTHOG_KEY", "")
@@ -73,13 +80,26 @@ app = FastAPI(title="PM Case Prep")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
-def _is_silence(reply: str) -> bool:
-    """True if the interviewer chose to stay quiet. If the "(listening)" sentinel
-    appears ANYWHERE, treat the whole turn as silence — any text around it is the
-    model narrating to itself, never something for the candidate to read."""
-    if "(listening)" in reply.lower():
-        return True
-    return "".join(c for c in reply.lower() if c.isalpha()) in ("", "listening")
+_SENTINEL_RE = re.compile(r"\(\s*listening\.?\s*\)", re.IGNORECASE)
+
+
+def _visible_reply(reply: str) -> str:
+    """What the candidate should actually SEE. Empty string = stay silent.
+
+    The model is told a silent turn is exactly "(listening)". But if it wraps a
+    real answer around the sentinel, swallowing everything would drop an answer
+    the model believes it delivered — the candidate then hears "as I said…"
+    about words that never reached the screen. So: strip the sentinel, and if
+    substantial text remains, show that text; only near-empty remainders are
+    true silence."""
+    if not reply:
+        return ""
+    if _SENTINEL_RE.search(reply):
+        remainder = " ".join(_SENTINEL_RE.sub(" ", reply).split())
+        return remainder if len(remainder) >= 60 else ""
+    if "".join(c for c in reply.lower() if c.isalpha()) in ("", "listening"):
+        return ""
+    return reply.strip()
 
 
 # Signals that the candidate is talking TO the interviewer and expects a fast
@@ -186,7 +206,8 @@ async def health() -> JSONResponse:
             "anthropic_key": bool(
                 os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")
             ),
-            "model": MODEL,
+            "interviewer_model": INTERVIEWER_MODEL,
+            "grader_model": GRADER_MODEL,
         }
     )
 
@@ -300,7 +321,7 @@ async def session_ws(ws: WebSocket) -> None:
 
     case = load_case(default_case_path())
     client = anthropic.Anthropic()
-    interviewer = Interviewer(client, case, MODEL)
+    interviewer = Interviewer(client, case, INTERVIEWER_MODEL)
     tracker = DeliveryTracker()
     # Scope every score to this visitor's cookie identity — on a public host,
     # skill graphs must never mix across users.
@@ -431,7 +452,7 @@ async def session_ws(ws: WebSocket) -> None:
                 case,
                 interviewer.transcript(),
                 interviewer.observations_text(),
-                MODEL,
+                GRADER_MODEL,
                 delivery_summary,
             )
         except Exception as exc:  # noqa: BLE001
@@ -489,8 +510,11 @@ async def session_ws(ws: WebSocket) -> None:
                 await send_json({"type": "error", "text": f"Model error: {exc}"})
                 await send_json({"type": "state", "state": "listening"})
                 continue
-            if reply and not _is_silence(reply):
-                await send_json({"type": "reply", "text": reply})
+            shown = _visible_reply(reply)
+            # The model's memory must match the candidate's screen, always.
+            interviewer.align_shown(shown or "(listening)")
+            if shown:
+                await send_json({"type": "reply", "text": shown})
             if interviewer.concluded:
                 await do_grade()
                 stop.set()

@@ -280,7 +280,7 @@ function updateMicUi() {
   $("eq").hidden = !micOn;
 }
 
-// --- Microphone: capture -> resample to 16k Int16 -> stream ------------------
+// --- Microphone: capture -> gate -> resample to 16k Int16 -> stream ----------
 // A local RMS level drives the voice meter, so "it hears me" is visible with
 // zero server round-trip.
 
@@ -301,10 +301,61 @@ function meter(frame) {
   $("orb").style.setProperty("--lvl", level.toFixed(2));
 }
 
+// --- Noise gate: only YOUR voice is streamed, not the room -------------------
+// An adaptive floor tracks the ambient level from quiet moments; the gate opens
+// when the signal rises clearly above it (your near-field voice), hangs open
+// 1.5s so word tails and short intra-sentence dips survive, and flushes a 0.4s
+// pre-roll on open so the first syllable isn't clipped. Background chatter and
+// keyboard noise stay below the moving threshold and never leave the browser.
+// Disable for debugging with ?gate=off in the URL.
+const GATE_ENABLED = !location.search.includes("gate=off");
+let emaRms = 0;
+let noiseFloor = 0.006;
+let gateOpenUntil = 0;
+let preroll = [];
+let prerollSamples = 0;
+let prerollMax = 0;
+
+function gate(frame, inRate) {
+  if (!GATE_ENABLED) return [frame];
+  if (!prerollMax) prerollMax = Math.round(inRate * 0.4);
+  let sum = 0;
+  for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
+  emaRms = emaRms * 0.7 + Math.sqrt(sum / frame.length) * 0.3;
+  const now = performance.now();
+  const wasOpen = now < gateOpenUntil;
+  const speakThresh = Math.max(noiseFloor * 2.5, 0.01);
+  if (emaRms < speakThresh) {
+    // Quiet moment: let the ambient floor drift (slowly, and never too high —
+    // a loud cafe must not teach the gate to ignore your voice entirely).
+    noiseFloor = Math.min(0.02, noiseFloor * 0.998 + emaRms * 0.002);
+  } else {
+    gateOpenUntil = now + 1500;
+    if (!wasOpen) {
+      const flush = preroll;
+      preroll = [];
+      prerollSamples = 0;
+      return [...flush, frame];
+    }
+    return [frame];
+  }
+  if (wasOpen) return [frame]; // hang time — keep streaming through the dip
+  preroll.push(frame);
+  prerollSamples += frame.length;
+  while (prerollSamples > prerollMax && preroll.length) {
+    prerollSamples -= preroll.shift().length;
+  }
+  return [];
+}
+
 async function startMic() {
   if (audioCtx) return;
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    micStream = await navigator.mediaDevices.getUserMedia({
+      // voiceIsolation: newer Chrome/Safari suppress non-primary voices at the
+      // OS level; harmlessly ignored where unsupported.
+      audio: { echoCancellation: true, noiseSuppression: true, voiceIsolation: true },
+    });
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     await audioCtx.audioWorklet.addModule("/static/worklet.js");
     micSource = audioCtx.createMediaStreamSource(micStream);
@@ -313,7 +364,9 @@ async function startMic() {
     workletNode.port.onmessage = (e) => {
       if (!micOn || ended || !ws || ws.readyState !== 1) return;
       meter(e.data);
-      ws.send(floatTo16(resampleTo16k(e.data, inRate)).buffer);
+      for (const f of gate(e.data, inRate)) {
+        ws.send(floatTo16(resampleTo16k(f, inRate)).buffer);
+      }
     };
     micSource.connect(workletNode);
     const sink = audioCtx.createGain();
