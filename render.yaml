@@ -5,13 +5,20 @@ services:
   - type: web
     name: pm-case-prep
     runtime: python
-    plan: free # WebSockets work on free; upgrade + add a disk for persistence
+    plan: starter # always-on (no cold starts) and supports the disk below
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn pmcaseprep.web.app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    # Persistent disk: user progress + email logins survive deploys/restarts.
+    disk:
+      name: pmcp-data
+      mountPath: /data
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.6
+      - key: PMCP_DB
+        value: /data/skill_graph.db
       - key: ANTHROPIC_API_KEY
         sync: false # prompted in the dashboard — never in git
       - key: DEEPGRAM_API_KEY
