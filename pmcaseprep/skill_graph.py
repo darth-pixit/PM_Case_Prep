@@ -99,6 +99,7 @@ class SkillGraph:
         n = len(series)
         out: dict[str, Any] = {
             "sessions": n,
+            "series": [round(s, 2) for s in series],  # for the client sparkline
             "current": round(series[-1], 2) if series else None,
             "slope_per_case": None,
             "to_hire": None,

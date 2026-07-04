@@ -114,6 +114,17 @@ Nothing here is local-only by design — deploying is running the same app:
 - The frontend is static; later you can move `web/static/` to a CDN or a separate
   app pointing at the backend's `/ws` — the protocol doesn't change.
 
+### Turn detection: nova-3 vs Flux
+
+By default the app streams to Deepgram **nova-3** and detects turns itself
+(endpointing + a tunable pause window, `PMCP_SILENCE_S`/`PMCP_QUESTION_S`).
+Deepgram's **Flux** model goes further: it's a conversational model that
+detects end-of-turn *semantically* — it can tell a mid-thought pause from a
+finished answer from the speech itself, not just silence length. Enable it
+with `PMCP_STT=flux` (and tune patience via `PMCP_FLUX_EOT`, default 0.8).
+Experimental: if the Flux connection fails, the voice channel automatically
+falls back to nova-3, so it's safe to try.
+
 ### Visitor analytics (PostHog)
 
 Set `PMCP_POSTHOG_KEY` (and optionally `PMCP_POSTHOG_HOST`, default

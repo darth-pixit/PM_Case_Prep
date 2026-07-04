@@ -44,7 +44,7 @@ from ..grader import grade, weighted_result
 from ..interviewer import Interviewer
 from ..resources import resources_for
 from ..skill_graph import SkillGraph
-from .deepgram_live import DeepgramLive
+from .deepgram_live import DG_URL, FLUX_URL, NOVA_URL, DeepgramLive
 
 MODEL = os.environ.get("PMCP_MODEL", "claude-opus-4-8")
 # Turn-taking is ADAPTIVE. An utterance that addresses the interviewer (a
@@ -158,14 +158,18 @@ class Voice:
 
     async def _supervise(self) -> None:
         backoff = 1.0
+        url = DG_URL
+        fast_fails = 0  # consecutive near-instant drops (bad model/params)
         while not self._closed:
             keeper = None
+            started = asyncio.get_event_loop().time()
             try:
-                self._dg = DeepgramLive(self._key)
+                self._dg = DeepgramLive(self._key, url)
                 await self._dg.__aenter__()
                 backoff = 1.0
                 keeper = asyncio.create_task(self._keepalive())
                 async for evt in self._dg.events():
+                    fast_fails = 0
                     await self._handle(evt)
             except asyncio.CancelledError:
                 break
@@ -182,6 +186,16 @@ class Voice:
                 self._dg = None
             if self._closed:
                 break
+            # Experimental Flux model failing on connect? Fall back to nova-3
+            # rather than looping — voice must keep working no matter what.
+            if url == FLUX_URL and asyncio.get_event_loop().time() - started < 5.0:
+                fast_fails += 1
+                if fast_fails >= 2:
+                    url = NOVA_URL
+                    try:
+                        await self._notify("voice: flux unavailable — using standard model")
+                    except Exception:  # noqa: BLE001
+                        pass
             try:
                 await self._notify("voice reconnecting…")
             except Exception:  # noqa: BLE001
@@ -321,6 +335,31 @@ async def session_ws(ws: WebSocket) -> None:
                 await finalize_utterance()
         elif etype == "UtteranceEnd":
             await finalize_utterance()
+        elif etype == "TurnInfo":
+            # Flux native turn detection. Parsed defensively — if fields are
+            # missing we still deliver the text, just with degraded metrics.
+            event = evt.get("event", "")
+            transcript = (evt.get("transcript") or "").strip()
+            if transcript and event in ("Update", "StartOfTurn", "EagerEndOfTurn"):
+                await send_json({"type": "listening"})
+            if event == "EndOfTurn" and transcript:
+                words = evt.get("words") or []
+                parsed = [
+                    Word(
+                        w.get("word", ""),
+                        float(w.get("start", 0) or 0),
+                        float(w.get("end", 0) or 0),
+                    )
+                    for w in words
+                    if isinstance(w, dict)
+                ]
+                current_words.extend(
+                    parsed or [Word(t, 0.0, 0.0) for t in transcript.split()]
+                )
+                current_conf.append(
+                    float(evt.get("end_of_turn_confidence") or 1.0)
+                )
+                await finalize_utterance()
 
     # --- grading + interviewer worker ----------------------------------------
 

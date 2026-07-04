@@ -57,31 +57,67 @@ header h1 { font-size: 1.05rem; margin: 0; }
 .case-card h2 { margin: 0.3rem 0 0.4rem; font-size: 1.05rem; }
 .case-card p { margin: 0; }
 
-/* --- The presence indicator: the room's "state", front and center --------- */
+/* --- The presence indicator: the room's "state", front and center ---------
+   One glance answers: is it listening, thinking, or speaking? The orb color +
+   motion carries the state; the live meter proves the mic hears you. */
 .presence {
-  display: flex; align-items: center; gap: 0.6rem;
-  font-size: 1rem; color: var(--ink);
-  padding: 0.45rem 1rem;
+  display: flex; align-items: center; gap: 0.8rem;
+  color: var(--ink);
+  padding: 0.6rem 1.2rem;
   background: var(--panel); border: 1px solid var(--border); border-radius: 999px;
 }
+.presence-text { display: flex; flex-direction: column; line-height: 1.25; }
+.presence-text b { font-size: 1.02rem; }
+.presence-text small { color: var(--muted); font-size: 0.78rem; }
 .orb {
   width: 14px; height: 14px; border-radius: 50%;
   background: var(--muted); flex: 0 0 auto;
 }
-.orb.big { width: 22px; height: 22px; }
+.orb.big { width: 24px; height: 24px; }
 .orb.connecting { background: var(--muted); animation: breathe 1.6s ease-in-out infinite; }
 .orb.listening {
   background: var(--good);
   animation: breathe 2.6s ease-in-out infinite;
-  box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.35);
+  /* --lvl (0..1) comes from the live mic level — louder voice, brighter glow */
+  box-shadow: 0 0 calc(4px + var(--lvl, 0) * 26px) rgba(74, 222, 128, calc(0.35 + var(--lvl, 0) * 0.6));
 }
-/* Voice activity: the orb glows brighter while your words come in, but the
-   label stays "Listening" — one state, just visibly alive. */
-.orb.voiced { box-shadow: 0 0 16px rgba(74, 222, 128, 0.9); }
-.orb.responding { background: var(--accent); animation: hear 0.9s ease-in-out infinite; box-shadow: 0 0 12px rgba(110, 168, 254, 0.7); }
+.orb.thinking { background: var(--accent); animation: hear 0.9s ease-in-out infinite; box-shadow: 0 0 12px rgba(110, 168, 254, 0.7); }
+.orb.speaking { background: var(--accent); animation: none; box-shadow: 0 0 0 4px rgba(110, 168, 254, 0.25), 0 0 18px rgba(110, 168, 254, 0.8); }
+.orb.grading { background: var(--accent); animation: hear 0.9s ease-in-out infinite; }
 .orb.error { background: var(--bad); animation: none; }
 @keyframes breathe { 0%,100% { transform: scale(0.85); opacity: 0.6; } 50% { transform: scale(1.15); opacity: 1; } }
 @keyframes hear { 0%,100% { transform: scale(0.9); } 50% { transform: scale(1.35); } }
+
+/* Live voice meter: five bars scaled by mic RMS. Proof the room hears you. */
+.eq { display: flex; align-items: flex-end; gap: 3px; height: 20px; }
+.eq i {
+  display: block; width: 4px; height: 20px; border-radius: 2px;
+  background: var(--good); opacity: 0.9;
+  transform: scaleY(0.18); transform-origin: bottom;
+  transition: transform 0.12s ease;
+}
+
+/* --- Start gate: "mic is always on" said once, big, before anything else -- */
+.start-overlay {
+  position: fixed; inset: 0; z-index: 40;
+  background: rgba(15, 17, 21, 0.96);
+  display: flex; align-items: center; justify-content: center; padding: 1.2rem;
+}
+.start-card {
+  width: 100%; max-width: 500px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+  padding: 1.6rem 1.6rem 1.3rem;
+}
+.start-card h2 { margin: 0 0 1.1rem; font-size: 1.3rem; }
+.start-row { display: flex; gap: 0.8rem; margin-bottom: 0.95rem; }
+.start-row .start-ico { font-size: 1.3rem; flex: 0 0 auto; }
+.start-row div { color: var(--muted); font-size: 0.92rem; }
+.start-row b { display: block; color: var(--ink); font-size: 0.98rem; }
+#startBtn {
+  width: 100%; margin-top: 0.5rem; font-size: 1.08rem;
+  padding: 0.8rem; border-radius: 12px;
+}
+#startNote { display: block; text-align: center; margin-top: 0.55rem; color: var(--muted); }
 
 /* --- Only the latest interviewer message ---------------------------------- */
 .maya-current {
@@ -171,9 +207,10 @@ button:disabled { opacity: 0.5; cursor: default; }
 .sc-wrap { max-width: 780px; margin: 0 auto; padding: 1.6rem 1.2rem 0; }
 
 .sc-hero {
-  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  display: flex; align-items: center; justify-content: space-between; gap: 1.2rem;
   flex-wrap: wrap; margin-bottom: 1.1rem;
 }
+.sc-hero-left { flex: 1 1 320px; min-width: 0; }
 .sc-hero-left h2 { margin: 0 0 0.5rem; font-size: 1.15rem; color: var(--muted); font-weight: 600; }
 .sc-band {
   display: inline-block; padding: 0.35rem 0.9rem; border-radius: 999px;
@@ -181,9 +218,46 @@ button:disabled { opacity: 0.5; cursor: default; }
 }
 .sc-band.strong_hire, .sc-band.hire { background: rgba(74, 222, 128, 0.15); color: var(--good); border: 1px solid rgba(74, 222, 128, 0.4); }
 .sc-band.no_hire, .sc-band.strong_no_hire { background: rgba(248, 113, 113, 0.12); color: var(--bad); border: 1px solid rgba(248, 113, 113, 0.4); }
-.sc-score { text-align: right; }
-.sc-num { font-size: 3.2rem; font-weight: 650; line-height: 1; }
-.sc-den { display: block; color: var(--muted); font-size: 0.85rem; margin-top: 0.2rem; }
+
+/* Score gauge: donut sweeps to weighted/4 on load. */
+.sc-gauge { width: 132px; height: 132px; flex: 0 0 auto; }
+.g-track { fill: none; stroke: var(--panel-2); stroke-width: 10; }
+.g-fill {
+  fill: none; stroke-width: 10; stroke-linecap: round;
+  transform: rotate(-90deg); transform-origin: 60px 60px;
+  transition: stroke-dashoffset 1.1s cubic-bezier(0.22, 0.9, 0.35, 1);
+}
+.g-num { font-size: 30px; font-weight: 700; fill: var(--ink); text-anchor: middle; }
+.g-den { font-size: 10px; fill: var(--muted); text-anchor: middle; }
+
+/* Band ladder: where the score sits between strong-no-hire and strong-hire. */
+.lz-row {
+  position: relative; display: flex; height: 26px; margin-top: 0.8rem;
+  border-radius: 7px; overflow: hidden; max-width: 440px;
+}
+.lz { display: flex; align-items: center; justify-content: center; height: 100%; }
+.lz span { font-size: 0.6rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; }
+.lz.strong_no_hire { background: rgba(248, 113, 113, 0.22); }
+.lz.no_hire { background: rgba(248, 113, 113, 0.10); }
+.lz.hire { background: rgba(74, 222, 128, 0.12); }
+.lz.strong_hire { background: rgba(74, 222, 128, 0.24); }
+.lz-marker {
+  position: absolute; top: 2px; bottom: 2px; width: 3px;
+  background: #fff; border-radius: 2px; transform: translateX(-50%);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.7);
+}
+
+/* Trajectory: sparkline + tiles side by side. */
+.sc-traj { display: flex; gap: 1.1rem; align-items: center; flex-wrap: wrap; }
+.sc-spark { width: 250px; height: 76px; flex: 0 0 auto; }
+.traj-tiles { flex: 1 1 220px; margin-bottom: 0; }
+.sp-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.sp-dot { fill: var(--accent); stroke: var(--panel); stroke-width: 2; }
+.sp-dot.last { fill: #fff; }
+.sp-bar { stroke-width: 1; }
+.sp-bar.hire { stroke: rgba(251, 191, 36, 0.45); }
+.sp-bar.strong { stroke: rgba(74, 222, 128, 0.45); }
+.sp-lbl { font-size: 9px; fill: var(--muted); }
 
 .sc-card {
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
@@ -206,7 +280,11 @@ button:disabled { opacity: 0.5; cursor: default; }
 .sc-dim-head b { font-size: 0.95rem; }
 .sc-dim-score { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--muted); }
 .sc-meter { height: 8px; border-radius: 999px; margin: 0.5rem 0 0.55rem; overflow: hidden; }
-.sc-meter > i { display: block; height: 100%; border-radius: 999px; }
+.sc-meter > i {
+  display: block; height: 100%; border-radius: 999px;
+  transition: width 0.9s cubic-bezier(0.22, 0.9, 0.35, 1);
+}
+.dim-ico { margin-right: 0.15rem; }
 .sc-meter.m-low  { background: rgba(248, 113, 113, 0.16); } .sc-meter.m-low  > i { background: var(--bad); }
 .sc-meter.m-mid  { background: rgba(251, 191, 36, 0.16); }  .sc-meter.m-mid  > i { background: var(--warn); }
 .sc-meter.m-high { background: rgba(74, 222, 128, 0.16); }  .sc-meter.m-high > i { background: var(--good); }

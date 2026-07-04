@@ -1,10 +1,13 @@
 // PM Case Prep — browser client. Real-interview feel:
-//  * only the interviewer's LATEST message stays on screen (no chat history),
-//  * exactly two labeled states: Listening and Interviewer is responding
-//    (voice activity just brightens the orb — no third label),
-//  * your own words are never echoed,
+//  * a start gate makes "the mic is always on" impossible to miss (and the
+//    click doubles as the user gesture that grants mic permission),
+//  * one presence indicator answers listening / thinking / speaking at a
+//    glance, with a live voice meter so you SEE it hearing you,
+//  * only the interviewer's LATEST message stays on screen (history one click
+//    away), your own words are never echoed,
 //  * always-on mic + simultaneous typing,
-//  * grading shows a progress bar, and the scorecard ends with "Do another case".
+//  * grading shows a progress bar; the scorecard is a visual report with a
+//    score gauge, band ladder, trajectory sparkline and learning links.
 
 const $ = (id) => document.getElementById(id);
 const wsUrl = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "/ws";
@@ -43,29 +46,36 @@ function track(name, props) {
   } catch (e) { /* analytics must never break the interview */ }
 })();
 
+// --- State ----------------------------------------------------------------
+
 let ws;
 let micOn = false;
 let voiceSupported = false;
+let userStarted = false;
 let audioCtx, micStream, workletNode, micSource;
 let ended = false;
-let voiceTimer = null;
 let currentState = "connecting";
+let speakTimer = null;
 
-const STATE_LABELS = {
-  connecting: "connecting…",
-  listening: "Listening — take your time",
-  responding: "Interviewer is responding…",
-  grading: "Grading your case…",
-  error: "problem — see top right",
-  done: "Interview complete",
-  textonly: "Ready (text only — no voice key)",
+const STATE_META = {
+  connecting: { label: "Connecting…", hint: "" },
+  listening: { label: "Listening", hint: "Mic is on — think out loud, take your time" },
+  thinking: { label: "Thinking…", hint: "Maya is considering what you said" },
+  speaking: { label: "Maya is speaking", hint: "Her reply is below" },
+  grading: { label: "Grading your case…", hint: "" },
+  error: { label: "Problem", hint: "see top right" },
+  done: { label: "Interview complete", hint: "" },
+  textonly: { label: "Ready (text only)", hint: "No voice key — type your answers below" },
 };
 
 function setState(state) {
   currentState = state;
   const orb = $("orb");
-  orb.className = "orb " + (state === "textonly" || state === "done" ? "listening" : state);
-  $("stateLabel").textContent = STATE_LABELS[state] || state;
+  const orbState = state === "textonly" || state === "done" ? "listening" : state;
+  orb.className = "orb big " + orbState;
+  const meta = STATE_META[state] || { label: state, hint: "" };
+  $("stateLabel").textContent = meta.label;
+  $("stateHint").textContent = meta.hint;
   $("gradingOverlay").hidden = state !== "grading";
   if (state === "grading") startGradeProgress();
   else stopGradeProgress();
@@ -108,18 +118,9 @@ $("historyPanel").addEventListener("click", (e) => {
   if (e.target === $("historyPanel")) $("historyPanel").hidden = true;
 });
 
-// Voice activity only brightens the orb; the label stays "Listening".
-function pulseVoice() {
-  if (currentState !== "listening") return;
-  $("orb").classList.add("voiced");
-  if (voiceTimer) clearTimeout(voiceTimer);
-  voiceTimer = setTimeout(() => $("orb").classList.remove("voiced"), 1200);
-}
-
 // --- Grading progress -----------------------------------------------------
 // The server can't stream real percentages out of one long model call, so we
 // animate toward (never past) 95% and jump to 100% when the scorecard lands.
-// Better a bar that's honest-ish and moving than a spinner that looks hung.
 
 const GRADE_STAGES = [
   [0, "Re-reading your full transcript…"],
@@ -175,29 +176,37 @@ function handle(m) {
       $("caseArchetype").textContent = `${m.archetype} · ${m.case_type}`;
       $("caseTitle").textContent = m.title;
       $("casePrompt").textContent = m.prompt;
-      // The case card already shows the prompt; the message panel stays hidden
-      // until the interviewer actually says something.
       track("case_started", { case_title: m.title, archetype: m.archetype, voice: !!m.voice });
       voiceSupported = !!m.voice;
-      if (voiceSupported) startMic();
-      else {
+      if (!voiceSupported) {
         const b = $("micBtn");
         b.textContent = "🎤 voice off (no key)";
         b.classList.add("off");
         b.disabled = true;
-        setState("textonly");
+        $("startBtn").textContent = "Start interview (text only)";
+        $("startNote").textContent = "No voice key configured — you can type everything.";
+        if (userStarted) setState("textonly");
+      } else if (userStarted && !audioCtx) {
+        startMic();
       }
       break;
-    case "state":
-      // Voice-off sessions keep their clearer "text only" idle label.
-      if (m.state === "listening" && !voiceSupported) setState("textonly");
-      else setState(m.state);
+    case "state": {
+      const s = m.state === "responding" ? "thinking" : m.state;
+      // Give a fresh reply a beat on screen before flipping back to Listening.
+      if (s === "listening" && currentState === "speaking") break;
+      if (s === "listening" && !voiceSupported) setState("textonly");
+      else setState(s);
       break;
-    case "listening": // audio activity pulse from the server
-      pulseVoice();
+    }
+    case "listening": // server-side speech activity (kept for non-mic senders)
       break;
     case "reply":
       showMaya(m.text);
+      setState("speaking");
+      clearTimeout(speakTimer);
+      speakTimer = setTimeout(() => {
+        if (currentState === "speaking") setState(voiceSupported ? "listening" : "textonly");
+      }, 2600);
       break;
     case "status":
       if (m.text && m.text.includes("reconnect")) setError(m.text);
@@ -211,6 +220,17 @@ function handle(m) {
       break;
   }
 }
+
+// --- Start gate ---------------------------------------------------------------
+
+$("startBtn").onclick = () => {
+  userStarted = true;
+  track("interview_started", { voice: voiceSupported });
+  $("startOverlay").hidden = true;
+  if (voiceSupported) startMic();
+  else setState(currentState === "connecting" ? "connecting" : "textonly");
+  $("textInput").focus();
+};
 
 // --- Text + control actions --------------------------------------------------
 
@@ -243,8 +263,7 @@ $("micBtn").onclick = () => {
   if (!voiceSupported) return;
   if (!audioCtx) { startMic(); return; }
   micOn = !micOn;
-  $("micBtn").textContent = micOn ? "🎤 Mic: on" : "🎤 Mic: off";
-  $("micBtn").classList.toggle("off", !micOn);
+  updateMicUi();
   if (micOn && audioCtx.state === "suspended") audioCtx.resume();
 };
 $("reloadBtn").onclick = () => location.reload();
@@ -252,7 +271,33 @@ document.addEventListener("visibilitychange", () => {
   if (!document.hidden && audioCtx && audioCtx.state === "suspended") audioCtx.resume();
 });
 
+function updateMicUi() {
+  const b = $("micBtn");
+  b.textContent = micOn ? "🎤 Mic is live" : "🔇 Muted — click to unmute";
+  b.classList.toggle("off", !micOn);
+  $("eq").hidden = !micOn;
+}
+
 // --- Microphone: capture -> resample to 16k Int16 -> stream ------------------
+// A local RMS level drives the voice meter, so "it hears me" is visible with
+// zero server round-trip.
+
+let lastMeter = 0;
+const EQ_WEIGHTS = [0.55, 0.85, 1.0, 0.7, 0.45];
+
+function meter(frame) {
+  const now = performance.now();
+  if (now - lastMeter < 80) return;
+  lastMeter = now;
+  let sum = 0;
+  for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
+  const level = Math.min(1, Math.sqrt(sum / frame.length) * 9);
+  const bars = $("eq").children;
+  for (let i = 0; i < bars.length; i++) {
+    bars[i].style.transform = `scaleY(${(0.18 + level * EQ_WEIGHTS[i]).toFixed(2)})`;
+  }
+  $("orb").style.setProperty("--lvl", level.toFixed(2));
+}
 
 async function startMic() {
   if (audioCtx) return;
@@ -265,6 +310,7 @@ async function startMic() {
     const inRate = audioCtx.sampleRate;
     workletNode.port.onmessage = (e) => {
       if (!micOn || ended || !ws || ws.readyState !== 1) return;
+      meter(e.data);
       ws.send(floatTo16(resampleTo16k(e.data, inRate)).buffer);
     };
     micSource.connect(workletNode);
@@ -272,12 +318,12 @@ async function startMic() {
     sink.gain.value = 0; // keep the graph pulling frames without audible output
     workletNode.connect(sink).connect(audioCtx.destination);
     micOn = true;
-    $("micBtn").textContent = "🎤 Mic: on";
-    $("micBtn").classList.remove("off");
+    updateMicUi();
   } catch (err) {
     micOn = false;
     $("micBtn").textContent = "🎤 mic blocked";
     $("micBtn").classList.add("off");
+    track("mic_blocked", {});
     setError("mic permission needed — you can still type");
   }
 }
@@ -308,19 +354,19 @@ function floatTo16(f32) {
 
 // --- Scorecard ---------------------------------------------------------------
 
-const DIM_NAMES = {
-  structure: "Structure",
-  user_empathy: "User empathy",
-  prioritization: "Prioritization",
-  creativity: "Creativity",
-  communication: "Communication",
-  data_business: "Data & business",
+const DIM_META = {
+  structure: ["Structure", "🧭"],
+  user_empathy: ["User empathy", "❤️"],
+  prioritization: ["Prioritization", "⚖️"],
+  creativity: ["Creativity", "✨"],
+  communication: ["Communication", "🗣️"],
+  data_business: ["Data & business", "📊"],
 };
 
-function dimName(key) {
-  if (DIM_NAMES[key]) return DIM_NAMES[key];
+function dimMeta(key) {
+  if (DIM_META[key]) return DIM_META[key];
   const s = String(key).replace(/_/g, " ");
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  return [s.charAt(0).toUpperCase() + s.slice(1), "•"];
 }
 
 function resourceLink(r, where) {
@@ -328,24 +374,79 @@ function resourceLink(r, where) {
     data-where="${esc(where)}">${esc(r.title)}</a> <small>· ${esc(r.author)}</small>`;
 }
 
+// Score gauge: an SVG donut that fills to weighted/4 on load.
+function gauge(weighted, band) {
+  const R = 52;
+  const C = 2 * Math.PI * R;
+  const frac = Math.max(0, Math.min(1, weighted / 4));
+  const tone = band === "hire" || band === "strong_hire"
+    ? "var(--good)" : weighted >= 2 ? "var(--warn)" : "var(--bad)";
+  return `<svg class="sc-gauge" viewBox="0 0 120 120" role="img"
+      aria-label="Weighted score ${esc(weighted)} out of 4">
+    <circle cx="60" cy="60" r="${R}" class="g-track"/>
+    <circle cx="60" cy="60" r="${R}" class="g-fill"
+      style="stroke:${tone}; stroke-dasharray:${C.toFixed(1)}; stroke-dashoffset:${C.toFixed(1)}"
+      data-target="${(C * (1 - frac)).toFixed(1)}"/>
+    <text x="60" y="64" class="g-num">${esc(weighted)}</text>
+    <text x="60" y="80" class="g-den">out of 4</text>
+  </svg>`;
+}
+
+// Band ladder: where this score sits on strong-no-hire -> strong-hire.
+function ladder(weighted) {
+  const zones = [
+    ["strong_no_hire", 0, 2.0, "strong no"],
+    ["no_hire", 2.0, 2.75, "no hire"],
+    ["hire", 2.75, 3.5, "hire"],
+    ["strong_hire", 3.5, 4.0, "strong"],
+  ];
+  const seg = zones.map(([k, a, b, label]) =>
+    `<div class="lz ${k}" style="width:${(((b - a) / 4) * 100).toFixed(2)}%"><span>${label}</span></div>`
+  ).join("");
+  const pct = Math.max(1, Math.min(99, (weighted / 4) * 100));
+  return `<div class="lz-row">${seg}<div class="lz-marker" style="left:${pct.toFixed(1)}%"></div></div>`;
+}
+
+// Trajectory sparkline: per-case scores with the hire / strong-hire bars.
+function sparkline(series) {
+  if (!series || series.length < 2) return "";
+  const W = 250, H = 76, P = 10;
+  const x = (i) => P + (i * (W - 2 * P)) / (series.length - 1);
+  const y = (v) => H - P - ((Math.max(1, v) - 1) / 3) * (H - 2 * P);
+  const pts = series.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const dots = series.map((v, i) =>
+    `<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="${i === series.length - 1 ? 4.5 : 3}"
+       class="sp-dot${i === series.length - 1 ? " last" : ""}"/>`).join("");
+  return `<svg class="sc-spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="Score per case">
+    <line x1="${P}" x2="${W - P}" y1="${y(2.75).toFixed(1)}" y2="${y(2.75).toFixed(1)}" class="sp-bar hire"/>
+    <text x="${W - P}" y="${(y(2.75) - 3).toFixed(1)}" class="sp-lbl" text-anchor="end">hire 2.75</text>
+    <line x1="${P}" x2="${W - P}" y1="${y(3.5).toFixed(1)}" y2="${y(3.5).toFixed(1)}" class="sp-bar strong"/>
+    <text x="${W - P}" y="${(y(3.5) - 3).toFixed(1)}" class="sp-lbl" text-anchor="end">strong 3.5</text>
+    <polyline points="${pts}" class="sp-line"/>
+    ${dots}
+  </svg>`;
+}
+
 function trajectoryCard(t) {
   if (!t) return "";
-  let body;
   if (t.sessions < 2) {
-    body = `<p class="sc-dim-note">${esc(t.note || "Finish one more case to unlock your trajectory.")}</p>`;
-  } else {
-    const tile = (label, val) => `<div class="sc-tile"><div class="label">${esc(label)}</div>
-      <div class="value">${val}</div></div>`;
-    const fmt = (n) => (n === 0 ? "✓ there" : n === null ? "—" : `~${n} case${n === 1 ? "" : "s"}`);
-    body = `<div class="sc-tiles">
-        ${tile("Cases completed", esc(t.sessions))}
-        ${tile("Current level", esc(t.current) + " <small>/ 4</small>")}
+    return `<div class="sc-card"><h3>Your trajectory</h3>
+      <p class="sc-dim-note">${esc(t.note || "Finish one more case to unlock your trajectory.")}</p></div>`;
+  }
+  const tile = (label, val) => `<div class="sc-tile"><div class="label">${esc(label)}</div>
+    <div class="value">${val}</div></div>`;
+  const fmt = (n) => (n === 0 ? "✓ there" : n === null ? "—" : `~${n} case${n === 1 ? "" : "s"}`);
+  const spark = sparkline(t.series);
+  return `<div class="sc-card"><h3>Your trajectory</h3>
+    <div class="sc-traj">
+      ${spark}
+      <div class="sc-tiles traj-tiles">
+        ${tile("Cases done", esc(t.sessions))}
         ${tile("To HIRE bar", esc(fmt(t.to_hire)))}
         ${tile("To STRONG HIRE", esc(fmt(t.to_strong_hire)))}
       </div>
-      <p class="sc-dim-note">${esc(t.note)}</p>`;
-  }
-  return `<div class="sc-card"><h3>Your trajectory</h3>${body}</div>`;
+    </div>
+    <p class="sc-dim-note">${esc(t.note)}</p></div>`;
 }
 
 function renderScorecard(m) {
@@ -356,12 +457,13 @@ function renderScorecard(m) {
   // Dimension meters: fill = score severity, track = same hue lighter.
   const dims = c.dimension_scores.map((d) => {
     const tone = d.score <= 2 ? "m-low" : d.score === 3 ? "m-mid" : "m-high";
+    const [name, ico] = dimMeta(d.dimension);
     const links = (dimResources[d.dimension] || [])
       .map((r) => resourceLink(r, d.dimension)).join("<br>");
     return `<div class="sc-dim">
-      <div class="sc-dim-head"><b>${esc(dimName(d.dimension))}</b>
+      <div class="sc-dim-head"><b><span class="dim-ico">${ico}</span> ${esc(name)}</b>
         <span class="sc-dim-score">${d.score} / 4</span></div>
-      <div class="sc-meter ${tone}"><i style="width:${(d.score / 4) * 100}%"></i></div>
+      <div class="sc-meter ${tone}"><i style="width:0%" data-w="${(d.score / 4) * 100}"></i></div>
       <p class="sc-dim-note">${esc(d.justification)}</p>
       ${links ? `<p class="sc-links">Level up: ${links}</p>` : ""}
     </div>`;
@@ -398,9 +500,9 @@ function renderScorecard(m) {
         <div class="sc-hero-left">
           <h2>Your scorecard</h2>
           <span class="sc-band ${esc(band)}">${esc(band.replace(/_/g, " ").toUpperCase())}</span>
+          ${ladder(m.weighted)}
         </div>
-        <div class="sc-score"><span class="sc-num">${esc(m.weighted)}</span>
-          <span class="sc-den">weighted score out of 4</span></div>
+        ${gauge(m.weighted, band)}
       </header>
 
       <div class="sc-card sc-opp"><h3>💡 Your biggest opportunity</h3>
@@ -426,7 +528,7 @@ function renderScorecard(m) {
       <div class="sc-card"><h3>Coach's note</h3><p>${esc(c.summary)}</p></div>
 
       <details class="sc-fold">
-        <summary>Your progress across cases</summary>
+        <summary>Full skill graph</summary>
         <pre class="graph">${esc(m.skill_graph)}</pre>
       </details>
 
@@ -437,6 +539,14 @@ function renderScorecard(m) {
     </div>`;
   $("gradingOverlay").hidden = true;
   $("scorecard").hidden = false;
+  // Kick the entrance animations once painted: meters fill, gauge sweeps.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    document.querySelectorAll(".sc-meter > i").forEach((el) => {
+      el.style.width = el.dataset.w + "%";
+    });
+    const g = document.querySelector(".g-fill");
+    if (g) g.style.strokeDashoffset = g.dataset.target;
+  }));
   track("scorecard_viewed", { band: m.band, weighted: m.weighted, sessions: m.trajectory && m.trajectory.sessions });
   $("newCaseBtn").onclick = () => { track("new_case_clicked", {}); location.reload(); };
   $("scorecard").addEventListener("click", (e) => {

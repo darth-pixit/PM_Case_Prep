@@ -5,17 +5,27 @@ churn. We ask for interim results (live partial transcript), word timestamps
 (delivery metrics), and endpointing + utterance-end events (turn detection —
 so Maya knows when you've finished a thought).
 
+Two speech models are supported:
+  * nova-3 (default) — classic streaming STT; turn boundaries come from
+    silence heuristics (endpointing + utterance_end_ms) that WE tune.
+  * flux (opt-in: PMCP_STT=flux) — Deepgram's conversational model with
+    NATIVE turn detection: it models whether a pause is "mid-thought" vs
+    "done talking" from the speech itself, not just silence length. Better
+    for interview-style thinking-out-loud. Experimental here: if the Flux
+    connection fails, the supervisor falls back to nova-3 automatically.
+
 Audio expected: 16 kHz, mono, linear16 (PCM). The browser sends exactly that.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from typing import AsyncIterator
 
 import websockets
 
-DG_URL = (
+NOVA_URL = (
     "wss://api.deepgram.com/v1/listen"
     "?model=nova-3"
     "&smart_format=true"
@@ -29,6 +39,18 @@ DG_URL = (
     "&channels=1"
 )
 
+# Flux: eot_threshold is the confidence the model needs before declaring the
+# turn over — higher = more patient with thinking pauses.
+FLUX_URL = (
+    "wss://api.deepgram.com/v2/listen"
+    "?model=flux-general-en"
+    "&encoding=linear16"
+    "&sample_rate=16000"
+    f"&eot_threshold={os.environ.get('PMCP_FLUX_EOT', '0.8')}"
+)
+
+DG_URL = FLUX_URL if os.environ.get("PMCP_STT", "").lower() == "flux" else NOVA_URL
+
 
 async def _connect(url: str, api_key: str):
     """Connect, tolerating the websockets header-kwarg rename across versions."""
@@ -40,12 +62,13 @@ async def _connect(url: str, api_key: str):
 
 
 class DeepgramLive:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, url: str = DG_URL):
         self.api_key = api_key
+        self.url = url
         self.ws = None
 
     async def __aenter__(self) -> "DeepgramLive":
-        self.ws = await _connect(DG_URL, self.api_key)
+        self.ws = await _connect(self.url, self.api_key)
         return self
 
     async def __aexit__(self, *_exc) -> None:

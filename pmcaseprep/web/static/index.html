@@ -23,10 +23,15 @@
       <p id="casePrompt"></p>
     </div>
 
-    <!-- Prominent presence indicator: listening / responding / grading -->
+    <!-- The room's presence: one glance answers "is it hearing me, thinking,
+         or speaking?" — the orb + live voice meter + a labeled state. -->
     <div id="presence" class="presence">
-      <span id="orb" class="orb connecting"></span>
-      <span id="stateLabel">connecting…</span>
+      <span id="orb" class="orb big connecting"></span>
+      <div class="eq" id="eq" hidden><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="presence-text">
+        <b id="stateLabel">connecting…</b>
+        <small id="stateHint"></small>
+      </div>
     </div>
 
     <!-- Only the interviewer's LATEST message is shown — like a real interview.
@@ -51,18 +56,37 @@
 
   <div class="composer">
     <textarea id="textInput" rows="2"
-      placeholder="Think out loud — talk (mic is always on) or type. The interviewer stays quiet unless you ask or finish."></textarea>
+      placeholder="Prefer typing? Type here — speaking works at the same time."></textarea>
     <div class="composer-actions">
       <button id="sendBtn">Send</button>
-      <button id="micBtn" class="toggle">🎤 Mic: on</button>
+      <button id="micBtn" class="toggle">🎤 Mic</button>
       <button id="hintBtn" class="ghost">Ask for a hint</button>
       <button id="doneBtn" class="ghost">Done &amp; grade</button>
     </div>
   </div>
 
+  <!-- Start gate: makes "the mic is on the whole time" impossible to miss, and
+       the click is the user gesture that grants mic permission cleanly. -->
+  <div id="startOverlay" class="start-overlay">
+    <div class="start-card">
+      <h2>Your case interview</h2>
+      <div class="start-row"><span class="start-ico">🎤</span>
+        <div><b>The mic stays on the whole time.</b>
+        Just think out loud, like a real interview — no push-to-talk.</div></div>
+      <div class="start-row"><span class="start-ico">🤫</span>
+        <div><b>Maya stays quiet while you think.</b>
+        She answers when you ask her something or finish a thought.</div></div>
+      <div class="start-row"><span class="start-ico">🏁</span>
+        <div><b>Press "Done &amp; grade" when you're finished.</b>
+        You'll get a full scorecard with your trajectory.</div></div>
+      <button id="startBtn">Start interview 🎤</button>
+      <small id="startNote">Your browser will ask for microphone access.</small>
+    </div>
+  </div>
+
   <div id="gradingOverlay" class="grading-overlay" hidden>
     <div class="grading-box">
-      <span class="orb responding big"></span>
+      <span class="orb thinking big"></span>
       <p id="gradeStage">Re-reading your full transcript…</p>
       <div class="progress-track"><div id="gradeFill" class="progress-fill"></div></div>
       <p id="gradePct" class="grade-pct">0%</p>
