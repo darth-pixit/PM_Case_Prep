@@ -26,6 +26,7 @@ MAX_PROJECTED_CASES = 30
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS scores (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    TEXT NOT NULL DEFAULT 'local',
     session_id TEXT NOT NULL,
     case_id    TEXT NOT NULL,
     archetype  TEXT NOT NULL,
@@ -34,43 +35,61 @@ CREATE TABLE IF NOT EXISTS scores (
     band       TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS users (
+    email      TEXT PRIMARY KEY,
+    uid        TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 
 class SkillGraph:
-    def __init__(self, db_path: str | Path = "skill_graph.db"):
+    """One user's longitudinal scores. `user_id` scopes every read and write —
+    on the web each visitor gets a cookie uid; the CLI stays 'local'."""
+
+    def __init__(self, db_path: str | Path = "skill_graph.db", user_id: str = "local"):
         self.conn = sqlite3.connect(str(db_path))
-        self.conn.execute(_SCHEMA)
+        self.user = user_id
+        self.conn.executescript(_SCHEMA)
+        # Migrate pre-multi-user databases in place.
+        cols = [r[1] for r in self.conn.execute("PRAGMA table_info(scores)")]
+        if "user_id" not in cols:
+            self.conn.execute(
+                "ALTER TABLE scores ADD COLUMN user_id TEXT NOT NULL DEFAULT 'local'"
+            )
         self.conn.commit()
 
     def record(self, session_id: str, case_id: str, archetype: str, card: ScoreCard, band: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
         rows = [
-            (session_id, case_id, archetype, ds.dimension, ds.score, band, now)
+            (self.user, session_id, case_id, archetype, ds.dimension, ds.score, band, now)
             for ds in card.dimension_scores
         ]
         self.conn.executemany(
-            "INSERT INTO scores (session_id, case_id, archetype, dimension, score, band, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO scores (user_id, session_id, case_id, archetype, dimension, score, band, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )
         self.conn.commit()
 
     def sessions_count(self) -> int:
-        cur = self.conn.execute("SELECT COUNT(DISTINCT session_id) FROM scores")
+        cur = self.conn.execute(
+            "SELECT COUNT(DISTINCT session_id) FROM scores WHERE user_id = ?", (self.user,)
+        )
         return cur.fetchone()[0]
 
     def averages(self) -> dict[str, float]:
         cur = self.conn.execute(
-            "SELECT dimension, AVG(score) FROM scores GROUP BY dimension"
+            "SELECT dimension, AVG(score) FROM scores WHERE user_id = ? GROUP BY dimension",
+            (self.user,),
         )
         return {dim: round(avg, 2) for dim, avg in cur.fetchall()}
 
     def trend(self, dimension: str) -> Optional[float]:
         """Delta between the earliest-half and latest-half average for a dimension."""
         cur = self.conn.execute(
-            "SELECT score FROM scores WHERE dimension = ? ORDER BY created_at, id",
-            (dimension,),
+            "SELECT score FROM scores WHERE user_id = ? AND dimension = ? ORDER BY created_at, id",
+            (self.user, dimension),
         )
         vals = [r[0] for r in cur.fetchall()]
         if len(vals) < 4:
@@ -83,9 +102,30 @@ class SkillGraph:
     def session_series(self) -> list[float]:
         """Per-case mean score (across dimensions), oldest case first."""
         cur = self.conn.execute(
-            "SELECT AVG(score) FROM scores GROUP BY session_id ORDER BY MIN(created_at), MIN(id)"
+            "SELECT AVG(score) FROM scores WHERE user_id = ? "
+            "GROUP BY session_id ORDER BY MIN(created_at), MIN(id)",
+            (self.user,),
         )
         return [float(row[0]) for row in cur.fetchall()]
+
+    # --- identity: link a cookie uid to an email ---------------------------
+
+    def uid_for_email(self, email: str) -> Optional[str]:
+        row = self.conn.execute("SELECT uid FROM users WHERE email = ?", (email,)).fetchone()
+        return row[0] if row else None
+
+    def email_for_uid(self, uid: str) -> Optional[str]:
+        row = self.conn.execute("SELECT email FROM users WHERE uid = ?", (uid,)).fetchone()
+        return row[0] if row else None
+
+    def link_email(self, email: str, uid: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        self.conn.execute(
+            "INSERT INTO users (email, uid, created_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(email) DO UPDATE SET uid = excluded.uid",
+            (email, uid, now),
+        )
+        self.conn.commit()
 
     def projection(self) -> dict:
         """How many more cases to the hire / strong-hire bar at the current pace.

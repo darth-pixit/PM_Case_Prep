@@ -175,6 +175,30 @@ def test_skill_graph_projection():
     g2.close()
 
 
+def test_skill_graph_user_isolation_and_login():
+    import os
+    import tempfile
+
+    from pmcaseprep.skill_graph import SkillGraph
+
+    with tempfile.TemporaryDirectory() as d:
+        db = os.path.join(d, "t.db")
+        a = SkillGraph(db, "uid-a")
+        b = SkillGraph(db, "uid-b")
+        card = _card_with_scores({k: 3 for k in rubric.DIMENSION_KEYS})
+        a.record("s1", "case", "ai-pm", card, "hire")
+        # One visitor's scores must never leak into another's graph.
+        assert a.sessions_count() == 1
+        assert b.sessions_count() == 0
+        assert b.projection()["sessions"] == 0
+        # Email linking: save on device A, restore from device B.
+        a.link_email("p@example.com", "uid-a")
+        assert b.uid_for_email("p@example.com") == "uid-a"
+        assert a.email_for_uid("uid-a") == "p@example.com"
+        a.close()
+        b.close()
+
+
 def test_resources_selection():
     from pmcaseprep.resources import RESOURCES, resources_for
 

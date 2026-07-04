@@ -34,7 +34,7 @@ except ImportError:
     pass
 
 import anthropic
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -60,6 +60,9 @@ MIN_CONFIDENCE = float(os.environ.get("PMCP_MIN_CONFIDENCE", "0.55"))
 # only ingest events, never read them — so serving it to the browser is safe.
 POSTHOG_KEY = os.environ.get("PMCP_POSTHOG_KEY", "")
 POSTHOG_HOST = os.environ.get("PMCP_POSTHOG_HOST", "https://us.i.posthog.com")
+DB_PATH = os.environ.get("PMCP_DB", "skill_graph.db")
+UID_COOKIE = "pmcp_uid"
+COOKIE_MAX_AGE = 60 * 60 * 24 * 730  # two years
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HINT_PROMPT = (
     "[The candidate asks for a hint. Give ONE graduated nudge for where they are "
@@ -112,14 +115,66 @@ def _is_noise(text: str, confidence: float) -> bool:
 
 
 @app.get("/")
-async def index() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+async def index(request: Request) -> FileResponse:
+    """Serve the app and give every visitor a stable anonymous identity, so
+    their skill graph is theirs alone even before they log in."""
+    resp = FileResponse(STATIC_DIR / "index.html")
+    if not request.cookies.get(UID_COOKIE):
+        resp.set_cookie(
+            UID_COOKIE, uuid.uuid4().hex, max_age=COOKIE_MAX_AGE, samesite="lax"
+        )
+    return resp
 
 
 @app.get("/config")
-async def config() -> JSONResponse:
+async def config(request: Request) -> JSONResponse:
     """Public, browser-safe config. No secrets — the PostHog key is publishable."""
-    return JSONResponse({"posthog_key": POSTHOG_KEY, "posthog_host": POSTHOG_HOST})
+    email = None
+    uid = request.cookies.get(UID_COOKIE)
+    if uid:
+        g = SkillGraph(DB_PATH, uid)
+        email = g.email_for_uid(uid)
+        g.close()
+    return JSONResponse(
+        {"posthog_key": POSTHOG_KEY, "posthog_host": POSTHOG_HOST, "email": email}
+    )
+
+
+@app.post("/api/login")
+async def login(request: Request) -> JSONResponse:
+    """Email-linked progress (MVP — no password yet, see README).
+
+    New email  -> links this browser's uid to it ("save my progress").
+    Known email -> switches this browser to the saved uid ("restore my progress").
+    """
+    try:
+        data = await request.json()
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=400)
+    email = str(data.get("email") or "").strip().lower()
+    if "@" not in email or "." not in email.rsplit("@", 1)[-1] or len(email) > 254:
+        return JSONResponse({"ok": False, "error": "invalid email"}, status_code=400)
+
+    uid = request.cookies.get(UID_COOKIE) or uuid.uuid4().hex
+    g = SkillGraph(DB_PATH, uid)
+    try:
+        existing = g.uid_for_email(email)
+        restored = bool(existing and existing != uid)
+        if restored:
+            uid = existing
+        else:
+            g.link_email(email, uid)
+        g2 = SkillGraph(DB_PATH, uid)
+        sessions = g2.sessions_count()
+        g2.close()
+    finally:
+        g.close()
+
+    resp = JSONResponse(
+        {"ok": True, "email": email, "restored": restored, "sessions": sessions}
+    )
+    resp.set_cookie(UID_COOKIE, uid, max_age=COOKIE_MAX_AGE, samesite="lax")
+    return resp
 
 
 @app.get("/health")
@@ -247,7 +302,10 @@ async def session_ws(ws: WebSocket) -> None:
     client = anthropic.Anthropic()
     interviewer = Interviewer(client, case, MODEL)
     tracker = DeliveryTracker()
-    graph = SkillGraph()
+    # Scope every score to this visitor's cookie identity — on a public host,
+    # skill graphs must never mix across users.
+    uid = ws.cookies.get(UID_COOKIE) or uuid.uuid4().hex
+    graph = SkillGraph(DB_PATH, uid)
     session_id = uuid.uuid4().hex[:8]
     voice_on = bool(os.environ.get("DEEPGRAM_API_KEY"))
 

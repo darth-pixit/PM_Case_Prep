@@ -19,6 +19,7 @@ const wsUrl = (location.protocol === "https:" ? "wss" : "ws") + "://" + location
 // ever sent — only event names and coarse properties.
 
 let phReady = false;
+let signedInEmail = null; // set from /config; the scorecard offers login if absent
 const phQueue = [];
 
 function track(name, props) {
@@ -29,6 +30,7 @@ function track(name, props) {
 (async function initAnalytics() {
   try {
     const cfg = await (await fetch("/config")).json();
+    signedInEmail = cfg.email || null;
     if (!cfg.posthog_key) return;
     const assets = cfg.posthog_host.replace(".i.posthog.com", "-assets.i.posthog.com");
     const s = document.createElement("script");
@@ -532,6 +534,19 @@ function renderScorecard(m) {
         <pre class="graph">${esc(m.skill_graph)}</pre>
       </details>
 
+      ${signedInEmail
+        ? `<div class="sc-card sc-login"><h3>💾 Progress</h3>
+            <p class="sc-dim-note">Signed in as <b>${esc(signedInEmail)}</b> — your scores and trajectory save automatically.</p></div>`
+        : `<div class="sc-card sc-login"><h3>💾 Save your progress</h3>
+            <p>Right now this scorecard lives only in this browser. Add your email to keep your
+            skill graph and trajectory — and pick them up on any device.</p>
+            <div class="login-row">
+              <input id="loginEmail" type="email" inputmode="email" autocomplete="email"
+                placeholder="you@email.com">
+              <button id="loginBtn">Log in &amp; save</button>
+            </div>
+            <small id="loginMsg" class="sc-dim-note"></small></div>`}
+
       <div class="sc-actions">
         <button id="newCaseBtn">Do another case →</button>
         <span class="sub">Starts a fresh interview</span>
@@ -549,6 +564,38 @@ function renderScorecard(m) {
   }));
   track("scorecard_viewed", { band: m.band, weighted: m.weighted, sessions: m.trajectory && m.trajectory.sessions });
   $("newCaseBtn").onclick = () => { track("new_case_clicked", {}); location.reload(); };
+  if ($("loginBtn")) {
+    $("loginEmail").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); $("loginBtn").click(); }
+    });
+    $("loginBtn").onclick = async () => {
+      const email = $("loginEmail").value.trim();
+      if (!email) { $("loginMsg").textContent = "Enter your email first."; return; }
+      $("loginBtn").disabled = true;
+      try {
+        const r = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        });
+        const d = await r.json();
+        if (d.ok) {
+          signedInEmail = d.email;
+          track("login", { restored: d.restored, sessions: d.sessions });
+          $("loginBtn").textContent = "✓ Signed in";
+          $("loginMsg").textContent = d.restored
+            ? `Welcome back — ${d.sessions} past case${d.sessions === 1 ? "" : "s"} linked to this email are yours again.`
+            : "Saved. Use this email on any device to pick your progress back up.";
+        } else {
+          $("loginMsg").textContent = d.error || "That didn't work — check the email.";
+          $("loginBtn").disabled = false;
+        }
+      } catch {
+        $("loginMsg").textContent = "Network problem — try again.";
+        $("loginBtn").disabled = false;
+      }
+    };
+  }
   $("scorecard").addEventListener("click", (e) => {
     const a = e.target.closest("a.resource");
     if (a) track("resource_opened", { url: a.href, where: a.dataset.where });

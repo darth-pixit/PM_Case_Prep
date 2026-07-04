@@ -103,16 +103,40 @@ Files: `pmcaseprep/web/app.py` (backend + one WebSocket per session),
 
 ## Going online
 
-Nothing here is local-only by design — deploying is running the same app:
+The app is deploy-ready — same code, hosted. The UI is tuned for phones and
+desktops, and every visitor gets their own progress (cookie identity + the
+scorecard's "save your progress" email login).
 
-- It's a standard FastAPI app (`pmcaseprep.web.app:app`). Host it anywhere that
-  runs Python (Render, Fly.io, Railway, a VM): `uvicorn pmcaseprep.web.app:app`.
-- Set `ANTHROPIC_API_KEY` and `DEEPGRAM_API_KEY` as environment variables on the
-  host — **keys stay server-side; the browser never sees them.**
-- Serve over **HTTPS** (any host provides it). Browsers require a secure context
-  for the mic off `localhost`; the frontend auto-switches to `wss://` on https.
-- The frontend is static; later you can move `web/static/` to a CDN or a separate
-  app pointing at the backend's `/ws` — the protocol doesn't change.
+### Deploy on Render (recommended, ~5 minutes)
+
+1. [render.com](https://render.com) → sign up with your GitHub account.
+2. **New → Blueprint**, pick this repository (and the working branch). Render
+   reads `render.yaml` and configures everything.
+3. It will prompt for the secrets: `ANTHROPIC_API_KEY`, `DEEPGRAM_API_KEY`,
+   `PMCP_POSTHOG_KEY`. Paste the same values as your local `.env`.
+4. Deploy. You get `https://pm-case-prep.onrender.com` — HTTPS included, so the
+   mic works and the frontend auto-switches to `wss://`.
+
+Free-tier honesty: the instance sleeps after ~15 idle minutes (first visit
+wakes it in ~30s), and the SQLite file is wiped on each deploy/restart — so
+saved progress survives a session but not a redeploy. For real persistence:
+paid instance + a Render Disk (set `PMCP_DB=/data/skill_graph.db`), or the
+roadmap Postgres move.
+
+### Deploy anywhere else
+
+`Dockerfile` included — Railway, Fly.io, Cloud Run, or any VPS:
+`docker build -t pmcaseprep . && docker run -p 8000:8000 --env-file .env pmcaseprep`.
+Keys are environment variables — **server-side only; the browser never sees them.**
+
+### Accounts & saved progress (MVP)
+
+Each browser gets an anonymous identity cookie, so scores never mix between
+visitors. The scorecard ends with **"Save your progress"**: entering an email
+links it to that identity; entering the same email on another device restores
+it. This is deliberately password-less for now — fine for a prep tool MVP,
+but add real auth (Google OAuth / magic links via Clerk or Auth0) before
+promoting it widely, since anyone who knows an email could claim it.
 
 ### Turn detection: nova-3 vs Flux
 

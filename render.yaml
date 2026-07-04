@@ -1,0 +1,23 @@
+# One-click-ish deploy on Render (https://render.com).
+# Dashboard -> New -> Blueprint -> point at this repo. Render reads this file,
+# builds the service, and prompts you for the secret env vars below.
+services:
+  - type: web
+    name: pm-case-prep
+    runtime: python
+    plan: free # WebSockets work on free; upgrade + add a disk for persistence
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn pmcaseprep.web.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.6
+      - key: ANTHROPIC_API_KEY
+        sync: false # prompted in the dashboard — never in git
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: PMCP_POSTHOG_KEY
+        sync: false
+      # Optional: uncomment to use Deepgram Flux turn detection
+      # - key: PMCP_STT
+      #   value: flux
