@@ -132,6 +132,72 @@ def test_web_app_imports():
         assert (webapp.STATIC_DIR / f).exists(), f"missing static file {f}"
 
 
+def _card_with_scores(scores: dict[str, int]) -> ScoreCard:
+    return ScoreCard(
+        dimension_scores=[
+            DimensionScore(dimension=k, score=v, justification="x")
+            for k, v in scores.items()
+        ],
+        category_checklist=[],
+        red_flags=[],
+        top_improvement="x",
+        overall_band="hire",
+        summary="y",
+    )
+
+
+def test_skill_graph_projection():
+    from pmcaseprep.skill_graph import SkillGraph
+
+    g = SkillGraph(":memory:")
+    proj = g.projection()
+    assert proj["sessions"] == 0 and proj["to_hire"] is None
+
+    # Three cases improving ~0.25/case: 2.0 -> 2.25 -> 2.5. Hire bar is 2.75.
+    for i, s in enumerate(([2, 2, 2, 2, 2, 2], [2, 2, 2, 2, 3, 2], [3, 2, 3, 2, 3, 2])):
+        card = _card_with_scores(dict(zip(rubric.DIMENSION_KEYS, s)))
+        g.record(f"s{i}", "case", "ai-pm", card, "no_hire")
+    proj = g.projection()
+    assert proj["sessions"] == 3
+    assert proj["slope_per_case"] > 0
+    # Least-squares fit: level 2.47 at the latest case, +0.25/case.
+    assert proj["to_hire"] == 2  # ceil((2.75 - 2.47) / 0.25)
+    assert proj["to_strong_hire"] == 5  # ceil((3.5 - 2.47) / 0.25)
+
+    # Flat scores -> no dishonest extrapolation.
+    g2 = SkillGraph(":memory:")
+    for i in range(3):
+        card = _card_with_scores({k: 2 for k in rubric.DIMENSION_KEYS})
+        g2.record(f"s{i}", "case", "ai-pm", card, "no_hire")
+    proj2 = g2.projection()
+    assert proj2["to_hire"] is None and "flat" in proj2["note"]
+    g.close()
+    g2.close()
+
+
+def test_resources_selection():
+    from pmcaseprep.resources import RESOURCES, resources_for
+
+    case = load_case(default_case_path())
+    # Every tag a case declares must exist in the curated map.
+    for tag in case.resource_tags:
+        assert tag in RESOURCES, f"case tags unknown resource key {tag}"
+    scores = dict.fromkeys(rubric.DIMENSION_KEYS, 4)
+    scores["structure"] = 2
+    scores["communication"] = 3
+    picked = resources_for(_card_with_scores(scores), case)
+    if RESOURCES:  # once links are curated, weak dims must get them
+        assert "structure" in picked["dimensions"]
+        assert len(picked["dimensions"].get("communication", [])) <= 1
+        assert picked["case"], "case resource_tags should yield links"
+        for links in list(picked["dimensions"].values()) + [picked["case"]]:
+            for r in links:
+                assert r["url"].startswith("https://")
+    # A perfect run shows no dimension links.
+    perfect = resources_for(_card_with_scores(dict.fromkeys(rubric.DIMENSION_KEYS, 4)), case)
+    assert perfect["dimensions"] == {}
+
+
 def test_weighted_result_is_deterministic():
     case = load_case(default_case_path())
     card = ScoreCard(

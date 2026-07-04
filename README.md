@@ -114,6 +114,19 @@ Nothing here is local-only by design — deploying is running the same app:
 - The frontend is static; later you can move `web/static/` to a CDN or a separate
   app pointing at the backend's `/ws` — the protocol doesn't change.
 
+### Visitor analytics (PostHog)
+
+Set `PMCP_POSTHOG_KEY` (and optionally `PMCP_POSTHOG_HOST`, default
+`https://us.i.posthog.com`) in the server's environment and every visitor is
+tracked automatically: pageviews, **every click** (autocapture), plus the
+interview funnel — `case_started → hint_requested → interview_finished →
+scorecard_viewed → resource_opened → new_case_clicked`. PostHog distinguishes
+visitors with a persistent per-device ID (more reliable than IP, which changes
+on the same person and collides across an office/NAT); each event also carries
+the visitor's IP and GeoIP location. The key is a *publishable* write-only
+token, so serving it to the browser is safe. **No transcript content is ever
+sent** — only event names and coarse properties like the band.
+
 ## Voice & photo input (CLI)
 
 The text CLI (`python -m pmcaseprep.cli`) is the quick, no-browser option. It
@@ -147,8 +160,27 @@ portaudio`). `/voice <file>` needs no audio libraries.
 `cases/ai_pm_thumbs_down_spike.json` — an **AI-PM execution / root-cause** case
 ("thumbs-down rate jumped 4% → 9%"). It exercises metric definition, MECE
 internal/external diagnosis, segmenting to a model A/B arm, and AI-specific
-signals (eval regression, quality-vs-latency tradeoff, guardrail metrics). All
-wording is original — no copyrighted question/answer text is reproduced.
+signals (eval regression, quality-vs-latency tradeoff, guardrail metrics).
+
+**Legally clean by construction**: the product ("Quill"), the interviewer, the
+numbers, and every fact are invented for this repo. No text is reproduced from
+any book or question bank (Lewis Lin, Exponent, PMExercises, …) — the case only
+follows the *format* of an execution interview, and formats aren't ownable.
+Keep new cases to the same standard: original scenario, original wording.
+
+## Learning resources & trajectory
+
+- `pmcaseprep/resources.py` holds a short, curated map of gold-standard free
+  articles/videos per rubric dimension (issue trees, JTBD, RICE, Pyramid
+  Principle, North Star metrics, …) and per case concept tag (`resource_tags`
+  in the case JSON — e.g. metric debugging, A/B testing, LLM evals). The
+  scorecard shows "level up" links on dimensions where the candidate scored
+  ≤3, and a "go deeper" section for the case's concepts. Clicks are tracked.
+- The skill graph projects a **trajectory**: a least-squares trend over your
+  per-case scores answers "at this pace, roughly how many more cases to the
+  HIRE (2.75) / STRONG HIRE (3.5) bar?" It refuses to extrapolate flat trends
+  or fewer than two cases, and is labeled an estimate (the real band also
+  gates on your weakest dimension).
 
 ## Grading model
 

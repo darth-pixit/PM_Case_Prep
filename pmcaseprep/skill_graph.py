@@ -9,13 +9,19 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime, timezone
+from math import ceil
 from pathlib import Path
 from typing import Any, Optional
 
 from .models import ScoreCard
-from .rubric import DIMENSIONS
+from .rubric import BANDS, DIMENSIONS
 
 DIMENSION_NAMES = {key: name for key, name, _ in DIMENSIONS}
+_BAR = {name: cutoff for cutoff, name in BANDS}
+HIRE_BAR = _BAR["hire"]
+STRONG_HIRE_BAR = _BAR["strong_hire"]
+# A projection past this many cases is noise, not a plan — report "flat" instead.
+MAX_PROJECTED_CASES = 30
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS scores (
@@ -73,6 +79,75 @@ class SkillGraph:
         first = sum(vals[:mid]) / mid
         last = sum(vals[mid:]) / (len(vals) - mid)
         return round(last - first, 2)
+
+    def session_series(self) -> list[float]:
+        """Per-case mean score (across dimensions), oldest case first."""
+        cur = self.conn.execute(
+            "SELECT AVG(score) FROM scores GROUP BY session_id ORDER BY MIN(created_at), MIN(id)"
+        )
+        return [float(row[0]) for row in cur.fetchall()]
+
+    def projection(self) -> dict:
+        """How many more cases to the hire / strong-hire bar at the current pace.
+
+        Honest by construction: needs >=2 graded cases, uses a least-squares
+        trend over per-case mean scores, refuses to extrapolate a flat or
+        absurdly long trend, and is labeled an estimate (the real band also
+        gates on the weakest dimension, which an average can't see).
+        """
+        series = self.session_series()
+        n = len(series)
+        out: dict[str, Any] = {
+            "sessions": n,
+            "current": round(series[-1], 2) if series else None,
+            "slope_per_case": None,
+            "to_hire": None,
+            "to_strong_hire": None,
+            "note": "",
+        }
+        if n < 2:
+            out["note"] = "Finish one more case to unlock your trajectory."
+            return out
+
+        xs = list(range(n))
+        mean_x = (n - 1) / 2
+        mean_y = sum(series) / n
+        denom = sum((x - mean_x) ** 2 for x in xs)
+        slope = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, series)) / denom
+        level = mean_y + slope * ((n - 1) - mean_x)  # fitted level at the latest case
+        out["current"] = round(level, 2)
+        out["slope_per_case"] = round(slope, 3)
+
+        def cases_to(target: float) -> Optional[int]:
+            if level >= target:
+                return 0
+            if slope <= 0.005:  # flat or falling — no honest projection exists
+                return None
+            needed = ceil((target - level) / slope)
+            return needed if needed <= MAX_PROJECTED_CASES else None
+
+        out["to_hire"] = cases_to(HIRE_BAR)
+        out["to_strong_hire"] = cases_to(STRONG_HIRE_BAR)
+
+        if out["to_strong_hire"] == 0:
+            out["note"] = (
+                "You're scoring at the strong-hire bar — consistency across "
+                "archetypes is the goal now."
+            )
+        elif out["to_hire"] == 0:
+            out["note"] = (
+                "You're at the hire bar. Hold this level and push your weakest "
+                "dimension to reach strong hire."
+            )
+        elif out["to_hire"] is None:
+            out["note"] = (
+                "Your trend is flat right now, so a case count would be a guess — "
+                "the fastest route up is drilling your two weakest dimensions, "
+                "not more volume."
+            )
+        else:
+            out["note"] = "Estimate — assumes your current pace of improvement holds."
+        return out
 
     def render_summary(self) -> str:
         n = self.sessions_count()

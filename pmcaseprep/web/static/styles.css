@@ -211,6 +211,12 @@ button:disabled { opacity: 0.5; cursor: default; }
 .sc-meter.m-mid  { background: rgba(251, 191, 36, 0.16); }  .sc-meter.m-mid  > i { background: var(--warn); }
 .sc-meter.m-high { background: rgba(74, 222, 128, 0.16); }  .sc-meter.m-high > i { background: var(--good); }
 .sc-dim-note { color: var(--muted); font-size: 0.86rem; margin: 0; }
+.sc-links { margin: 0.5rem 0 0; font-size: 0.86rem; color: var(--muted); }
+.sc-links a, .sc-res a { color: var(--accent); text-decoration: none; }
+.sc-links a:hover, .sc-res a:hover { text-decoration: underline; }
+.sc-res { padding: 0.4rem 0; border-top: 1px solid var(--border); }
+.sc-res:first-of-type { border-top: none; padding-top: 0; }
+.sc-res .why { display: block; color: var(--muted); }
 
 /* Compact rows for the checklist (inside a collapsible) */
 details.sc-fold {

@@ -9,6 +9,40 @@
 const $ = (id) => document.getElementById(id);
 const wsUrl = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "/ws";
 
+// --- Analytics (PostHog) -------------------------------------------------
+// The key comes from /config (server env), is publishable by design, and when
+// absent everything silently no-ops. Autocapture covers pageviews + every
+// click; track() adds the interview-funnel events. No transcript content is
+// ever sent — only event names and coarse properties.
+
+let phReady = false;
+const phQueue = [];
+
+function track(name, props) {
+  if (phReady) window.posthog.capture(name, props);
+  else phQueue.push([name, props]);
+}
+
+(async function initAnalytics() {
+  try {
+    const cfg = await (await fetch("/config")).json();
+    if (!cfg.posthog_key) return;
+    const assets = cfg.posthog_host.replace(".i.posthog.com", "-assets.i.posthog.com");
+    const s = document.createElement("script");
+    s.src = assets + "/static/array.js";
+    s.onload = () => {
+      window.posthog.init(cfg.posthog_key, {
+        api_host: cfg.posthog_host,
+        defaults: "2025-05-24",
+        person_profiles: "always", // every visitor becomes a distinct person
+      });
+      phReady = true;
+      phQueue.splice(0).forEach(([n, p]) => window.posthog.capture(n, p));
+    };
+    document.head.appendChild(s);
+  } catch (e) { /* analytics must never break the interview */ }
+})();
+
 let ws;
 let micOn = false;
 let voiceSupported = false;
@@ -143,6 +177,7 @@ function handle(m) {
       $("casePrompt").textContent = m.prompt;
       // The case card already shows the prompt; the message panel stays hidden
       // until the interviewer actually says something.
+      track("case_started", { case_title: m.title, archetype: m.archetype, voice: !!m.voice });
       voiceSupported = !!m.voice;
       if (voiceSupported) startMic();
       else {
@@ -190,9 +225,15 @@ $("sendBtn").onclick = sendText;
 $("textInput").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendText(); }
 });
-$("hintBtn").onclick = () => { if (ws && ws.readyState === 1 && !ended) ws.send(JSON.stringify({ type: "hint" })); };
+$("hintBtn").onclick = () => {
+  if (ws && ws.readyState === 1 && !ended) {
+    track("hint_requested", {});
+    ws.send(JSON.stringify({ type: "hint" }));
+  }
+};
 $("doneBtn").onclick = () => {
   if (ws && ws.readyState === 1 && !ended) {
+    track("interview_finished", {});
     ws.send(JSON.stringify({ type: "done" }));
     ended = true;
     setState("grading");
@@ -282,17 +323,47 @@ function dimName(key) {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function resourceLink(r, where) {
+  return `<a class="resource" href="${esc(r.url)}" target="_blank" rel="noopener"
+    data-where="${esc(where)}">${esc(r.title)}</a> <small>· ${esc(r.author)}</small>`;
+}
+
+function trajectoryCard(t) {
+  if (!t) return "";
+  let body;
+  if (t.sessions < 2) {
+    body = `<p class="sc-dim-note">${esc(t.note || "Finish one more case to unlock your trajectory.")}</p>`;
+  } else {
+    const tile = (label, val) => `<div class="sc-tile"><div class="label">${esc(label)}</div>
+      <div class="value">${val}</div></div>`;
+    const fmt = (n) => (n === 0 ? "✓ there" : n === null ? "—" : `~${n} case${n === 1 ? "" : "s"}`);
+    body = `<div class="sc-tiles">
+        ${tile("Cases completed", esc(t.sessions))}
+        ${tile("Current level", esc(t.current) + " <small>/ 4</small>")}
+        ${tile("To HIRE bar", esc(fmt(t.to_hire)))}
+        ${tile("To STRONG HIRE", esc(fmt(t.to_strong_hire)))}
+      </div>
+      <p class="sc-dim-note">${esc(t.note)}</p>`;
+  }
+  return `<div class="sc-card"><h3>Your trajectory</h3>${body}</div>`;
+}
+
 function renderScorecard(m) {
   const c = m.card;
+  const dimResources = (m.resources && m.resources.dimensions) || {};
+  const caseResources = (m.resources && m.resources.case) || [];
 
   // Dimension meters: fill = score severity, track = same hue lighter.
   const dims = c.dimension_scores.map((d) => {
     const tone = d.score <= 2 ? "m-low" : d.score === 3 ? "m-mid" : "m-high";
+    const links = (dimResources[d.dimension] || [])
+      .map((r) => resourceLink(r, d.dimension)).join("<br>");
     return `<div class="sc-dim">
       <div class="sc-dim-head"><b>${esc(dimName(d.dimension))}</b>
         <span class="sc-dim-score">${d.score} / 4</span></div>
       <div class="sc-meter ${tone}"><i style="width:${(d.score / 4) * 100}%"></i></div>
       <p class="sc-dim-note">${esc(d.justification)}</p>
+      ${links ? `<p class="sc-links">Level up: ${links}</p>` : ""}
     </div>`;
   }).join("");
 
@@ -335,6 +406,8 @@ function renderScorecard(m) {
       <div class="sc-card sc-opp"><h3>💡 Your biggest opportunity</h3>
         <p class="lede">${esc(c.top_improvement)}</p></div>
 
+      ${trajectoryCard(m.trajectory)}
+
       <div class="sc-dims">${dims}</div>
 
       <details class="sc-fold">
@@ -344,6 +417,11 @@ function renderScorecard(m) {
 
       ${flags}
       ${delivery}
+
+      ${caseResources.length ? `<div class="sc-card"><h3>📚 Go deeper on this case's concepts</h3>
+        ${caseResources.map((r) => `<div class="sc-res">${resourceLink(r, "case")}
+          ${r.why ? `<small class="why">${esc(r.why)}</small>` : ""}</div>`).join("")}
+      </div>` : ""}
 
       <div class="sc-card"><h3>Coach's note</h3><p>${esc(c.summary)}</p></div>
 
@@ -359,7 +437,12 @@ function renderScorecard(m) {
     </div>`;
   $("gradingOverlay").hidden = true;
   $("scorecard").hidden = false;
-  $("newCaseBtn").onclick = () => location.reload();
+  track("scorecard_viewed", { band: m.band, weighted: m.weighted, sessions: m.trajectory && m.trajectory.sessions });
+  $("newCaseBtn").onclick = () => { track("new_case_clicked", {}); location.reload(); };
+  $("scorecard").addEventListener("click", (e) => {
+    const a = e.target.closest("a.resource");
+    if (a) track("resource_opened", { url: a.href, where: a.dataset.where });
+  });
   setState("done");
 }
 

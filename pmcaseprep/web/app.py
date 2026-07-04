@@ -42,6 +42,7 @@ from ..case_loader import default_case_path, load_case
 from ..delivery import FILLERS_CORE, DeliveryTracker, Word
 from ..grader import grade, weighted_result
 from ..interviewer import Interviewer
+from ..resources import resources_for
 from ..skill_graph import SkillGraph
 from .deepgram_live import DeepgramLive
 
@@ -55,6 +56,10 @@ QUESTION_S = float(os.environ.get("PMCP_QUESTION_S", "1.5"))
 # Utterances below this Deepgram confidence are treated as noise (keyboard
 # clatter, coughs, background voices) and never become turns.
 MIN_CONFIDENCE = float(os.environ.get("PMCP_MIN_CONFIDENCE", "0.55"))
+# Product analytics (PostHog). The project key is publishable by design — it can
+# only ingest events, never read them — so serving it to the browser is safe.
+POSTHOG_KEY = os.environ.get("PMCP_POSTHOG_KEY", "")
+POSTHOG_HOST = os.environ.get("PMCP_POSTHOG_HOST", "https://us.i.posthog.com")
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HINT_PROMPT = (
     "[The candidate asks for a hint. Give ONE graduated nudge for where they are "
@@ -109,6 +114,12 @@ def _is_noise(text: str, confidence: float) -> bool:
 @app.get("/")
 async def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/config")
+async def config() -> JSONResponse:
+    """Public, browser-safe config. No secrets — the PostHog key is publishable."""
+    return JSONResponse({"posthog_key": POSTHOG_KEY, "posthog_host": POSTHOG_HOST})
 
 
 @app.get("/health")
@@ -340,6 +351,8 @@ async def session_ws(ws: WebSocket) -> None:
                 "delivery": tracker.snapshot(),
                 "delivery_summary": delivery_summary,
                 "skill_graph": graph.render_summary(),
+                "trajectory": graph.projection(),
+                "resources": resources_for(card, case),
             }
         )
 

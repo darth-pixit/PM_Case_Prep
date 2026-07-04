@@ -28,6 +28,7 @@
     "Short-term mitigation: roll back or hold v4.2 for the email use case; add thumbs-down and latency as launch-gate guardrail metrics.",
     "Longer term: add a pre-launch eval suite segmented by use case so a regression like this is caught before a 50% rollout."
   ],
+  "resource_tags": ["metric_debugging", "ab_testing", "ai_evals"],
   "extra_checklist": [
     "Isolates the regression to the v4.2 model arm using the running A/B rather than guessing",
     "Frames thumbs-down as a model-quality guardrail and asks about recent model/version changes early",
