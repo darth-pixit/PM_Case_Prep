@@ -21,10 +21,12 @@ import asyncio
 import json
 import os
 import re
+import time
 import uuid
 from collections import deque
 from pathlib import Path
 from typing import Awaitable, Callable
+from urllib.parse import urlsplit
 
 try:
     from dotenv import load_dotenv
@@ -77,7 +79,97 @@ HINT_PROMPT = (
     "right now — a question or a pointer to the missing dimension. Do not solve it.]"
 )
 
-app = FastAPI(title="PM Case Prep")
+# --- Abuse guards -------------------------------------------------------------
+# Every /ws session drives PAID calls (Claude per turn + a Deepgram stream), so
+# the socket is gated: same-origin browsers carrying the visitor cookie only,
+# hourly open-rate and concurrent-session caps per IP / per visitor / global,
+# and in-session ceilings on turns, duration, idle time, and text size. Limits
+# are in-process state — fine for the single-instance deploy; use a shared
+# store if this ever scales out.
+MAX_SESSIONS = int(os.environ.get("PMCP_MAX_SESSIONS", "25"))
+MAX_SESSIONS_PER_IP = int(os.environ.get("PMCP_MAX_SESSIONS_PER_IP", "4"))
+MAX_SESSIONS_PER_UID = int(os.environ.get("PMCP_MAX_SESSIONS_PER_UID", "2"))
+WS_HOURLY_PER_IP = int(os.environ.get("PMCP_WS_HOURLY_PER_IP", "30"))
+LOGIN_HOURLY_PER_IP = int(os.environ.get("PMCP_LOGIN_HOURLY_PER_IP", "10"))
+MAX_TURNS = int(os.environ.get("PMCP_MAX_TURNS", "80"))  # model calls per session
+MAX_SESSION_S = 60 * int(os.environ.get("PMCP_MAX_SESSION_MIN", "90"))
+IDLE_S = 60 * int(os.environ.get("PMCP_IDLE_MIN", "15"))
+MAX_TEXT_CHARS = int(os.environ.get("PMCP_MAX_TEXT_CHARS", "8000"))
+
+
+class SlidingLimit:
+    """Sliding-window rate limiter: at most `limit` hits per `window_s` per key."""
+
+    def __init__(self, limit: int, window_s: float, now_fn: Callable[[], float] = time.monotonic):
+        self.limit = limit
+        self.window = window_s
+        self._now = now_fn
+        self._hits: dict[str, deque] = {}
+
+    def allow(self, key: str) -> bool:
+        now = self._now()
+        if len(self._hits) > 4096:  # keep memory bounded under key churn
+            self._hits = {k: v for k, v in self._hits.items() if v}
+        dq = self._hits.setdefault(key, deque())
+        while dq and now - dq[0] > self.window:
+            dq.popleft()
+        if len(dq) >= self.limit:
+            return False
+        dq.append(now)
+        return True
+
+
+class Gauge:
+    """Concurrent-session counts by key (inc/dec must be paired)."""
+
+    def __init__(self):
+        self._n: dict[str, int] = {}
+
+    def get(self, key: str) -> int:
+        return self._n.get(key, 0)
+
+    def inc(self, key: str) -> None:
+        self._n[key] = self._n.get(key, 0) + 1
+
+    def dec(self, key: str) -> None:
+        left = self._n.get(key, 0) - 1
+        if left > 0:
+            self._n[key] = left
+        else:
+            self._n.pop(key, None)
+
+
+WS_OPENS = SlidingLimit(WS_HOURLY_PER_IP, 3600)
+LOGIN_ATTEMPTS = SlidingLimit(LOGIN_HOURLY_PER_IP, 3600)
+ACTIVE = Gauge()
+
+
+def _client_ip(conn) -> str:
+    """Real client IP. Behind Render's proxy the socket peer is the proxy, so
+    prefer the first X-Forwarded-For hop (set by the proxy; the container is
+    not directly reachable). Falls back to the socket peer for local dev."""
+    xff = conn.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return conn.client.host if conn.client else "unknown"
+
+
+def _same_origin(conn) -> bool:
+    """Browsers always send Origin on WebSocket handshakes — reject ones from
+    foreign pages (drive-by embedding). Non-browser clients omit Origin and
+    fall through to the cookie + rate-limit gates instead."""
+    origin = conn.headers.get("origin")
+    if not origin:
+        return True
+    return urlsplit(origin).netloc == conn.headers.get("host", "")
+
+
+# /docs, /redoc and /openapi.json are free recon (endpoints, models, stack) —
+# off in production. Flip on locally by running with PMCP_DEV_DOCS=1.
+_DOCS = {} if os.environ.get("PMCP_DEV_DOCS") else {
+    "docs_url": None, "redoc_url": None, "openapi_url": None
+}
+app = FastAPI(title="PM Case Prep", **_DOCS)
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -173,7 +265,15 @@ async def login(request: Request) -> JSONResponse:
 
     New email  -> links this browser's uid to it ("save my progress").
     Known email -> switches this browser to the saved uid ("restore my progress").
+
+    Email is the ONLY key here (no password/code yet — see README), so the
+    endpoint is rate-limited per IP to keep enumeration and account takeover
+    from being scriptable. Proper fix is an emailed one-time code.
     """
+    if not LOGIN_ATTEMPTS.allow(_client_ip(request)):
+        return JSONResponse(
+            {"ok": False, "error": "too many attempts — try again later"}, status_code=429
+        )
     try:
         data = await request.json()
     except Exception:  # noqa: BLE001
@@ -211,6 +311,10 @@ async def login(request: Request) -> JSONResponse:
 
 @app.get("/health")
 async def health() -> JSONResponse:
+    """Deliberately bare — the verbose version (models, which keys exist, active
+    STT) is recon material. Run with PMCP_DEV_DOCS=1 locally to get it back."""
+    if not os.environ.get("PMCP_DEV_DOCS"):
+        return JSONResponse({"ok": True})
     return JSONResponse(
         {
             "ok": True,
@@ -330,15 +434,55 @@ class Voice:
 
 @app.websocket("/ws")
 async def session_ws(ws: WebSocket) -> None:
+    """Gate, then run. Accepting this socket means spending real money (model
+    turns + an STT stream) on whoever is on the other end — so nobody gets a
+    session without a same-origin page, a visitor cookie, and headroom in the
+    per-IP / per-visitor / global caps."""
+    ip = _client_ip(ws)
+    uid = ws.cookies.get(UID_COOKIE)
     await ws.accept()
 
+    async def reject(reason: str) -> None:
+        try:
+            await ws.send_json({"type": "error", "text": reason})
+            await ws.close(code=1008)
+        except Exception:  # noqa: BLE001
+            pass
+
+    if not _same_origin(ws):
+        await reject("cross-origin connection refused")
+        return
+    if not uid:
+        await reject("no session — reload the page")
+        return
+    if not WS_OPENS.allow(ip):
+        await reject("too many new interviews from your network — try again later")
+        return
+    if (
+        ACTIVE.get("all") >= MAX_SESSIONS
+        or ACTIVE.get(f"ip:{ip}") >= MAX_SESSIONS_PER_IP
+        or ACTIVE.get(f"uid:{uid}") >= MAX_SESSIONS_PER_UID
+    ):
+        await reject("the interviewer is at capacity — try again in a few minutes")
+        return
+
+    keys = ("all", f"ip:{ip}", f"uid:{uid}")
+    for k in keys:
+        ACTIVE.inc(k)
+    try:
+        await _run_session(ws, uid)
+    finally:
+        for k in keys:
+            ACTIVE.dec(k)
+
+
+async def _run_session(ws: WebSocket, uid: str) -> None:
     case = load_case(default_case_path())
     client = anthropic.Anthropic()
     interviewer = Interviewer(client, case, INTERVIEWER_MODEL)
     tracker = DeliveryTracker()
     # Scope every score to this visitor's cookie identity — on a public host,
     # skill graphs must never mix across users.
-    uid = ws.cookies.get(UID_COOKIE) or uuid.uuid4().hex
     graph = SkillGraph(DB_PATH, uid)
     session_id = uuid.uuid4().hex[:8]
     voice_on = bool(os.environ.get("DEEPGRAM_API_KEY"))
@@ -435,7 +579,17 @@ async def session_ws(ws: WebSocket) -> None:
 
     # --- grading + interviewer worker ----------------------------------------
 
+    graded = False
+
     async def do_grade() -> None:
+        # Idempotent: the done button, the turn cap, the session clock, and the
+        # interviewer concluding can all race — exactly one Opus call happens.
+        nonlocal graded
+        if graded:
+            return
+        graded = True
+        if voice is not None:
+            await voice.stop()  # interview is over — stop paying for STT
         await send_json({"type": "state", "state": "grading"})
         delivery_summary = tracker.summary_text()
         try:
@@ -484,6 +638,7 @@ async def session_ws(ws: WebSocket) -> None:
         # turns are MERGED into one model call — so asking twice while a reply
         # is in flight yields one good answer, not a serial backlog of calls.
         pending: deque = deque()
+        turns = 0
         while not stop.is_set():
             if not pending:
                 pending.append(await turn_queue.get())
@@ -508,6 +663,16 @@ async def session_ws(ws: WebSocket) -> None:
                 text = "\n".join(t for t in texts if t.strip())
             if not text.strip():
                 continue
+            if turns >= MAX_TURNS:
+                # Spend ceiling: a real interview is ~15-30 turns; anything
+                # near the cap is a runaway (or a script). Grade and finish.
+                await send_json(
+                    {"type": "status", "text": "turn limit reached — grading now"}
+                )
+                await do_grade()
+                stop.set()
+                break
+            turns += 1
             await send_json({"type": "state", "state": "responding"})
             try:
                 reply = await asyncio.to_thread(interviewer.respond_content, text)
@@ -537,8 +702,36 @@ async def session_ws(ws: WebSocket) -> None:
             )
             await voice.start()
 
+        # Session clock: a hard duration cap (bounds STT + model spend even if
+        # someone parks a tab or scripts the socket) and an idle cap (voice
+        # streams audio continuously, so true silence on the wire means the
+        # tab is gone). Hitting either grades what exists — a real candidate
+        # still gets their scorecard — then one grace window to deliver it.
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + MAX_SESSION_S
+        closing = False
         while not stop.is_set():
-            msg = await ws.receive()
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                if closing:
+                    break  # grace window elapsed too — close out
+                closing = True
+                deadline = loop.time() + 300  # grace: grade + deliver scorecard
+                if voice is not None:
+                    await voice.stop()
+                await send_json(
+                    {"type": "status", "text": "session limit reached — grading now"}
+                )
+                await commit_pending()
+                await turn_queue.put({"cmd": "done"})
+                continue
+            try:
+                msg = await asyncio.wait_for(
+                    ws.receive(), timeout=min(remaining, IDLE_S)
+                )
+            except asyncio.TimeoutError:
+                deadline = loop.time()  # idle — wind down via the limit path
+                continue
             if msg.get("type") == "websocket.disconnect":
                 break
             if msg.get("bytes") is not None:
@@ -551,7 +744,10 @@ async def session_ws(ws: WebSocket) -> None:
                 mtype = data.get("type")
                 if mtype == "text" and data.get("text", "").strip():
                     await commit_pending()  # commit any pending spoken thoughts first
-                    await turn_queue.put({"source": "text", "text": data["text"].strip()})
+                    await turn_queue.put(
+                        # Length-capped: unbounded pasted text is unbounded tokens.
+                        {"source": "text", "text": data["text"].strip()[:MAX_TEXT_CHARS]}
+                    )
                 elif mtype == "hint":
                     await turn_queue.put({"cmd": "hint"})
                 elif mtype == "done":
