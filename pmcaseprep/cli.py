@@ -216,7 +216,15 @@ def run(case_path: Path) -> None:
     weighted, _min_dim, band = weighted_result(case, card)
     _print_scorecard(card, weighted, band)
 
-    graph.record(session_id, case.id, case.archetype, card, band)
+    graph.record(
+        session_id,
+        case.id,
+        case.archetype,
+        card,
+        band,
+        weighted=round(weighted, 2),
+        transcript=interviewer.transcript(),
+    )
     print("\n" + graph.render_summary())
     graph.close()
 
