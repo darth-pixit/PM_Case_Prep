@@ -303,6 +303,32 @@ def test_visible_reply_salvage():
     assert _visible_reply("Sure — what would you like to know?") == "Sure — what would you like to know?"
 
 
+def test_empty_audio_never_reaches_deepgram():
+    """A zero-byte binary frame is Deepgram's end-of-stream signal. A client
+    bug once flooded the socket with empty frames, killing the voice channel
+    in a reconnect loop — empties must be dropped, never forwarded."""
+    import asyncio
+
+    try:
+        from pmcaseprep.web.deepgram_live import DeepgramLive
+    except ImportError as exc:
+        print(f"  (skipped test_empty_audio_never_reaches_deepgram — missing dep: {exc.name})")
+        return
+
+    class FakeWs:
+        def __init__(self):
+            self.sent = []
+
+        async def send(self, data):
+            self.sent.append(data)
+
+    dg = DeepgramLive("key")
+    dg.ws = FakeWs()
+    asyncio.run(dg.send_audio(b""))  # end-of-stream signal — must be dropped
+    asyncio.run(dg.send_audio(b"\x01\x02"))  # real audio — must pass
+    assert dg.ws.sent == [b"\x01\x02"]
+
+
 def test_weighted_result_is_deterministic():
     case = load_case(default_case_path())
     card = ScoreCard(

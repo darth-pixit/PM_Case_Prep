@@ -525,7 +525,9 @@ async def session_ws(ws: WebSocket) -> None:
             if msg.get("type") == "websocket.disconnect":
                 break
             if msg.get("bytes") is not None:
-                if voice is not None:
+                # Drop empty frames: a zero-byte binary message is Deepgram's
+                # end-of-stream signal and would close the voice connection.
+                if voice is not None and msg["bytes"]:
                     await voice.send(msg["bytes"])  # never raises
             elif msg.get("text") is not None:
                 data = json.loads(msg["text"])
