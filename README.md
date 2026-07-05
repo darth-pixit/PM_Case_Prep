@@ -55,7 +55,8 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env        # add your ANTHROPIC_API_KEY
 
-python -m pmcaseprep.cli    # runs the default AI-PM case
+python -m pmcaseprep.cli           # picks an AI-PM case you haven't done yet
+python -m pmcaseprep.cli --list    # see the whole case bank
 ```
 
 During a case: type your thinking out loud; `/hint` for a graduated nudge,
@@ -212,18 +213,37 @@ portaudio`). `/voice <file>` needs no audio libraries.
 > Swapping speech-to-text: `transcribe.py` uses Deepgram over plain HTTPS. Moving
 > to OpenAI Whisper or a local `faster-whisper` model is a small, isolated change.
 
-## The sample case
+## The case bank — 12 AI-PM cases
 
-`cases/ai_pm_thumbs_down_spike.json` — an **AI-PM execution / root-cause** case
-("thumbs-down rate jumped 4% → 9%"). It exercises metric definition, MECE
-internal/external diagnosis, segmenting to a model A/B arm, and AI-specific
-signals (eval regression, quality-vs-latency tradeoff, guardrail metrics).
+The bank covers the interview loop an AI-PM candidate actually faces — design,
+strategy, execution/RCA, metrics, and estimation — each themed on a
+best-in-industry AI product situation (agent autonomy, hallucination incidents,
+model sourcing, AI pricing, eval-vs-field gaps, inference economics, …):
 
-**Legally clean by construction**: the product ("Quill"), the interviewer, the
-numbers, and every fact are invented for this repo. No text is reproduced from
-any book or question bank (Lewis Lin, Exponent, PMExercises, …) — the case only
-follows the *format* of an execution interview, and formats aren't ownable.
-Keep new cases to the same standard: original scenario, original wording.
+| Case | Type | What it drills |
+|---|---|---|
+| `ai_pm_thumbs_down_spike` | execution | Metric regression → segment to a model A/B arm; eval + guardrail thinking |
+| `ai_pm_meeting_copilot_design` | product-design | "Add an AI feature" with no brief: pick the problem, design for model errors, cost envelope |
+| `ai_pm_expense_agent_autonomy` | product-design | Agent autonomy as a risk-graduated spectrum; model proposes, rules validate |
+| `ai_pm_model_sourcing_strategy` | strategy | Build vs frontier API vs open-weights, argued with capex/quality/compliance numbers |
+| `ai_pm_assistant_pricing` | strategy | Bundle vs add-on vs usage for an AI assistant; margin math and beta clawback |
+| `ai_pm_tutor_guardrails` | strategy | Responsible AI under growth pressure: safety escalation, engagement-metric conflict |
+| `ai_pm_hallucinated_policy` | ai-pm | Hallucination incident: contain, localize to the RAG layer, risk-tiered guardrails |
+| `ai_pm_voice_latency_tradeoff` | ai-pm | Quality vs latency vs cost ship decision; routing by query mix; eval-to-field gap |
+| `ai_pm_cost_spike` | execution | Unit-cost RCA: decompose calls × tokens × price; context waste, caching, retries |
+| `ai_pm_novelty_retention_cliff` | execution | Novelty-effect retention cliff: cohort arithmetic, find the real audience |
+| `ai_pm_copilot_metrics` | metrics | North star + driver tree for an AI copilot; Goodhart traps; honest attribution |
+| `ai_pm_review_summaries_cost` | estimation | Annual inference cost: per-refresh vs per-view structure is the whole answer |
+
+The web app and CLI pick a case the current user **hasn't been graded on yet**
+(random among unseen, falling back to random repeats once the bank is done), so
+"New case" after a scorecard genuinely rotates the bank.
+
+**Legally clean by construction**: every product, interviewer, number, and fact
+in these cases is invented for this repo. No text is reproduced from any book
+or question bank (Lewis Lin, Exponent, PMExercises, …) — the cases only follow
+the *format* of PM interviews, and formats aren't ownable. Keep new cases to
+the same standard: original scenario, original wording.
 
 ## Learning resources & trajectory
 
@@ -265,8 +285,9 @@ Marked `# TODO` in the code where relevant:
 - **Company personas**: "Meta Product Sense", "Google Generalist", "Amazon Bar
   Raiser", "OpenAI AI-PM" — different question style, follow-up aggressiveness, and
   rubric weighting (a field on `Case` + persona prompt fragments).
-- **Case bank + RAG**: `case_loader.py` is the retrieval seam; seed from free,
-  IP-safe sources and author original variants (see notes below).
+- **Case bank + RAG**: seeded — 12 original AI-PM cases with unseen-first
+  rotation (see "The case bank"). Next: non-AI archetypes (growth, consumer,
+  B2B), and swap `pick_case_path` for skill-graph-driven adaptive selection.
 
 ## A note on case sources & IP
 

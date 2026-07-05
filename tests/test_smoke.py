@@ -28,6 +28,45 @@ def test_cases_load_and_validate():
         assert case.id and case.prompt and case.type
 
 
+def test_case_bank_integrity():
+    """Every case in the bank must be fully usable: unique id, a known type
+    (so the grader gets a Layer-2 checklist), interviewer facts, grader notes,
+    calibration anchors, and resource tags that resolve to curated links."""
+    from pmcaseprep.resources import RESOURCES
+
+    cases = [load_case(p) for p in list_cases()]
+    assert len(cases) >= 12, "the case bank should hold the full seeded set"
+
+    ids = [c.id for c in cases]
+    assert len(ids) == len(set(ids)), "case ids must be unique"
+
+    for c in cases:
+        assert c.type in rubric.CATEGORY_CHECKLISTS, f"{c.id}: unknown type {c.type!r}"
+        assert c.hidden_facts, f"{c.id}: interviewer needs hidden facts"
+        assert c.ideal_answer_notes, f"{c.id}: grader needs ideal-answer notes"
+        assert c.anchors is not None, f"{c.id}: grader needs calibration anchors"
+        assert c.extra_checklist, f"{c.id}: needs case-specific checklist items"
+        for tag in c.resource_tags:
+            assert tag in RESOURCES, f"{c.id}: unknown resource tag {tag!r}"
+
+
+def test_pick_case_prefers_unseen():
+    import random
+
+    from pmcaseprep.case_loader import pick_case_path
+
+    paths = list_cases()
+    all_ids = [load_case(p).id for p in paths]
+    rng = random.Random(7)
+    # With every case but one already done, the picker must return that one.
+    picked = pick_case_path(set(all_ids) - {all_ids[-1]}, rng=rng)
+    assert load_case(picked).id == all_ids[-1]
+    # With the whole bank done, it still returns a valid case (repeat practice).
+    assert pick_case_path(set(all_ids), rng=rng) in paths
+    # With no history, any case is fair game.
+    assert pick_case_path(None, rng=rng) in paths
+
+
 def test_default_case_is_ai_pm():
     case = load_case(default_case_path())
     assert isinstance(case, Case)

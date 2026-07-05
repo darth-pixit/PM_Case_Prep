@@ -1,0 +1,43 @@
+{
+  "id": "ai-pm-copilot-metrics",
+  "archetype": "ai-pm",
+  "company_persona": "a developer-tools company with an AI code-review copilot",
+  "interviewer_name": "Maya",
+  "title": "Is Otto actually good?",
+  "type": "metrics",
+  "prompt": "You're the PM for Otto, an AI code-review copilot that comments on pull requests — flagging bugs, security issues, and style problems. Three months post-launch, the CEO asks in the exec review: 'Is Otto actually good? What's the one number we should watch?' Design the measurement framework you'd bring back.",
+  "hidden_facts": {
+    "raw_stats": "Otto comments on 85% of PRs. 34% of its comments get any human reaction; 18% lead to a code change in that PR.",
+    "noise_problem": "The #1 complaint is 'too many nitpicks'. 7% of organizations have disabled Otto entirely; disable events cluster in the first two weeks of use.",
+    "acceptance_by_type": "Acceptance varies wildly by suggestion category: security ~45%, correctness ~30%, performance ~20%, style ~9%.",
+    "outcome_data": "The team CAN measure: revert rate, escaped-bug rate (production bugs traced back to a PR), review latency, and human reviewer time per PR.",
+    "confounder": "Teams that adopted Otto skew larger and better-instrumented, so naive adopter-vs-non-adopter comparisons flatter Otto.",
+    "latency_stat": "Otto posts within 4 minutes median; the median human first review takes 7 hours.",
+    "goal_ambiguity": "Different execs say different things: 'catch bugs', 'save senior engineers time', 'raise code quality'. No one has forced a ranking.",
+    "pricing_plan": "Next year Otto moves to usage-based pricing, so cost per unit of delivered value will matter directly.",
+    "history_trap": "For the first two months the team celebrated 'comments posted per week' — which is exactly what drove the nitpick spam and the disable wave."
+  },
+  "ideal_answer_notes": [
+    "Force goal clarity before proposing numbers: catching defects, saving reviewer time, and raising code quality are different north stars with different instrumentation — and name the decision the metric will drive (invest, tune, price, or kill).",
+    "Diagnose the historical trap explicitly: 'comments posted' is an activity metric that Goodharted into nitpick spam and the 7% disable wave. The replacement must measure realized value, not output volume.",
+    "Propose a north star around accepted, defect-relevant value — e.g. accepted suggestions that prevent defects per PR, or reviewer-hours saved — and defend the choice against the goal ranking.",
+    "Build the driver tree underneath it: coverage (% PRs analyzed) × precision (acceptance rate by category) × impact (escaped bugs prevented, reviewer time saved), each with its instrumentation named.",
+    "Make trust a first-class guardrail: dismiss rate, mute/disable rate (the live alarm — clustering in the first two weeks means onboarding calibration matters), and a reviewer-trust survey. A copilot that gets disabled has zero value regardless of its precision.",
+    "Segment by suggestion category and act on it: security at 45% acceptance earns investment; style at 9% is the nitpick source — tune it down, gate it, or kill it. The blended acceptance number hides the product decision.",
+    "Handle attribution honestly: adopters skew larger/better-instrumented, so escaped-bug claims need a staggered rollout or matched-cohort experiment, not a dashboard comparison — propose the design.",
+    "Separate leading indicators (acceptance, dismiss rate, time-to-first-review) from lagging ones (escaped bugs, revert rate, org retention) and set the review cadence for each.",
+    "Tie to the pricing decision: cost per accepted suggestion becomes the unit-economics bridge for usage-based pricing next year.",
+    "Answer the CEO's actual question: one headline number (the north star), with the guardrail pair that keeps it honest — and say why a single unguarded number caused the last mess."
+  ],
+  "resource_tags": ["ai_evals", "ab_testing"],
+  "extra_checklist": [
+    "Names the past 'comments posted' metric as Goodharted activity and replaces it with a realized-value north star",
+    "Elevates the mute/disable rate to a first-class trust guardrail rather than a footnote",
+    "Proposes a staggered-rollout or matched-cohort design for outcome attribution instead of a naive adopter comparison"
+  ],
+  "anchors": {
+    "strong": "Forces the exec goal ranking, autopsies the comments-posted trap, proposes an accepted-defect-value north star with a coverage×precision×impact driver tree, makes disable-rate a headline guardrail, splits metrics by suggestion category with product consequences, designs a real attribution experiment, and lands the CEO a single number plus its guardrails.",
+    "at_bar": "Proposes sensible metrics (acceptance rate, bugs caught, time saved) and mentions noise as a concern, but needs prompting to rank goals, structure a driver tree, treat disables as a guardrail, or handle the adopter-selection confounder.",
+    "weak": "Lists a metrics grab-bag with no north star or hierarchy, keeps activity metrics ('comments posted', 'PRs covered') as headline numbers, ignores the disable wave and the category split, and claims outcome impact from the biased adopter comparison."
+  }
+}

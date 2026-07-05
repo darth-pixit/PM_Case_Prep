@@ -47,7 +47,7 @@ class Case(BaseModel):
     company_persona: str
     interviewer_name: str = "Maya"
     title: str
-    # product-design | execution | estimation | strategy | behavioral | ai-pm
+    # product-design | execution | estimation | strategy | behavioral | ai-pm | metrics
     type: str
     prompt: str  # candidate-facing case statement
     hidden_facts: dict[str, str] = Field(default_factory=dict)  # interviewer-only

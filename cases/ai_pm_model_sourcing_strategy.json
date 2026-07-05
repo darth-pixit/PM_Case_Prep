@@ -1,0 +1,43 @@
+{
+  "id": "ai-pm-model-sourcing-strategy",
+  "archetype": "ai-pm",
+  "company_persona": "a customer-support software platform for mid-market and enterprise",
+  "interviewer_name": "Priya",
+  "title": "Build, buy, or open-weights?",
+  "type": "strategy",
+  "prompt": "You're the AI product lead at Helplane, a customer-support platform. Your AI ticket-resolution feature runs on a frontier model API. At the board meeting, a director asks: 'Every dollar of AI margin flows to a model vendor, and they could become a competitor. Should we train our own model, keep buying the API, or self-host an open-weights model?' You own the recommendation. Walk me through it.",
+  "hidden_facts": {
+    "current_cost": "The frontier API costs about $0.019 per assisted ticket. At full projected rollout (~90M assisted tickets/year) that's ~$1.7M/year, roughly 3% of COGS.",
+    "quality_gap": "On the internal eval suite, the frontier API resolves 77% of tickets; the best open-weights model reaches 72%. Resolution rate is the number customers buy on.",
+    "team": "Six ML engineers, none with pretraining experience. Recruiting pretraining talent is brutal and slow.",
+    "training_capex": "A credible internal estimate for training a competitive model: $40–80M up front plus an ongoing team, with no guarantee of parity. Self-hosting open-weights: ~$2.5M/year infra plus ~3 more engineers.",
+    "data_position": "400M historical tickets, but customer contracts restrict cross-customer training use. About 60% of enterprise deals ask security questions about data flowing to third-party model providers.",
+    "vendor_terms": "The frontier vendor now offers zero-data-retention terms and EU-hosted inference, which has satisfied most enterprise security reviews so far.",
+    "latency": "API p95 latency is 2.1s vs ~1.4s achievable self-hosted; current UX tolerates both.",
+    "sales_evidence": "Win/loss analysis says deals are won on workflow depth and integrations, not on who owns the model. No lost deal cites model ownership.",
+    "switching_cost": "Because an eval suite exists, migrating between the two viable frontier vendors took an internal spike about 2–3 weeks of prompt and eval migration.",
+    "traffic_shape": "About 40% of model calls are simple classification/routing (intent, language, priority), where the quality gap between models is negligible."
+  },
+  "ideal_answer_notes": [
+    "Anchor on the actual goal before comparing options: protect gross margin, pass enterprise security review, and keep winning on workflow — 'owning a model' is a means, not a goal.",
+    "Set explicit decision criteria: quality (resolution rate), unit cost and margin at scale, data/compliance posture, team feasibility, differentiation, and vendor/concentration risk.",
+    "Kill 'train our own' with the numbers, respectfully: $40–80M capex plus a team they can't hire, to maybe match a 77% resolution rate that costs $1.7M/year to rent — and sales evidence shows ownership doesn't win deals. Directors deserve the math, not a mood.",
+    "Treat sourcing as a portfolio, not a religion: frontier API for the hard 60% of traffic where the 5-point resolution gap is the product; open-weights or small models for the 40% classification/routing traffic where the gap is negligible and cost/latency win.",
+    "Neutralize the enterprise-data objection with vendor terms (zero retention, EU hosting) rather than infrastructure heroics; that's what has actually cleared security reviews.",
+    "Name the real moat: per-customer knowledge bases, resolution feedback loops, workflow integrations, and the eval suite itself — assets that persist across whatever model runs underneath.",
+    "Address vendor risk concretely: dual-vendor abstraction plus the eval harness makes switching a 2–3 week job, which converts 'they could become a competitor' from existential fear to a managed risk with a tested exit.",
+    "Commit to a recommendation with a first move (route classification traffic to cheap models; negotiate committed-use API pricing; keep the abstraction layer warm) and a review trigger (e.g. API spend exceeding a set % of COGS, or open-weights closing within ~2 points on the eval).",
+    "Define success measures: resolution rate, cost per ticket, AI gross margin, and enterprise security-objection rate in deals."
+  ],
+  "resource_tags": ["llm_economics", "ai_evals"],
+  "extra_checklist": [
+    "Quantifies the train-your-own option against the capex, talent, and sales-evidence facts rather than debating it abstractly",
+    "Proposes a mixed sourcing portfolio routed by task difficulty instead of one answer for all traffic",
+    "Names the eval suite plus vendor abstraction as the concrete hedge that makes the API choice reversible"
+  ],
+  "anchors": {
+    "strong": "Frames goals and criteria first, dismantles the build option with the capex/talent/sales math, proposes routing cheap traffic to cheap models while keeping frontier quality where it's paid for, answers the board's competitor fear with a tested switching path, and lands a recommendation with a first move and explicit review triggers.",
+    "at_bar": "Structures build/buy/host with sensible criteria and reaches 'buy the API for now', but needs prompting to split traffic by difficulty, to use the vendor-terms fact against the data objection, or to give the board a concrete hedge and review trigger.",
+    "weak": "Picks a side ideologically ('real companies own their models' or 'never build') without using the cost, quality, or sales facts, never asks what the model spend actually is, and ends without a first move or success measure."
+  }
+}

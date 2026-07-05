@@ -1,0 +1,42 @@
+{
+  "id": "ai-pm-novelty-retention-cliff",
+  "archetype": "ai-pm",
+  "company_persona": "a consumer photo-editing app",
+  "interviewer_name": "Ines",
+  "title": "Magic Edit's retention cliff",
+  "type": "execution",
+  "prompt": "You're a PM at Lumo, a consumer photo-editing app with 80 million MAU. Ten weeks ago you launched Magic Edit — an AI editor that removes objects, swaps backgrounds, and restyles photos — to great press. The numbers now: 64% of MAU have tried it, but only 9% of triers still use it in week 4. The CEO calls it a failure and wants to reassign the team. What's your read, and what would you do?",
+  "hidden_facts": {
+    "funnel": "64% try; 31% use it a second time within week 1; 9% still active with it in week 4. Overall app retention is unchanged by the launch — the feature neither lifted nor hurt it.",
+    "retainer_segments": "Week-4 retainers are dominated by two groups: online sellers editing product photos, and parents cleaning up family shots. The churned majority used it once or twice for entertainment edits and shared the result.",
+    "usage_depth": "Retainers average 3+ edits per session on repeat tasks (background removal, object cleanup). Churners do one novelty edit and leave.",
+    "quality_by_category": "Edit failure rate is ~22% overall, but only ~8% on product-style photos (well-lit, single subject). Failures cluster on complex scenes.",
+    "discovery": "The launch banner ran for two weeks. Since then the feature sits two taps deep in the edit menu. Most week-4 retainers have favorited it to their home row.",
+    "monetization": "Sellers convert to the paid pro tier at 3x the average rate. Magic Edit is currently identical in free and pro.",
+    "benchmark": "Comparable AI features across the industry see roughly 5–12% week-4 retention among triers. The CEO's mental benchmark is the app's core editor, which retains far higher — but nothing like 64% of MAU ever tried the core editor in ten weeks.",
+    "cost": "Generation cost per edit has fallen ~60% since launch due to batching.",
+    "history": "The company's earlier 'collage maker' followed the same curve: viral spike, steep drop, then a stable niche that sustained it profitably for years."
+  },
+  "ideal_answer_notes": [
+    "Define the metric and challenge the frame before diagnosing: week-4 retention among triers is the right cut, but 9% of a 64%-try cohort of 80M MAU is ~4.6M week-4 users — do that arithmetic out loud before accepting 'failure'.",
+    "Benchmark properly: 9% sits mid-pack for the industry's AI features; the CEO is comparing against the core editor, which is a different kind of surface. Correcting the reference class respectfully is part of the job.",
+    "Characterize the curve: viral spike then steep decay then plateau is the classic novelty pattern — the diagnostic question is whether the plateau is a real audience with a recurring job, and the segment data says yes (sellers, parents).",
+    "Segment before judging: retainers are high-intent users with repeat tasks and an 8% failure rate use case; churners were entertainment users doing one shareable edit. The feature isn't failing — it's finding its actual market.",
+    "Diagnose the funnel MECE — awareness (banner gone, feature buried two taps deep), quality (22% failure on complex scenes vs 8% on product shots), and value (novelty vs recurring job) each explain part of the drop; assign the drop to the layers rather than one cause.",
+    "Plan around the real audience: seller workflows (batch edit, templates, presets), contextual entry points at the moment of need (detect product-like photos), quality investment targeted at the categories retainers actually use — or expectation-setting on the ones that fail.",
+    "Connect to money: sellers already convert to pro at 3x — Magic Edit is a natural pro-tier anchor, and generation costs fell 60%, so the unit economics of the niche improved while the CEO watched the retention number.",
+    "Propose experiments with kill criteria: contextual-entry A/B, seller-onboarding flow, pro-tier gating test — and state honestly what result would justify sunsetting, which makes the plan falsifiable rather than defensive.",
+    "Reset the CEO's metrics: revenue per retainer, pro-conversion attach, task success on target categories, and cost per edit — not blended week-4 retention over a cohort dominated by novelty triers."
+  ],
+  "resource_tags": ["metric_debugging", "ab_testing"],
+  "extra_checklist": [
+    "Does the cohort arithmetic (9% of 64% of 80M) before accepting or rejecting the 'failure' framing",
+    "Separates novelty triers from job-driven retainers and rebuilds the strategy around the retaining segments",
+    "States an explicit kill criterion, making the recommendation falsifiable rather than defensive"
+  ],
+  "anchors": {
+    "strong": "Runs the funnel arithmetic immediately, re-benchmarks against comparable AI features rather than the core editor, identifies the seller/parent plateau as the real market, splits the drop across awareness, quality, and value with the given data, and proposes seller-focused bets tied to the 3x pro conversion — with experiments, a metrics reset for the CEO, and an honest kill criterion.",
+    "at_bar": "Recognizes the novelty effect and that some users stayed, suggests improving discovery and quality, and pushes back gently on 'failure', but needs nudges to do the absolute-numbers arithmetic, to dig into who the retainers are, or to connect the plan to monetization.",
+    "weak": "Accepts the failure framing and proposes generic fixes ('improve the AI', 're-run the marketing banner'), never asks who still uses it or how many users 9% actually is, ignores the quality-by-category and pro-conversion facts, and offers no experiment or criterion for the reassign-the-team decision."
+  }
+}

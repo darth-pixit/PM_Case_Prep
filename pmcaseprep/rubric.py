@@ -141,6 +141,14 @@ CATEGORY_CHECKLISTS: dict[str, list[str]] = {
         "Reasons about model tradeoffs (quality vs latency vs cost)",
         "Proposes an experiment-based confirmation before concluding",
     ],
+    "metrics": [
+        "Anchors on the product goal (and the decision the metric drives) before naming numbers",
+        "Proposes a north star tied to realized user value, not raw activity",
+        "Builds a driver tree of input metrics under the north star",
+        "Names guardrail / counter-metrics (quality, trust, cost, cannibalization)",
+        "Separates leading from lagging indicators and says how each is instrumented",
+        "Addresses attribution honestly (experiment or cohort design, not a biased comparison)",
+    ],
 }
 
 

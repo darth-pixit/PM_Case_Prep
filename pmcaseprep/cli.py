@@ -1,7 +1,8 @@
 """Runnable text CLI that drives one full case end-to-end.
 
-    python -m pmcaseprep.cli                # runs the default (first) case
+    python -m pmcaseprep.cli                # picks a case you haven't done yet
     python -m pmcaseprep.cli cases/foo.json # runs a specific case
+    python -m pmcaseprep.cli --list         # lists the case bank
 
 Commands during a case:  /hint   ask for a graduated nudge
                          /done   finish and get your scorecard
@@ -19,7 +20,7 @@ import sys
 import uuid
 from pathlib import Path
 
-from .case_loader import default_case_path, load_case
+from .case_loader import list_cases, load_case, pick_case_path
 from .grader import grade, weighted_result
 from .interviewer import Interviewer
 from .models import ScoreCard
@@ -231,7 +232,20 @@ def run(case_path: Path) -> None:
 
 def main() -> None:
     arg = sys.argv[1] if len(sys.argv) > 1 else None
-    case_path = Path(arg) if arg else default_case_path()
+    if arg in ("--list", "-l"):
+        for path in list_cases():
+            c = load_case(path)
+            print(f"{c.id:38s} {c.type:15s} {c.title}")
+        return
+    if arg:
+        case_path = Path(arg)
+    else:
+        # Same rotation as the web app: prefer a case this user hasn't been
+        # graded on, so repeat runs walk through the bank.
+        graph = SkillGraph()
+        done_ids = {h["case_id"] for h in graph.history()}
+        graph.close()
+        case_path = pick_case_path(done_ids)
     run(case_path)
 
 

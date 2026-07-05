@@ -150,6 +150,64 @@ RESOURCES: dict[str, list[dict[str, str]]] = {
             "PM-oriented framing: evals as regression tests across model versions.",
         ),
     ],
+    "ai_ux": [
+        _r(
+            "People + AI Guidebook",
+            "Google PAIR",
+            "https://pair.withgoogle.com/guidebook/",
+            "The canonical playbook for designing human-AI products: trust, errors, feedback, and handoff.",
+        ),
+        _r(
+            "HAX Toolkit: Guidelines for Human-AI Interaction",
+            "Microsoft Research",
+            "https://www.microsoft.com/en-us/haxtoolkit/",
+            "18 research-backed guidelines for when AI should act, ask, or stay quiet.",
+        ),
+    ],
+    "ai_agents": [
+        _r(
+            "Building Effective Agents",
+            "Anthropic",
+            "https://www.anthropic.com/engineering/building-effective-agents",
+            "When to use workflows vs autonomous agents, and why simple composable patterns win.",
+        ),
+        _r(
+            "Agents",
+            "Chip Huyen",
+            "https://huyenchip.com/2025/01/07/agents.html",
+            "Deep, vendor-neutral treatment of agent capabilities, planning, and failure modes.",
+        ),
+    ],
+    "rag": [
+        _r(
+            "Retrieval-Augmented Generation (RAG)",
+            "Pinecone Learn",
+            "https://www.pinecone.io/learn/retrieval-augmented-generation/",
+            "How grounding works end to end — and why answer quality is retrieval quality.",
+        ),
+    ],
+    "llm_economics": [
+        _r(
+            "Navigating the High Cost of AI Compute",
+            "a16z",
+            "https://a16z.com/navigating-the-high-cost-of-ai-compute/",
+            "Where AI money actually goes — the cost structure behind every inference decision.",
+        ),
+        _r(
+            "The Ultimate Guide to AI Pricing",
+            "Kyle Poyar, Growth Unhinged",
+            "https://www.growthunhinged.com/p/the-ultimate-guide-to-ai-pricing",
+            "How real AI products price: bundles, add-ons, usage, and hybrids with attach-rate data.",
+        ),
+    ],
+    "responsible_ai": [
+        _r(
+            "AI Risk Management Framework",
+            "NIST",
+            "https://www.nist.gov/itl/ai-risk-management-framework",
+            "The reference framework for mapping, measuring, and governing AI product risk.",
+        ),
+    ],
 }
 
 

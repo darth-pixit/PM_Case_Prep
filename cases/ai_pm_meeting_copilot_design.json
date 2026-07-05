@@ -1,0 +1,44 @@
+{
+  "id": "ai-pm-meeting-copilot-design",
+  "archetype": "ai-pm",
+  "company_persona": "a B2B meeting-transcription and notes product",
+  "interviewer_name": "Elena",
+  "title": "One AI feature for Minute",
+  "type": "product-design",
+  "prompt": "You're a PM at Minute, a meeting-transcription and notes product used by sales teams, recruiters, and product orgs. The exec team has asked for 'an AI feature' on next quarter's roadmap — that's the entire brief. You get two AI engineers and one quarter. What do you build? Walk me through it.",
+  "hidden_facts": {
+    "goal": "If pushed, leadership cares most about retention; differentiation second; a paid AI tier is 'interesting later'. They have NOT chosen — a good candidate makes them choose or picks with reasoning.",
+    "user_mix": "Weekly actives: ~40% sales reps, ~30% product/eng teams, ~15% recruiters, ~15% execs and others.",
+    "pain_research": "Top complaints from churn interviews: action items get lost after the meeting (cited by 42% of churned accounts), notes too long to read, and can't find past decisions.",
+    "retention_signal": "Users who share a summary within an hour of a meeting retain at roughly 2x the rate of those who don't.",
+    "competition": "The two main competitors shipped a generic 'AI meeting summary' about six months ago. Buyers now treat summaries as table stakes.",
+    "eng_constraints": "Two AI engineers for one quarter. No fine-tuning infrastructure. They can call a frontier model API and build product logic around it.",
+    "cost_envelope": "At current pricing, finance wants AI serving cost under about $0.40 per user per month.",
+    "transcript_quality": "Word error rate is ~8% on noisy calls (worse for crosstalk and heavy accents), near-perfect on clean audio.",
+    "distribution": "Slack and CRM (Salesforce/HubSpot) integrations already exist and are widely connected.",
+    "usage_data": "Only 12% of users ever open notes more than 24 hours after the meeting — the artifact is consumed immediately or never."
+  },
+  "ideal_answer_notes": [
+    "Clarify the goal before designing: 'an AI feature' is not a goal. Retention vs differentiation vs new revenue lead to different builds; the hidden facts say retention.",
+    "Segment by job-to-be-done, not title: sales reps need follow-ups sent, product teams need decisions findable, recruiters need structured debriefs. Pick one segment with reasoning.",
+    "Ground the pick in the pain data: lost action items drive churn, and shared-within-an-hour predicts retention — so a feature that pushes commitments OUT of the meeting (extraction, owner assignment, Slack/CRM delivery) beats a parity summary.",
+    "Generate 3+ distinct concepts before converging — e.g. action-item extraction with owners/due dates pushed to Slack/CRM, auto-drafted follow-up email for reps, decision memory searchable across meetings — and compare on value, effort, and defensibility.",
+    "Design the AI failure modes, not just the happy path: precision/recall tradeoff on extracted commitments, confidence thresholds, confirm-before-send human-in-the-loop, and provenance links back to the transcript moment so users can verify.",
+    "Handle the 8% word-error-rate: low-confidence items get flagged rather than silently sent; corrections are one tap and feed an eval set.",
+    "Check unit economics out loud: per-meeting token cost vs the $0.40/user/month envelope — this rules out reprocessing every meeting with the biggest model.",
+    "Define success and guardrails: activation (% meetings with extracted items), share-within-1h rate, week-8 retention delta; guardrails: false action-item rate, cost/user, latency to summary.",
+    "Scope an honest MVP for 2 engineers/1 quarter and say what's explicitly deferred (decision search, auto-send without confirm, custom templates).",
+    "Plan the eval before scale: a golden set of ~200 meetings across audio conditions, extraction precision/recall targets, and human review during beta."
+  ],
+  "resource_tags": ["ai_ux", "ai_evals"],
+  "extra_checklist": [
+    "Chooses a segment and pain point using the churn/retention evidence rather than shipping a parity 'AI summary'",
+    "Designs trust into the feature: confirmation before anything is sent externally, and provenance back to the transcript",
+    "Checks model cost per meeting against the $0.40/user/month envelope before committing to the design"
+  ],
+  "anchors": {
+    "strong": "Forces the goal question, picks the lost-action-items pain with the churn and share-within-1h evidence, generates three distinct concepts and converges with explicit criteria, designs confirm-before-send and provenance for model errors, sanity-checks token cost against the envelope, and scopes a 2-engineer MVP with a real eval plan.",
+    "at_bar": "Picks a sensible segment and lands on action items or follow-ups with some evidence, names a success metric, and mentions model errors, but needs nudges to consider multiple concepts, the cost envelope, or how wrong extractions reach users.",
+    "weak": "Jumps straight to 'add an AI summary/chatbot' without asking why or for whom, never uses the research provided, treats model output as always correct, and names no success metric or eval plan."
+  }
+}
