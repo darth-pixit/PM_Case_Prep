@@ -182,7 +182,8 @@ async def login(request: Request) -> JSONResponse:
     if "@" not in email or "." not in email.rsplit("@", 1)[-1] or len(email) > 254:
         return JSONResponse({"ok": False, "error": "invalid email"}, status_code=400)
 
-    uid = request.cookies.get(UID_COOKIE) or uuid.uuid4().hex
+    anon_uid = request.cookies.get(UID_COOKIE) or uuid.uuid4().hex
+    uid = anon_uid
     g = SkillGraph(DB_PATH, uid)
     try:
         existing = g.uid_for_email(email)
@@ -192,6 +193,10 @@ async def login(request: Request) -> JSONResponse:
         else:
             g.link_email(email, uid)
         g2 = SkillGraph(DB_PATH, uid)
+        if restored:
+            # Cases finished on this device BEFORE logging in (e.g. the one
+            # just graded) must follow the person into their saved account.
+            g2.merge_from(anon_uid)
         sessions = g2.sessions_count()
         g2.close()
     finally:
@@ -447,7 +452,19 @@ async def session_ws(ws: WebSocket) -> None:
             await send_json({"type": "error", "text": f"Grading failed: {exc}"})
             return
         weighted, _min_dim, band = weighted_result(case, card)
-        graph.record(session_id, case.id, case.archetype, card, band)
+        graph.record(
+            session_id,
+            case.id,
+            case.archetype,
+            card,
+            band,
+            weighted=round(weighted, 2),
+            transcript=interviewer.transcript(),
+            delivery={
+                "snapshot": tracker.snapshot(),
+                "summary": delivery_summary,
+            },
+        )
         await send_json(
             {
                 "type": "scorecard",
@@ -525,7 +542,9 @@ async def session_ws(ws: WebSocket) -> None:
             if msg.get("type") == "websocket.disconnect":
                 break
             if msg.get("bytes") is not None:
-                if voice is not None:
+                # Drop empty frames: a zero-byte binary message is Deepgram's
+                # end-of-stream signal and would close the voice connection.
+                if voice is not None and msg["bytes"]:
                     await voice.send(msg["bytes"])  # never raises
             elif msg.get("text") is not None:
                 data = json.loads(msg["text"])

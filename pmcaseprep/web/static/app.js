@@ -350,9 +350,11 @@ async function startMic() {
     workletNode.port.onmessage = (e) => {
       if (!micOn || ended || !ws || ws.readyState !== 1) return;
       meter(e.data);
-      for (const f of gate(e.data, inRate)) {
-        ws.send(floatTo16(resampleTo16k(f, inRate)).buffer);
-      }
+      // gate() returns ONE frame (voice or digital silence) — send it whole.
+      // Never send an empty buffer: a zero-byte binary frame is Deepgram's
+      // end-of-stream signal and closes the upstream connection.
+      const pcm = floatTo16(resampleTo16k(gate(e.data), inRate));
+      if (pcm.length) ws.send(pcm.buffer);
     };
     micSource.connect(workletNode);
     const sink = audioCtx.createGain();

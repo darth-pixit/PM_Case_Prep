@@ -87,7 +87,8 @@ class DeepgramLive:
                 pass
 
     async def send_audio(self, data: bytes) -> None:
-        if self.ws is not None:
+        # Empty binary = Deepgram's end-of-stream signal; never send one as audio.
+        if self.ws is not None and data:
             await self.ws.send(data)
 
     async def keepalive(self) -> None:
