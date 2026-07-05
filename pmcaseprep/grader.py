@@ -19,9 +19,14 @@ def grade(
     transcript: str,
     observations_text: str,
     model: str,
+    delivery_summary: str = "",
     max_tokens: int = 4000,
 ) -> ScoreCard:
-    """Score one completed case. Adaptive thinking on for careful judgment."""
+    """Score one completed case. Adaptive thinking on for careful judgment.
+
+    `delivery_summary` (pace/pauses/fillers) is optional and, when present, feeds
+    the Communication dimension — the fusion of *how* and *what* you say.
+    """
     resp = client.messages.parse(
         model=model,
         max_tokens=max_tokens,
@@ -30,7 +35,9 @@ def grade(
         messages=[
             {
                 "role": "user",
-                "content": build_grader_input(case, transcript, observations_text),
+                "content": build_grader_input(
+                    case, transcript, observations_text, delivery_summary
+                ),
             }
         ],
         output_format=ScoreCard,

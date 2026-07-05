@@ -1,6 +1,21 @@
-# PM Case Prep — prototype dependencies
+# PM Case Prep — dependencies
 # A recent Anthropic SDK is required for messages.parse() / structured outputs
 # and the claude-opus-4-8 model id.
 anthropic>=0.49.0
 pydantic>=2.6
 python-dotenv>=1.0
+
+# Web app (live voice + delivery meters + simultaneous typing)
+fastapi>=0.110
+uvicorn[standard]>=0.27
+websockets>=12.0
+
+# Test runner (offline smoke tests). Optional but makes `pytest` work.
+pytest>=8.0
+
+# --- Optional: microphone recording for the CLI's /record ----------------
+# The WEB app uses the browser mic (no install needed). These are only for the
+# terminal CLI's /record command:
+#   pip install sounddevice numpy      # on macOS also: brew install portaudio
+# sounddevice>=0.4
+# numpy>=1.24

@@ -73,14 +73,55 @@ class Interviewer:
         self.messages: list[dict[str, Any]] = []
         self.observations: list[Observation] = []
         self.concluded = False
+        self._turn_start = 0  # index of the first message of the current turn
 
     def respond(self, user_text: str) -> str:
-        """Feed one candidate turn; run the tool loop; return the spoken reply."""
-        self.messages.append({"role": "user", "content": user_text})
+        """Feed one text candidate turn; run the tool loop; return the reply."""
+        return self.respond_content(user_text)
+
+    def respond_content(self, content: Any) -> str:
+        """Feed one candidate turn of any shape (text string or content blocks,
+        e.g. an image + text for a whiteboard photo); run the loop; return reply."""
+        self.messages.append({"role": "user", "content": content})
+        self._turn_start = len(self.messages)
         return self._run_loop()
 
+    def align_shown(self, shown_text: str) -> None:
+        """Rewrite this turn's assistant messages so the model's memory contains
+        EXACTLY what the candidate saw (or "(listening)" when nothing was shown).
+
+        Without this, suppressed narration and swallowed replies stay in the
+        conversation — the model then believes it said things that never reached
+        the screen ("as I already mentioned…"), and the grader reads a transcript
+        that differs from the candidate's actual experience."""
+        last_assistant = None
+        for i in range(self._turn_start, len(self.messages)):
+            if self.messages[i]["role"] == "assistant":
+                last_assistant = i
+        if last_assistant is None:
+            return
+        for i in range(self._turn_start, len(self.messages)):
+            msg = self.messages[i]
+            if msg["role"] != "assistant":
+                continue
+            blocks: list[Any] = [
+                {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+                for b in msg["content"]
+                if getattr(b, "type", "") == "tool_use"
+            ]
+            if i == last_assistant:
+                blocks.insert(0, {"type": "text", "text": shown_text})
+            elif not blocks:
+                blocks = [{"type": "text", "text": shown_text}]
+            msg["content"] = blocks
+
     def _run_loop(self) -> str:
-        reply_parts: list[str] = []
+        # Text emitted ALONGSIDE tool calls is usually the model narrating to
+        # itself ("I'll note that...") — never meant for the candidate. So the
+        # reply is the text of the FINAL response only; earlier text is kept as
+        # a fallback in case the model front-loaded its whole answer.
+        all_text: list[str] = []
+        last_text: list[str] = []
         while True:
             resp = self.client.messages.create(
                 model=self.model,
@@ -92,10 +133,12 @@ class Interviewer:
             )
             self.messages.append({"role": "assistant", "content": resp.content})
 
+            last_text = []
             tool_results = []
             for block in resp.content:
                 if block.type == "text":
-                    reply_parts.append(block.text)
+                    last_text.append(block.text)
+                    all_text.append(block.text)
                 elif block.type == "tool_use":
                     tool_results.append(self._handle_tool(block))
 
@@ -104,7 +147,8 @@ class Interviewer:
                 continue
             break
 
-        return "\n".join(p for p in reply_parts if p.strip())
+        parts = last_text if any(p.strip() for p in last_text) else all_text
+        return "\n".join(p for p in parts if p.strip())
 
     def _handle_tool(self, block: Any) -> dict[str, Any]:
         result = "ok"

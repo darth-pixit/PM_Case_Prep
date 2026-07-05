@@ -14,6 +14,7 @@ README "Roadmap". The reasoning + grading loop below is provider-complete today.
 from __future__ import annotations
 
 import os
+import shlex
 import sys
 import uuid
 from pathlib import Path
@@ -23,6 +24,8 @@ from .grader import grade, weighted_result
 from .interviewer import Interviewer
 from .models import ScoreCard
 from .skill_graph import SkillGraph
+from .transcribe import TranscriptionError, mic_available, record, transcribe, voice_configured
+from .vision import image_content
 
 MODEL = os.environ.get("PMCP_MODEL", "claude-opus-4-8")
 
@@ -78,6 +81,82 @@ def _print_scorecard(card: ScoreCard, weighted: float, band: str) -> None:
     print("=" * 64)
 
 
+def _print_input_help(voice_on: bool, mic_on: bool) -> None:
+    print("How to answer — you can type, speak, or sketch:")
+    print("  • just type your thinking out loud and press Enter")
+    print("  • /voice <audio-file>    speak your answer, then point to the recording")
+    if mic_on:
+        print("  • /record [seconds]      record from your mic right now")
+    print("  • /photo <image> [note]  share a whiteboard/sketch (funnels, 2x2s, metric trees)")
+    print("  • /hint   nudge      /done   finish & grade      /quit   abort")
+    voice = "ready" if voice_on else "off — add DEEPGRAM_API_KEY to enable /voice and /record"
+    print(f"  [voice input: {voice}]   [photo input: ready via Claude vision]\n")
+
+
+def _photo_turn(argstr: str):
+    parts = shlex.split(argstr)
+    if not parts:
+        print("Usage: /photo <image-file> [optional note]   (tip: drag the file into the terminal)")
+        return None
+    path = parts[0]
+    note = " ".join(parts[1:]) or "Here's a sketch of my thinking — take a look."
+    if not Path(path).exists():
+        print(f"Image not found: {path}")
+        return None
+    try:
+        content = image_content(path, note)
+    except Exception as exc:  # noqa: BLE001
+        print(f"Couldn't read image: {exc}")
+        return None
+    print(f"(sent photo: {path})")
+    return content
+
+
+def _voice_turn(argstr: str):
+    parts = shlex.split(argstr)
+    if not parts:
+        print("Usage: /voice <audio-file>   (e.g. a Voice Memo .m4a, or .mp3/.wav)")
+        return None
+    try:
+        text = transcribe(parts[0])
+    except TranscriptionError as exc:
+        print(str(exc))
+        return None
+    if not text:
+        print("(no speech detected)")
+        return None
+    print(f'(transcribed) "{text}"')
+    return text
+
+
+def _record_turn(argstr: str, mic_on: bool):
+    if not mic_on:
+        print(
+            "Mic recording needs the optional 'sounddevice' package: pip install sounddevice numpy "
+            "(on Mac also: brew install portaudio). Or record on your phone and use /voice <file>."
+        )
+        return None
+    if not voice_configured():
+        print("Recording also needs a Deepgram key to transcribe. Set DEEPGRAM_API_KEY in .env.")
+        return None
+    parts = shlex.split(argstr)
+    seconds = float(parts[0]) if parts else None
+    print(f"Recording for {seconds:.0f}s..." if seconds else "Recording... press Enter to stop.")
+    try:
+        text = transcribe(record(seconds))
+    except TranscriptionError as exc:
+        print(str(exc))
+        return None
+    except Exception as exc:  # noqa: BLE001
+        print(f"Recording failed: {exc}")
+        return None
+    if not text:
+        print("(no speech detected)")
+        return None
+    print(f'(transcribed) "{text}"')
+    return text
+
+
 def run(case_path: Path) -> None:
     case = load_case(case_path)
     client = _make_client()
@@ -85,26 +164,48 @@ def run(case_path: Path) -> None:
     graph = SkillGraph()
     session_id = uuid.uuid4().hex[:8]
 
+    voice_on = voice_configured()
+    mic_on = mic_available()
+
     print(f"\n=== {case.title}  [{case.archetype} / {case.type}] ===\n")
     print(f"{case.interviewer_name}: {case.prompt}\n")
-    print("(Type your thinking out loud. /hint for a nudge, /done to finish, /quit to abort.)\n")
+    _print_input_help(voice_on, mic_on)
 
     while True:
         try:
-            user = input("you> ").strip()
+            raw = input("you> ").strip()
         except (EOFError, KeyboardInterrupt):
             print()
             break
-        if not user:
+        if not raw:
             continue
-        if user == "/quit":
+
+        cmd, _, argstr = raw.partition(" ")
+        content = None  # what we send to the interviewer this turn
+
+        if cmd == "/quit":
             print("Aborted (not graded).")
             graph.close()
             return
-        if user == "/done":
+        elif cmd == "/done":
             break
-        turn = _HINT_PROMPT if user == "/hint" else user
-        reply = interviewer.respond(turn)
+        elif cmd == "/hint":
+            content = _HINT_PROMPT
+        elif cmd == "/photo":
+            content = _photo_turn(argstr)
+        elif cmd == "/voice":
+            content = _voice_turn(argstr)
+        elif cmd == "/record":
+            content = _record_turn(argstr, mic_on)
+        elif cmd.startswith("/"):
+            print(f"Unknown command: {cmd}. Try /voice, /record, /photo, /hint, /done, /quit.")
+        else:
+            content = raw
+
+        if content is None:  # command failed or was informational — reprompt
+            continue
+
+        reply = interviewer.respond_content(content)
         if reply:
             print(f"\n{case.interviewer_name}: {reply}\n")
         if interviewer.concluded:

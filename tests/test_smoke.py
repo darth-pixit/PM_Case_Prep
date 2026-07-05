@@ -57,6 +57,278 @@ def test_prompts_omit_ideal_answer_from_interviewer():
     assert any(v in system for v in case.hidden_facts.values())
 
 
+def test_vision_builds_image_blocks(tmp_path=None):
+    import base64
+
+    from pmcaseprep import vision
+
+    # 1x1 transparent PNG
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    p = Path(__file__).resolve().parent / "_tmp_pixel.png"
+    p.write_bytes(png)
+    try:
+        blocks = vision.image_content(p, "my 2x2")
+        assert blocks[0]["type"] == "image"
+        assert blocks[0]["source"]["media_type"] == "image/png"
+        assert blocks[1] == {"type": "text", "text": "my 2x2"}
+    finally:
+        p.unlink()
+
+
+def test_transcribe_reports_missing_key(monkeypatch=None):
+    import os
+
+    from pmcaseprep import transcribe
+
+    saved = os.environ.pop("DEEPGRAM_API_KEY", None)
+    try:
+        assert transcribe.voice_configured() is False
+        try:
+            transcribe.transcribe("does-not-matter.wav")
+            assert False, "expected TranscriptionError without a key"
+        except transcribe.TranscriptionError:
+            pass
+    finally:
+        if saved is not None:
+            os.environ["DEEPGRAM_API_KEY"] = saved
+
+
+def test_delivery_metrics():
+    from pmcaseprep.delivery import DeliveryTracker, Word, turn_metrics
+
+    # 4 words over 2.0s -> 120 wpm; one 1.0s pause; one hard filler ("um").
+    words = [
+        Word("So", 0.0, 0.3),
+        Word("um", 0.4, 0.6),
+        Word("retention", 1.6, 2.0),  # 1.0s gap before this word = a pause
+        Word("dropped", 2.0, 2.0),
+    ]
+    m = turn_metrics(words)
+    assert m["words"] == 4
+    assert m["core_fillers"] == 1  # "um"
+    assert m["soft_fillers"] == 1  # "So"
+    assert m["pause_count"] == 1
+    assert m["longest_pause_s"] >= 1.0
+
+    tracker = DeliveryTracker()
+    snap = tracker.add_turn(words)
+    assert snap["words"] == 4
+    assert snap["filler_rate_per_100"] == 50.0  # 2 fillers / 4 words * 100
+    assert "wpm" in tracker.summary_text().lower() or "words" in tracker.summary_text().lower()
+
+
+def test_web_app_imports():
+    # Skip cleanly if web/runtime deps aren't installed in this environment.
+    try:
+        from pmcaseprep.web import app as webapp
+    except ImportError as exc:
+        print(f"  (skipped test_web_app_imports — missing dep: {exc.name})")
+        return
+    assert webapp.app is not None
+    assert (webapp.STATIC_DIR / "index.html").exists()
+    for f in ("index.html", "app.js", "worklet.js", "styles.css"):
+        assert (webapp.STATIC_DIR / f).exists(), f"missing static file {f}"
+
+
+def _card_with_scores(scores: dict[str, int]) -> ScoreCard:
+    return ScoreCard(
+        dimension_scores=[
+            DimensionScore(dimension=k, score=v, justification="x")
+            for k, v in scores.items()
+        ],
+        category_checklist=[],
+        red_flags=[],
+        top_improvement="x",
+        overall_band="hire",
+        summary="y",
+    )
+
+
+def test_skill_graph_projection():
+    from pmcaseprep.skill_graph import SkillGraph
+
+    g = SkillGraph(":memory:")
+    proj = g.projection()
+    assert proj["sessions"] == 0 and proj["to_hire"] is None
+
+    # Three cases improving ~0.25/case: 2.0 -> 2.25 -> 2.5. Hire bar is 2.75.
+    for i, s in enumerate(([2, 2, 2, 2, 2, 2], [2, 2, 2, 2, 3, 2], [3, 2, 3, 2, 3, 2])):
+        card = _card_with_scores(dict(zip(rubric.DIMENSION_KEYS, s)))
+        g.record(f"s{i}", "case", "ai-pm", card, "no_hire")
+    proj = g.projection()
+    assert proj["sessions"] == 3
+    assert proj["slope_per_case"] > 0
+    # Least-squares fit: level 2.47 at the latest case, +0.25/case.
+    assert proj["to_hire"] == 2  # ceil((2.75 - 2.47) / 0.25)
+    assert proj["to_strong_hire"] == 5  # ceil((3.5 - 2.47) / 0.25)
+
+    # Flat scores -> no dishonest extrapolation.
+    g2 = SkillGraph(":memory:")
+    for i in range(3):
+        card = _card_with_scores({k: 2 for k in rubric.DIMENSION_KEYS})
+        g2.record(f"s{i}", "case", "ai-pm", card, "no_hire")
+    proj2 = g2.projection()
+    assert proj2["to_hire"] is None and "flat" in proj2["note"]
+    g.close()
+    g2.close()
+
+
+def test_skill_graph_user_isolation_and_login():
+    import os
+    import tempfile
+
+    from pmcaseprep.skill_graph import SkillGraph
+
+    with tempfile.TemporaryDirectory() as d:
+        db = os.path.join(d, "t.db")
+        a = SkillGraph(db, "uid-a")
+        b = SkillGraph(db, "uid-b")
+        card = _card_with_scores({k: 3 for k in rubric.DIMENSION_KEYS})
+        a.record("s1", "case", "ai-pm", card, "hire")
+        # One visitor's scores must never leak into another's graph.
+        assert a.sessions_count() == 1
+        assert b.sessions_count() == 0
+        assert b.projection()["sessions"] == 0
+        # Email linking: save on device A, restore from device B.
+        a.link_email("p@example.com", "uid-a")
+        assert b.uid_for_email("p@example.com") == "uid-a"
+        assert a.email_for_uid("uid-a") == "p@example.com"
+        a.close()
+        b.close()
+
+
+def test_resources_selection():
+    from pmcaseprep.resources import RESOURCES, resources_for
+
+    case = load_case(default_case_path())
+    # Every tag a case declares must exist in the curated map.
+    for tag in case.resource_tags:
+        assert tag in RESOURCES, f"case tags unknown resource key {tag}"
+    scores = dict.fromkeys(rubric.DIMENSION_KEYS, 4)
+    scores["structure"] = 2
+    scores["communication"] = 3
+    picked = resources_for(_card_with_scores(scores), case)
+    if RESOURCES:  # once links are curated, weak dims must get them
+        assert "structure" in picked["dimensions"]
+        assert len(picked["dimensions"].get("communication", [])) <= 1
+        assert picked["case"], "case resource_tags should yield links"
+        for links in list(picked["dimensions"].values()) + [picked["case"]]:
+            for r in links:
+                assert r["url"].startswith("https://")
+    # A perfect run shows no dimension links.
+    perfect = resources_for(_card_with_scores(dict.fromkeys(rubric.DIMENSION_KEYS, 4)), case)
+    assert perfect["dimensions"] == {}
+
+
+def test_flux_word_timing_synthesis():
+    """Flux omits per-word timestamps; we synthesize them from the turn window
+    so words-per-minute stays meaningful."""
+    try:
+        from pmcaseprep.web.app import _flux_words
+    except ImportError as exc:
+        print(f"  (skipped test_flux_word_timing_synthesis — missing dep: {exc.name})")
+        return
+    # No per-word timing, only a 3s window over 6 words -> ~120 wpm.
+    evt = {
+        "audio_window_start": 10.0,
+        "audio_window_end": 13.0,
+        "words": [{"word": w, "confidence": 0.9} for w in "one two three four five six".split()],
+    }
+    words = _flux_words(evt)
+    assert len(words) == 6
+    assert abs((words[-1].end - words[0].start) - 3.0) < 1e-6
+    from pmcaseprep.delivery import turn_metrics
+    assert abs(turn_metrics(words)["wpm"] - 120.0) < 1.0
+    # Real per-word timing is honored when present.
+    evt2 = {"words": [{"word": "hi", "start": 0.0, "end": 0.5, "confidence": 0.9}]}
+    assert _flux_words(evt2)[0].end == 0.5
+
+
+def test_interviewer_memory_matches_screen():
+    """After align_shown, the model's memory (and the grader's transcript) must
+    contain exactly what the candidate saw — never suppressed narration."""
+    from types import SimpleNamespace
+
+    from pmcaseprep.interviewer import Interviewer
+
+    case = load_case(default_case_path())
+    responses = [
+        SimpleNamespace(
+            stop_reason="tool_use",
+            content=[
+                SimpleNamespace(type="text", text="They're structuring well — noting it."),
+                SimpleNamespace(
+                    type="tool_use",
+                    name="log_observation",
+                    id="t1",
+                    input={"dimension": "structure", "note": "tree", "polarity": "positive"},
+                ),
+            ],
+        ),
+        SimpleNamespace(
+            stop_reason="end_turn",
+            content=[SimpleNamespace(type="text", text="Private narration. (listening)")],
+        ),
+    ]
+
+    class FakeMessages:
+        @staticmethod
+        def create(**kw):
+            return responses.pop(0)
+
+    class FakeClient:
+        messages = FakeMessages()
+
+    iv = Interviewer(FakeClient(), case, "test-model")
+    iv.respond("thinking out loud about the funnel")
+    iv.align_shown("(listening)")
+    t = iv.transcript()
+    assert "structuring well" not in t and "narration" not in t.lower()
+    assert "(listening)" in t
+    assert len(iv.observations) == 1  # tool effects survive the rewrite
+
+
+def test_visible_reply_salvage():
+    try:
+        from pmcaseprep.web.app import _visible_reply
+    except ImportError as exc:
+        print(f"  (skipped test_visible_reply_salvage — missing dep: {exc.name})")
+        return
+    assert _visible_reply("(listening)") == ""
+    assert _visible_reply("Noted. (listening)") == ""  # short remainder = narration
+    answer = "The spike started three days ago and is concentrated in the email use case on v4.2."
+    assert _visible_reply(answer + " (listening)") == answer  # real answer salvaged
+    assert _visible_reply("Sure — what would you like to know?") == "Sure — what would you like to know?"
+
+
+def test_empty_audio_never_reaches_deepgram():
+    """A zero-byte binary frame is Deepgram's end-of-stream signal. A client
+    bug once flooded the socket with empty frames, killing the voice channel
+    in a reconnect loop — empties must be dropped, never forwarded."""
+    import asyncio
+
+    try:
+        from pmcaseprep.web.deepgram_live import DeepgramLive
+    except ImportError as exc:
+        print(f"  (skipped test_empty_audio_never_reaches_deepgram — missing dep: {exc.name})")
+        return
+
+    class FakeWs:
+        def __init__(self):
+            self.sent = []
+
+        async def send(self, data):
+            self.sent.append(data)
+
+    dg = DeepgramLive("key")
+    dg.ws = FakeWs()
+    asyncio.run(dg.send_audio(b""))  # end-of-stream signal — must be dropped
+    asyncio.run(dg.send_audio(b"\x01\x02"))  # real audio — must pass
+    assert dg.ws.sent == [b"\x01\x02"]
+
+
 def test_weighted_result_is_deterministic():
     case = load_case(default_case_path())
     card = ScoreCard(

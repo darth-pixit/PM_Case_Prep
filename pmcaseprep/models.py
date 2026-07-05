@@ -55,6 +55,9 @@ class Case(BaseModel):
     rubric_weights: Optional[dict[str, float]] = None  # per-case override
     extra_checklist: list[str] = Field(default_factory=list)  # case-specific items
     anchors: Optional[Anchors] = None
+    # Concept keys (see resources.py) this case exercises beyond the six
+    # dimensions — used to attach "go deeper" learning links to the scorecard.
+    resource_tags: list[str] = Field(default_factory=list)
 
 
 class Observation(BaseModel):

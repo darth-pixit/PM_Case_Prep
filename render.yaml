@@ -1,0 +1,30 @@
+# One-click-ish deploy on Render (https://render.com).
+# Dashboard -> New -> Blueprint -> point at this repo. Render reads this file,
+# builds the service, and prompts you for the secret env vars below.
+services:
+  - type: web
+    name: pm-case-prep
+    runtime: python
+    plan: starter # always-on (no cold starts) and supports the disk below
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn pmcaseprep.web.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    # Persistent disk: user progress + email logins survive deploys/restarts.
+    disk:
+      name: pmcp-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.6
+      - key: PMCP_DB
+        value: /data/skill_graph.db
+      - key: ANTHROPIC_API_KEY
+        sync: false # prompted in the dashboard — never in git
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: PMCP_POSTHOG_KEY
+        sync: false
+      # Optional: uncomment to use Deepgram Flux turn detection
+      # - key: PMCP_STT
+      #   value: flux
