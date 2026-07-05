@@ -1,0 +1,43 @@
+{
+  "id": "ai-pm-hallucinated-policy",
+  "archetype": "ai-pm",
+  "company_persona": "a vendor of embedded AI support agents",
+  "interviewer_name": "Noah",
+  "title": "The refund policy that never existed",
+  "type": "ai-pm",
+  "prompt": "You're the PM for Sable, an AI support agent that companies embed in their help centers. This morning your largest customer — an airline — escalated: Sable told a passenger they were entitled to a full cash refund plus compensation, citing a policy that doesn't exist. The passenger posted screenshots and it's picking up traction. Walk me through what you do — today, this week, and structurally.",
+  "hidden_facts": {
+    "customer_action": "The airline honored the refund to contain the story and is furious. They are 18% of ARR with a renewal in four months.",
+    "blast_radius": "A log search finds 214 conversations in the last 30 days where Sable cited a 'policy' string that matches no knowledge-base document — about 0.3% of policy-related chats, concentrated on this airline.",
+    "root_cause": "The airline rewrote its refund KB article five weeks ago. The per-tenant reindexing job has been silently failing for them since then, so retrieval served stale chunks and the model filled the gaps.",
+    "model_changes": "No model or prompt version changed in this window.",
+    "current_guardrails": "Answers show a citation link, but nothing enforces that the answer is actually grounded in the cited document before sending.",
+    "groundedness_option": "A groundedness-check gate (verify the answer is supported by retrieved text before sending) adds ~300ms latency and ~8% inference cost.",
+    "strict_mode_option": "A strict quote-only mode for policy questions drops the answer rate (deflection) by ~25% — a real cost, since deflection is what customers pay for.",
+    "monitoring_gap": "There is no per-tenant index-freshness or indexing-job-health alert. Nobody was paged.",
+    "contract": "The SLA contains 'commercially reasonable accuracy' language; legal says exposure is manageable but the relationship is the real risk.",
+    "competitor": "A rival has started marketing 'hallucination-proof' guarantees to enterprise buyers."
+  },
+  "ideal_answer_notes": [
+    "Contain before diagnosing: today, switch the affected tenant's policy-class queries to strict quote-only mode (accepting the deflection hit), get comms and legal aligned with the airline, and support the customer publicly — don't debug in public.",
+    "Scope the blast radius with data before generalizing: the 214-conversation search, which tenants, which intent classes — and proactively check other tenants for the same failure signature.",
+    "Root-cause using the RAG pipeline MECE: retrieval (stale index — the actual cause), generation (no model change), knowledge-base content, prompt/config. Confirm with the timeline: KB rewrite five weeks ago plus silently failing reindex job matches the incident window.",
+    "Make the precise diagnosis explicitly: this is not 'the model hallucinated' as a mystery — the system served stale grounding and the model papered over the gap. The distinction drives both the fix and the customer narrative.",
+    "Fix in layers with stated tradeoffs: per-tenant index-health alerts (cheap, do immediately); groundedness gating for high-stakes intents (+300ms/+8% cost — worth it for policy/commitment answers, probably not for everything); citation-or-refuse for anything that commits the customer to money or obligations.",
+    "Introduce risk tiers per intent: refund/legal/medical/billing answers get strict grounding and lower autonomy; chit-chat and how-to answers keep the fast path. One global setting overcorrects.",
+    "Define guardrail metrics that become launch gates: groundedness rate on sampled answers, unsupported-claim rate from human audits, index freshness age per tenant, and time-to-detect for pipeline failures.",
+    "Handle the relationship deliberately: a written incident report with the real root cause, the remediation plan with dates, and success criteria tied to the four-month renewal.",
+    "Structural follow-through: add stale-KB scenarios to the eval suite, chaos-test the indexer, and consider making groundedness reporting a customer-visible trust feature — turning the incident into the counter to the rival's 'hallucination-proof' pitch."
+  ],
+  "resource_tags": ["rag", "ai_evals"],
+  "extra_checklist": [
+    "Contains the incident for the affected tenant before starting the broad diagnosis",
+    "Locates the failure precisely in the retrieval layer (stale index) instead of stopping at 'the model hallucinated'",
+    "Proposes risk-tiered guardrails with their latency, cost, and deflection tradeoffs stated as numbers"
+  ],
+  "anchors": {
+    "strong": "Contains today with strict mode plus customer comms, scopes with the log search, walks the retrieval-vs-generation-vs-content split and confirms stale indexing via the timeline, then ships layered fixes — freshness alerts, groundedness gates on risk-tiered intents, citation-or-refuse for commitments — with the 300ms/8%/25% tradeoffs weighed and renewal-focused customer handling.",
+    "at_bar": "Handles the customer and proposes checking 'what the AI retrieved', reaching the stale-content cause with a nudge or two, and suggests guardrails, but treats the fixes as absolutes without weighing the latency/cost/deflection numbers or tiering by intent risk.",
+    "weak": "Jumps to 'models hallucinate, we need a better model or better prompts', never asks what changed or searches the logs, proposes a disclaimer as the fix, and ignores the renewal, the monitoring gap, and the difference between retrieval and generation failures."
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "id": "ai-pm-expense-agent-autonomy",
+  "archetype": "ai-pm",
+  "company_persona": "a corporate travel and expense platform",
+  "interviewer_name": "Marcus",
+  "title": "How much should the agent do on its own?",
+  "type": "product-design",
+  "prompt": "You're a PM at Trailfin, a travel-and-expense platform. The company wants an AI agent that files expenses for employees — it reads receipts, categorizes line items, builds the report, and submits it. The team is split on one question: how much should the agent do on its own? Design the product and take a position on autonomy.",
+  "hidden_facts": {
+    "error_rate": "Receipt extraction (OCR + LLM) gets about 4% of line items wrong — amount, currency, or category — measured on a labeled set.",
+    "volume": "About 1.2 million expense reports per quarter across roughly 4,000 companies.",
+    "bounce_baseline": "Today, ~30% of human-filed reports get bounced back by finance for policy violations or missing data.",
+    "user_research": "Employees hate filing (median 25 minutes/month) but their stated fear is 'the AI submitted something wrong under my name'. Finance admins fear fraud and loss of control.",
+    "stakes": "A wrong submission can breach company expense policy or tax rules; finance teams audit roughly 10% of reports.",
+    "customer_range": "Customers span 20-person startups to 30,000-employee enterprises with custom policy rules per company.",
+    "existing_asset": "The platform already has a deterministic, per-customer policy rules engine (limits, categories, receipt requirements).",
+    "competitor_incident": "A competitor shipped full 'auto-file' and had a public embarrassment when it misfiled an executive's expenses; buyers now ask about it in sales calls.",
+    "input_channels": "Receipts arrive via email forwarding, phone photos, and corporate card feeds; card feeds carry structured merchant data.",
+    "trust_data": "In a prototype study, users who saw WHY a line item was categorized (receipt region highlighted) accepted suggestions 2.3x more often."
+  },
+  "ideal_answer_notes": [
+    "Reframe autonomy as a spectrum, not a binary: draft-only → one-tap approve → auto-file below thresholds → full auto. The design question is where each transaction lands, decided by risk, not a single global setting.",
+    "Map the stakeholders separately: employee (time back), finance admin (control, auditability), the company (compliance, fraud). Success and fears differ; the product needs a face for each.",
+    "Use the existing deterministic policy engine as the guardrail layer: the LLM extracts and proposes, rules validate. Don't ask a probabilistic model to be the compliance layer when a rules engine already exists.",
+    "Do the error math out loud: 4% line-item errors on 1.2M reports/quarter means tens of thousands of wrong items per quarter — full auto at launch is indefensible; graduated autonomy is a quantitative conclusion, not a vibe.",
+    "Propose earned autonomy: auto-file only when extraction confidence is high AND the policy engine passes AND the amount is under a per-company threshold; everything else becomes a prepared draft. Thresholds are per-customer config because a startup and a 30k-seat enterprise price risk differently.",
+    "Design for trust mechanics: show the receipt-region highlight (the 2.3x acceptance fact), an undo window before submission, and a complete activity log for finance audits.",
+    "Define success metrics per stakeholder: median time-to-file, % reports auto-approved without bounce (against the 30% human baseline), override/correction rate, finance trust survey. Guardrails: misfile rate, fraud flags, support tickets about the agent.",
+    "Rollout: opt-in per company starting in draft mode; autonomy expands per customer as measured accuracy clears bars — turning the competitor's public failure into a sales asset.",
+    "Close the loop: every human correction becomes labeled eval data (respecting per-customer data boundaries), so the accuracy that unlocks autonomy is measured, not assumed."
+  ],
+  "resource_tags": ["ai_agents", "ai_ux"],
+  "extra_checklist": [
+    "Treats autonomy as a graduated, risk-based spectrum with explicit thresholds rather than an on/off decision",
+    "Separates probabilistic extraction (model) from deterministic policy validation (existing rules engine)",
+    "Quantifies the error budget from the 4% error rate and 1.2M report volume before choosing the default autonomy level"
+  ],
+  "anchors": {
+    "strong": "Immediately splits stakeholders, converts the 4% error rate into an absolute error volume to reject full-auto, designs a confidence-plus-rules-plus-threshold gate with per-customer configuration, uses the receipt-highlight evidence for trust UX, and defines per-stakeholder metrics with an earned-autonomy rollout.",
+    "at_bar": "Lands on 'start with human review, automate later' with some reasoning, mentions the rules engine or thresholds when nudged, and names time-saved and error-rate metrics, but doesn't quantify the error budget or differentiate customers by risk tolerance.",
+    "weak": "Picks 'full auto because that's the vision' or 'always human review' without using the volume, error-rate, or research facts, ignores the finance stakeholder, and describes UI features with no guardrail metrics or rollout plan."
+  }
+}

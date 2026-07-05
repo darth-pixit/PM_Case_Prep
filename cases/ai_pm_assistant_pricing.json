@@ -1,0 +1,43 @@
+{
+  "id": "ai-pm-assistant-pricing",
+  "archetype": "ai-pm",
+  "company_persona": "a project-management SaaS with a newly launched AI assistant",
+  "interviewer_name": "Sam",
+  "title": "Price the assistant before the beta ends",
+  "type": "strategy",
+  "prompt": "You're a PM at Taskbeam, a project-management SaaS priced at $12 per seat per month. Three months ago you launched an AI assistant — it drafts specs, summarizes long threads, and generates weekly status reports — free during beta. The beta ends in eight weeks. How should you price it: bundle it into existing tiers, sell it as an add-on, or charge by usage? And at roughly what level?",
+  "hidden_facts": {
+    "adoption": "38% of weekly active users touched the assistant during beta; about 12% use it daily. Status-report generation is the stickiest use.",
+    "cost_distribution": "Median user costs ~$0.70/seat/month in inference. Daily users cost ~$6. The p99 is ~$28 — a handful of agencies hammer report generation via automation.",
+    "wtp_survey": "In a pricing survey, ~25% of workspace admins said they'd pay $8–10/seat for the assistant as an add-on. Resistance is high to a general price increase.",
+    "clawback_risk": "Support and community threads show strong 'don't take away what we have' sentiment — beta users assume the features are now part of the product.",
+    "competitors": "One rival folded AI into a 20% across-the-board price increase and weathered the backlash. Another sells a $10/seat AI add-on with about 15% attach.",
+    "margin_target": "Company gross margin is 78%. The board wants AI gross margin at or above 60% within a year.",
+    "cost_trend": "Unit inference costs fell ~40% over the past year and are expected to keep falling.",
+    "value_evidence": "Teams that use the assistant weekly expand seats 9% faster; team leads report ~2 hours/week saved on status reporting.",
+    "usage_pricing_history": "A previous storage-based add-on generated bill-shock complaints and a support-ticket spike; the sales team still brings it up.",
+    "sales_motion": "Product-led growth plus an inside-sales team for 100+ seat deals, where custom discounting is normal."
+  },
+  "ideal_answer_notes": [
+    "Set the pricing goals before picking a mechanism: monetize real value, protect the 60% AI margin target, keep the adoption flywheel spinning, and avoid beta-clawback churn. Say the tradeoff out loud: max adoption and max monetization pull in opposite directions.",
+    "Segment by value received, not by plan: occasional summarizers (median $0.70 cost), daily heavy users ($6), and automated-abuse outliers ($28). One price cannot fit all three.",
+    "Evaluate each mechanism against criteria: bundling (adoption-max, simple, but taxes non-users and eats margin on heavy users), add-on (captures the 25% WTP at $8–10, but attach friction — rival gets 15%), usage-based (margin-safe but this company has a documented bill-shock scar).",
+    "Recommend a defensible hybrid: include a monthly allowance of assistant actions in existing tiers (protects the flywheel and defuses clawback), sell an 'AI Pro' add-on around $10/seat for heavy use with a fair-use cap, and custom terms for 100+ seat deals.",
+    "Do the margin math explicitly: at $0.70 median cost, bundled light usage barely dents 78% margin; a $10 add-on against $6 heavy-user cost is 40% margin — below the 60% target, which is why the fair-use cap and falling costs matter; the p99 $28 users must be capped or priced by usage.",
+    "Use the cost trend strategically: don't anchor long-term pricing to today's costs — price against value (2 hours/week saved), and let falling costs expand margin rather than passing them through immediately.",
+    "Design the beta transition: grandfather period, clear communication of what stays free, and migration offers — the clawback sentiment is a churn risk with a named mitigation.",
+    "Propose validation before global rollout: price-sensitivity testing, a regional or cohort experiment on attach rate, and monitoring churn among beta-heavy users.",
+    "Name the metrics: add-on attach rate, AI gross margin, assistant WAU retention post-beta, churn among beta users, and expansion-rate delta for assistant-using teams."
+  ],
+  "resource_tags": ["llm_economics", "ab_testing"],
+  "extra_checklist": [
+    "Uses the per-segment cost and willingness-to-pay numbers to test each pricing model's margin rather than arguing from taste",
+    "Designs the beta-to-paid transition explicitly as churn mitigation, not as an afterthought",
+    "Prices against delivered value while treating falling unit costs as margin tailwind rather than the price anchor"
+  ],
+  "anchors": {
+    "strong": "States the goal tension, segments users by cost and value, stress-tests bundle/add-on/usage against the margin target with actual arithmetic, recommends a hybrid with an allowance plus a capped add-on, plans the beta grandfathering, and proposes an attach-rate experiment with named metrics.",
+    "at_bar": "Compares the three mechanisms with reasonable pros/cons and lands on a plausible recommendation with a price point, but needs nudging to do the margin math, handle the p99 abusers, or treat the beta transition as a first-class risk.",
+    "weak": "Picks a mechanism immediately ('just charge $10, competitors do') without using the cost distribution or WTP data, never mentions the margin target or clawback risk, and proposes no way to validate the price before rollout."
+  }
+}

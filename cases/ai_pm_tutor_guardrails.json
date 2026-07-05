@@ -1,0 +1,43 @@
+{
+  "id": "ai-pm-tutor-guardrails",
+  "archetype": "ai-pm",
+  "company_persona": "a consumer AI tutoring app used mostly by teenagers",
+  "interviewer_name": "Grace",
+  "title": "The tutor that gives answers",
+  "type": "strategy",
+  "prompt": "You're the product lead for Marlo, an AI homework tutor whose users are mostly 13–17. Two things landed on your desk in the same week: a viral social thread showing that Marlo will simply hand students complete answers — parents and teachers are angry — and an internal log review showing a meaningful share of chats drifting into personal and emotional territory. The CEO asks you to own the response. What do you do?",
+  "hidden_facts": {
+    "usage_split": "About 60% of sessions are homework help. 22% of sessions drift off-topic at least once; roughly 6% are primarily personal/emotional conversations.",
+    "age_profile": "Median user age is 15. Age is self-reported at signup with no verification.",
+    "answer_giving": "In homework sessions, ~70% of interactions end with the student receiving the full answer within three turns. Time-in-app — the team's headline metric — correlates positively with answers given.",
+    "retention_evidence": "Students who get step-by-step guided help retain better at week 8 than answer-getters, but short-term engagement drops when answers are withheld.",
+    "emotional_chats": "There is no crisis-escalation flow. A small number of chats include self-harm mentions; today they get a generic safe-completion response with no resources, human review, or follow-up.",
+    "district_pilots": "Three school districts are piloting a classroom version — about 15% of the revenue roadmap. Two have threatened to cancel over the viral thread.",
+    "competitor": "The fastest-growing rival openly markets 'instant answers' and is growing faster than Marlo.",
+    "regulatory": "Scrutiny of minors' use of AI chat products is rising; a state attorney general letter about AI companions and minors is circulating in the industry.",
+    "parent_sentiment": "App-store reviews from parents increasingly say 'it does the homework for them'.",
+    "expert_access": "The company has budget approval to engage adolescent-psychology and crisis-response experts but hasn't done so."
+  },
+  "ideal_answer_notes": [
+    "Split the two problems immediately: pedagogy (answer-giving) and safety (emotional drift with no crisis flow) harm different people, carry different urgency, and have different fixes. Safety is first and non-negotiable.",
+    "Safety plan with concrete mechanics: a crisis classifier tuned for recall on self-harm signals, an escalation flow (age-appropriate resources, human review queue, follow-up), expert consultation before shipping, and audit sampling to measure the miss rate — not a policy paragraph.",
+    "Treat under-16 experience as its own design problem given self-reported age: safer defaults for everyone in ambiguous cases, and honest acknowledgment that age assurance is weak.",
+    "Name the metric conflict out loud: time-in-app rewards answer-giving. Replace it with an outcome-aligned north star (guided-session share, week-8 retention, learning outcomes in district pilots). The week-8 retention fact means the mission-aligned move is also the commercially rational one — say so.",
+    "Pedagogy fix: default to Socratic step-by-step scaffolding with friction before 'show the answer', a visible-to-teacher mode for classroom use, and framing for students about why.",
+    "Refuse the competitor trap with reasoning: chasing the 'instant answers' rival concedes the trust position; the district channel — 15% of the roadmap and currently threatening to cancel — only monetizes if trust holds.",
+    "Stakeholder plan: students (experience change comms), parents (visibility options, honest messaging), districts (briefing, teacher dashboard commitments), regulators (documented safety process before it's demanded).",
+    "Sequence explicitly: crisis flow hotfixed now; guided-by-default as an experiment next (measure the short-term engagement dip against week-8 retention); public comms alongside, not after.",
+    "Metrics and guardrails: guided-session share, week-8 retention, escalation precision/recall from audits, parent NPS, district renewals; watch for over-triggering (false escalations erode teen trust too)."
+  ],
+  "resource_tags": ["responsible_ai", "ai_ux"],
+  "extra_checklist": [
+    "Separates the safety incident from the pedagogy problem and sequences safety first",
+    "Replaces time-in-app with an outcome-aligned success metric and defends the engagement tradeoff with the retention evidence",
+    "Designs a concrete crisis-escalation flow — classifier, resources, human review, audit-measured miss rate — rather than a policy statement"
+  ],
+  "anchors": {
+    "strong": "Splits safety from pedagogy in the first minute, ships a real crisis flow with experts and audit metrics, calls out the time-in-app metric as the root incentive problem and replaces it, defends guided-by-default with the week-8 data against the engagement dip, and handles districts, parents, and regulators with a sequenced plan.",
+    "at_bar": "Recognizes both problems and proposes reasonable fixes — hints at guided mode and some safety response — but needs prompting to sequence safety first, to make the escalation flow concrete, or to confront the engagement-metric conflict directly.",
+    "weak": "Treats it as a PR problem, optimizes for keeping engagement against the 'instant answers' rival, proposes a filter or disclaimer as the entire safety answer, and never mentions the metric conflict, experts, or the district stakeholders."
+  }
+}

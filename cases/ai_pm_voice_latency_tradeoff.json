@@ -1,0 +1,43 @@
+{
+  "id": "ai-pm-voice-latency-tradeoff",
+  "archetype": "ai-pm",
+  "company_persona": "a consumer voice assistant that ships in cars and smart speakers",
+  "interviewer_name": "Tara",
+  "title": "Smarter but slower: ship it?",
+  "type": "ai-pm",
+  "prompt": "You're the PM for Aria, a voice assistant in cars and smart speakers. Your platform team can swap in a new model: task success on the eval suite jumps from 81% to 90%, but median response time goes from 900ms to 1.6s and unit cost roughly doubles. Marketing wants it announced at the fall hardware launch. Do you ship it?",
+  "hidden_facts": {
+    "latency_evidence": "A past experiment showed in-car task abandonment rises steeply past ~1.2s median response; at 1.6s, abandonment was up 18% relative.",
+    "query_mix": "About 55% of queries are simple — timers, music, weather, calls — where the current model already succeeds ~96%. The other 45% are complex (multi-step, open Q&A), where the current model scores ~62% and the new one ~84%.",
+    "review_driver": "Complex-task failures drive about 70% of one-star app reviews; latency complaints are rarer but rising.",
+    "cost": "Doubling unit cost breaks the hardware-subsidy margin plan unless routed carefully; finance flagged it.",
+    "distilled_option": "A distilled variant of the new model exists: roughly +5 points task success, +200ms, +30% cost.",
+    "router": "Another team has an intent router at ~94% accuracy; misroutes add a ~250ms fallback penalty when a query has to be re-run on the bigger model.",
+    "eval_gap": "The eval suite underweights noisy-cabin audio; historically, field task success lands about 5 points below eval numbers.",
+    "launch_reality": "The hardware ships this fall regardless; the assistant's software can be updated over-the-air afterward.",
+    "competitor": "A rival just announced 'the most capable assistant' and press comparisons run scripted complex tasks.",
+    "experiment_capacity": "A field A/B at meaningful scale can be run in about three weeks on the existing fleet."
+  },
+  "ideal_answer_notes": [
+    "Reject the all-or-nothing framing early: the query-mix fact (55% simple at 96% success) means the new model's gains are concentrated in the 45% complex traffic — this is a routing decision, not a swap decision.",
+    "Quantify both sides of the tradeoff: +18% abandonment at 1.6s against +22 points on complex tasks; weigh by mix and by the fact that complex failures drive 70% of one-star reviews while simple queries are where latency hurts most.",
+    "Interrogate the eval before trusting the 90%: the suite underweights noisy-cabin audio and the field gap is ~5 points — insist on a field A/B (three weeks, feasible) before fleet-wide commitment.",
+    "Propose the architecture: route simple intents to the fast/cheap path (current or distilled model), complex intents to the new model; account for the router's 94% accuracy and 250ms misroute penalty in the latency budget rather than hand-waving it.",
+    "Do the cost reasoning: doubling cost fleet-wide breaks the margin plan; routing confines expensive calls to a minority of traffic, and the distilled variant is a candidate for the middle tier.",
+    "Set per-intent latency budgets as launch guardrails: timers and music must stay near-instant; users will wait longer for a genuinely hard answer — latency tolerance is intent-dependent, so budgets must be too.",
+    "Use the OTA fact: hardware ships regardless, so decouple the marketing announcement from a staged software rollout behind the A/B — marketing can tell the capability story honestly on launch day with the rollout ramping.",
+    "Define the field metrics: task success measured in the field per intent class, p50/p95 latency per class, abandonment, cost per active user, review sentiment; kill/rollback thresholds stated up front.",
+    "Strategic point: assistants compete on trust — a 1.6-second timer feels broken no matter how smart the model is; capability wins press comparisons, latency wins daily habit. A strong answer holds both."
+  ],
+  "resource_tags": ["ai_evals", "ab_testing"],
+  "extra_checklist": [
+    "Uses the query-mix data to convert the ship/don't-ship question into a routing architecture",
+    "Challenges the eval-to-field gap and requires a field experiment before fleet-wide rollout",
+    "Sets per-intent latency and cost budgets as explicit launch guardrails"
+  ],
+  "anchors": {
+    "strong": "Immediately splits traffic by intent, quantifies abandonment-vs-quality using the given numbers, distrusts the eval and demands the three-week field A/B, designs routing with the misroute penalty priced in, keeps the margin plan intact by confining expensive calls, and gives marketing an honest launch story with staged OTA rollout and rollback thresholds.",
+    "at_bar": "Recognizes the latency-vs-quality tension and suggests testing before shipping, gets to routing or the distilled model with a nudge, but doesn't quantify with the mix/abandonment numbers or set per-intent budgets, and treats the eval score as ground truth until prompted.",
+    "weak": "Answers ship-or-don't from intuition ('quality always wins' or 'speed always wins'), never asks about the query mix, cost structure, or eval validity, ignores the router and distilled options entirely, and proposes no experiment or guardrails."
+  }
+}

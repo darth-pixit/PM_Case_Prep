@@ -1,0 +1,43 @@
+{
+  "id": "ai-pm-cost-spike",
+  "archetype": "ai-pm",
+  "company_persona": "a legal-tech document drafting assistant for law firms",
+  "interviewer_name": "Dev",
+  "title": "The 85% cost creep",
+  "type": "execution",
+  "prompt": "You're the PM for Redline, an AI drafting assistant used by law firms. Your CFO flags that inference spend per active user has risen 85% over the last six weeks, while active users grew only 5%. Nobody changed the pricing plan. Figure out what's happening and what you'd do about it.",
+  "hidden_facts": {
+    "pattern": "The rise is gradual and compounding over six weeks — not a step change on any single day.",
+    "decomposition": "Cost per user = calls per user × tokens per call × price per token. Price per token: unchanged. Calls per user: +12%. Tokens per call: +65%, almost entirely input tokens; output tokens per call are flat.",
+    "flow_segment": "The growth is concentrated in the 'review my draft' flow. Other flows are flat.",
+    "feature_change": "Seven weeks ago, a feature shipped that attaches the full document history of a matter (average ~40 pages) as context to every review call. As matters progress, that history grows — which is why cost climbs gradually.",
+    "tenant_outlier": "One enterprise tenant's misconfigured proxy causes timeout-retries, double-billing ~3% of total spend. Real but minor.",
+    "caching_miss": "The model provider offers prompt-caching discounts, but the payload assembles context in a different order each call, so the cache never hits. Fixing the ordering is estimated to cut input cost by ~55% on repeat calls.",
+    "value_evidence": "Users of full-history review convert to paid 30% better than others — the feature works; it's the implementation that's wasteful.",
+    "retrieval_test": "An internal eval showed retrieving the top-k relevant chunks of history instead of attaching everything scores within 2 points of full-history quality on the review eval.",
+    "model_version": "No model swap or provider price change occurred in the window.",
+    "budget_ask": "The CFO wants cost per active user back within 20% of the old baseline within a quarter."
+  },
+  "ideal_answer_notes": [
+    "Define the metric first: inference cost per active user, then decompose it mechanically — calls/user × tokens/call × price/token — before any hypothesis. The decomposition immediately localizes the problem to input tokens per call.",
+    "Characterize the pattern: gradual and compounding rules out a price change or a single bad deploy; something is growing over time. Segment by flow to find 'review my draft' carrying the growth.",
+    "Run the internal/external MECE: provider price change (no), model swap (no), traffic mix (minor, +12% calls), feature change (the 7-week-old full-history context — timing matches, and its growth-over-time signature matches the gradual curve), abuse/retries (the 3% tenant issue — real, minor).",
+    "Confirm rather than conclude: token histograms per flow over time, cost by tenant to catch the outlier, cache hit-rate stats. The compounding shape plus feature timing is the confirmation.",
+    "Fix without killing value: the feature converts 30% better — a naive rollback destroys value. The eval already shows top-k retrieval matches quality within 2 points; combine with cache-friendly payload ordering (~55% input savings) to meet the CFO's target while keeping the feature.",
+    "Sequence by effort and certainty: tenant retry fix (days), payload ordering for cache hits (a week, no quality risk), retrieval-based context behind the eval plus an A/B (weeks).",
+    "Install guardrails so it never recurs: per-flow cost-per-call budgets in launch review, token-anomaly alerts, cache-hit-rate dashboards, per-tenant spend caps.",
+    "Show AI cost literacy: input vs output token pricing, prompt caching mechanics, and context discipline are product decisions, not just engineering details — the case rewards knowing where LLM money actually goes.",
+    "Do the CFO math at the end: retries (−3%) + cache ordering (−~35% of total) + top-k context (large input reduction) plausibly returns to within 20% of baseline — state the plan against the target."
+  ],
+  "resource_tags": ["llm_economics", "metric_debugging"],
+  "extra_checklist": [
+    "Decomposes unit cost into calls × tokens × price and follows the dominant factor instead of guessing at causes",
+    "Preserves the high-converting feature by fixing context waste (retrieval, caching) rather than rolling it back",
+    "Installs cost guardrails — per-flow budgets, token anomaly alerts, cache-hit metrics — as standing launch gates"
+  ],
+  "anchors": {
+    "strong": "Decomposes the metric before hypothesizing, reads the gradual pattern as something that grows, isolates input-token growth in the review flow, ties it to the full-history feature by timing and shape, catches the retry outlier, and lands a sequenced fix — cache ordering plus top-k retrieval validated by the existing eval — with the arithmetic tied back to the CFO's 20% target and standing guardrails.",
+    "at_bar": "Structures internal vs external causes, finds the feature link with a couple of nudges, and proposes reducing context size, but doesn't decompose into the three cost factors unprompted, misses the caching angle or the retry outlier, and gives a fix without checking it against the quality eval or the CFO's numeric target.",
+    "weak": "Guesses immediately ('the provider raised prices', 'users are using it more'), never asks for the cost decomposition or flow segmentation, proposes 'switch to a cheaper model' as the entire answer, and suggests rolling the feature back without asking whether it drives value."
+  }
+}

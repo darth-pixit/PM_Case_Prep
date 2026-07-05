@@ -40,7 +40,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..case_loader import default_case_path, load_case
+from ..case_loader import load_case, pick_case_path
 from ..delivery import FILLERS_CORE, DeliveryTracker, Word
 from ..grader import grade, weighted_result
 from ..interviewer import Interviewer
@@ -511,13 +511,16 @@ async def session_ws(ws: WebSocket) -> None:
 
 
 async def _run_session(ws: WebSocket, uid: str) -> None:
-    case = load_case(default_case_path())
-    client = anthropic.Anthropic()
-    interviewer = Interviewer(client, case, INTERVIEWER_MODEL)
-    tracker = DeliveryTracker()
     # Scope every score to this visitor's cookie identity — on a public host,
     # skill graphs must never mix across users.
     graph = SkillGraph(DB_PATH, uid)
+    # Serve a case this visitor hasn't been graded on yet, so "New case" after
+    # the scorecard actually rotates through the bank.
+    done_ids = {h["case_id"] for h in graph.history()}
+    case = load_case(pick_case_path(done_ids))
+    client = anthropic.Anthropic()
+    interviewer = Interviewer(client, case, INTERVIEWER_MODEL)
+    tracker = DeliveryTracker()
     session_id = uuid.uuid4().hex[:8]
     voice_on = bool(os.environ.get("DEEPGRAM_API_KEY"))
 
