@@ -3,10 +3,17 @@
 Every graded case writes per-dimension scores to a plain SQLite table. Analytics
 run over that STRUCTURED table (never over raw transcripts) — cheaper, reliable,
 and honest. An optional Claude "coach" call turns the numbers into a paragraph.
+
+Alongside the analytics rows, each graded case also stores its FULL record
+(scorecard JSON, delivery metrics, transcript) in a `sessions` table, and
+`users` maps email -> uid. So when a person attaches their email — even after
+finishing cases anonymously — everything they've done is theirs, durably
+(`merge_from` re-homes pre-login cases at restore time).
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timezone
 from math import ceil
@@ -40,6 +47,19 @@ CREATE TABLE IF NOT EXISTS users (
     uid        TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS sessions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       TEXT NOT NULL,
+    session_id    TEXT NOT NULL,
+    case_id       TEXT NOT NULL,
+    archetype     TEXT NOT NULL,
+    band          TEXT NOT NULL,
+    weighted      REAL,
+    card_json     TEXT,
+    delivery_json TEXT,
+    transcript    TEXT,
+    created_at    TEXT NOT NULL
+);
 """
 
 
@@ -59,7 +79,21 @@ class SkillGraph:
             )
         self.conn.commit()
 
-    def record(self, session_id: str, case_id: str, archetype: str, card: ScoreCard, band: str) -> None:
+    def record(
+        self,
+        session_id: str,
+        case_id: str,
+        archetype: str,
+        card: ScoreCard,
+        band: str,
+        *,
+        weighted: Optional[float] = None,
+        transcript: Optional[str] = None,
+        delivery: Optional[dict] = None,
+    ) -> None:
+        """Persist a graded case: structured scores (analytics) plus the full
+        session record (scorecard, transcript, delivery) so a person's cases
+        survive to be revisited — especially once they attach an email."""
         now = datetime.now(timezone.utc).isoformat()
         rows = [
             (self.user, session_id, case_id, archetype, ds.dimension, ds.score, band, now)
@@ -69,6 +103,70 @@ class SkillGraph:
             "INSERT INTO scores (user_id, session_id, case_id, archetype, dimension, score, band, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
+        )
+        self.conn.execute(
+            "INSERT INTO sessions (user_id, session_id, case_id, archetype, band, "
+            "weighted, card_json, delivery_json, transcript, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                self.user,
+                session_id,
+                case_id,
+                archetype,
+                band,
+                weighted,
+                card.model_dump_json(),
+                json.dumps(delivery) if delivery is not None else None,
+                transcript,
+                now,
+            ),
+        )
+        self.conn.commit()
+
+    def history(self) -> list[dict]:
+        """This user's graded cases, oldest first — the light index (no blobs)."""
+        cur = self.conn.execute(
+            "SELECT session_id, case_id, archetype, band, weighted, created_at "
+            "FROM sessions WHERE user_id = ? ORDER BY created_at, id",
+            (self.user,),
+        )
+        cols = ("session_id", "case_id", "archetype", "band", "weighted", "created_at")
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    def session_record(self, session_id: str) -> Optional[dict]:
+        """Full stored record for one of this user's sessions (scorecard,
+        delivery metrics, transcript) — None if it isn't theirs."""
+        row = self.conn.execute(
+            "SELECT session_id, case_id, archetype, band, weighted, card_json, "
+            "delivery_json, transcript, created_at "
+            "FROM sessions WHERE user_id = ? AND session_id = ?",
+            (self.user, session_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "session_id": row[0],
+            "case_id": row[1],
+            "archetype": row[2],
+            "band": row[3],
+            "weighted": row[4],
+            "card": json.loads(row[5]) if row[5] else None,
+            "delivery": json.loads(row[6]) if row[6] else None,
+            "transcript": row[7],
+            "created_at": row[8],
+        }
+
+    def merge_from(self, other_uid: str) -> None:
+        """Re-home another uid's data onto this user. Used at login-restore so
+        cases finished anonymously (before entering the email) follow the
+        person into their saved account instead of being orphaned."""
+        if not other_uid or other_uid == self.user:
+            return
+        self.conn.execute(
+            "UPDATE scores SET user_id = ? WHERE user_id = ?", (self.user, other_uid)
+        )
+        self.conn.execute(
+            "UPDATE sessions SET user_id = ? WHERE user_id = ?", (self.user, other_uid)
         )
         self.conn.commit()
 

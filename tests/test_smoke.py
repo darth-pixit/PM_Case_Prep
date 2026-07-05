@@ -199,6 +199,74 @@ def test_skill_graph_user_isolation_and_login():
         b.close()
 
 
+def test_full_session_record_is_stored():
+    """A graded case persists everything — scorecard, transcript, delivery —
+    keyed to the user, so it's all there once they attach an email."""
+    from pmcaseprep.skill_graph import SkillGraph
+
+    g = SkillGraph(":memory:", "uid-a")
+    card = _card_with_scores({k: 3 for k in rubric.DIMENSION_KEYS})
+    g.record(
+        "s1",
+        "case-x",
+        "ai-pm",
+        card,
+        "hire",
+        weighted=3.0,
+        transcript="Interviewer: hi\nCandidate: my structure is...",
+        delivery={"snapshot": {"wpm": 130}, "summary": "steady pace"},
+    )
+    hist = g.history()
+    assert len(hist) == 1
+    assert hist[0]["case_id"] == "case-x" and hist[0]["weighted"] == 3.0
+
+    rec = g.session_record("s1")
+    assert rec is not None
+    assert rec["transcript"].startswith("Interviewer: hi")
+    assert rec["delivery"]["snapshot"]["wpm"] == 130
+    assert rec["card"]["dimension_scores"][0]["score"] == 3
+    assert rec["band"] == "hire"
+
+    # Another user must not be able to read it.
+    other = SkillGraph(":memory:", "uid-b")
+    assert other.session_record("s1") is None
+    other.close()
+    g.close()
+
+
+def test_login_restore_merges_anonymous_cases():
+    """Finish a case anonymously, then log in with a PREVIOUSLY saved email:
+    the anonymous case must follow the person into their account, not orphan."""
+    import os
+    import tempfile
+
+    from pmcaseprep.skill_graph import SkillGraph
+
+    with tempfile.TemporaryDirectory() as d:
+        db = os.path.join(d, "t.db")
+        card = _card_with_scores({k: 3 for k in rubric.DIMENSION_KEYS})
+
+        # Long ago on another device: uid-old did a case and saved their email.
+        old = SkillGraph(db, "uid-old")
+        old.record("s1", "case", "ai-pm", card, "hire")
+        old.link_email("p@example.com", "uid-old")
+
+        # Today, anonymously on this phone: uid-anon does a case…
+        anon = SkillGraph(db, "uid-anon")
+        anon.record("s2", "case2", "ai-pm", card, "hire")
+        # …then enters that same email. Login restores uid-old and merges.
+        old.merge_from("uid-anon")
+
+        assert old.sessions_count() == 2  # both cases are theirs now
+        assert {h["session_id"] for h in old.history()} == {"s1", "s2"}
+        assert anon.sessions_count() == 0  # nothing left behind
+        # Merging into yourself is a no-op, never data loss.
+        old.merge_from("uid-old")
+        assert old.sessions_count() == 2
+        old.close()
+        anon.close()
+
+
 def test_resources_selection():
     from pmcaseprep.resources import RESOURCES, resources_for
 
