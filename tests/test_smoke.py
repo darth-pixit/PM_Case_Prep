@@ -448,6 +448,85 @@ def test_ws_gate_helpers():
     assert _client_ip(conn({})) == "1.2.3.4"  # local dev: socket peer
 
 
+def test_voice_supervisor_dormant_not_spamming():
+    """A Deepgram drop while NO audio flows must park the channel silently —
+    no 'voice reconnecting…' churn (the stuck-banner bug) and no new
+    connections — then fresh audio wakes it and announces 'voice connected'.
+    Also: Flux must never get KeepAlive (its protocol rejects it)."""
+    import asyncio
+
+    try:
+        from pmcaseprep.web import app as webapp
+    except ImportError as exc:
+        print(f"  (skipped test_voice_supervisor_dormant_not_spamming — missing dep: {exc.name})")
+        return
+
+    class FakeDG:
+        instances = 0
+        keepalives = 0
+
+        def __init__(self, key, url):
+            FakeDG.instances += 1
+            self.url = url
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            pass
+
+        async def keepalive(self):
+            FakeDG.keepalives += 1
+
+        async def send_audio(self, data):
+            pass
+
+        async def events(self):
+            return
+            yield {}  # noqa — makes this an async generator that ends at once
+
+    async def run():
+        notes = []
+
+        async def notify(t):
+            notes.append(t)
+
+        async def handle(evt):
+            pass
+
+        v = webapp.Voice("key", handle, notify)
+        v.IDLE_AUDIO_S = 0.05
+        orig = webapp.DeepgramLive
+        webapp.DeepgramLive = FakeDG
+        try:
+            await v.start()
+            v._last_audio = -1e9  # pretend no audio ever flowed -> dormant
+            await asyncio.sleep(0.2)
+            assert FakeDG.instances == 0  # lazy channel never dialed Deepgram
+            assert notes == []  # and said nothing
+
+            await v.send(b"\x01")  # audio arrives -> wake, connect, then drop
+            await asyncio.sleep(1.4)  # covers connect + drop + one backoff
+            base = FakeDG.instances
+            assert base >= 1
+            assert notes.count("voice connected") == 1
+            spam = notes.count("voice reconnecting…")
+
+            await asyncio.sleep(0.5)  # audio stopped -> must be dormant again
+            assert FakeDG.instances == base  # no reconnect churn
+            assert notes.count("voice reconnecting…") == spam  # no banner spam
+
+            await v.send(b"\x01")  # speaking again -> reconnect + clear signal
+            await asyncio.sleep(0.3)
+            assert FakeDG.instances > base
+            assert notes.count("voice connected") >= 2
+        finally:
+            await v.stop()
+            webapp.DeepgramLive = orig
+
+    asyncio.run(run())
+
+
 def test_weighted_result_is_deterministic():
     case = load_case(default_case_path())
     card = ScoreCard(

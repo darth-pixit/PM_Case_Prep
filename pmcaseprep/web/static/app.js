@@ -52,8 +52,10 @@ function track(name, props) {
 
 let ws;
 let micOn = false;
-let voiceSupported = false;
+let voiceSupported = null; // null = unknown until the server's "case" message
 let userStarted = false;
+let micRequesting = false; // getUserMedia prompt in flight
+let voiceBanner = false; // header currently shows a voice status
 let audioCtx, micStream, workletNode, micSource;
 let ended = false;
 let currentState = "connecting";
@@ -78,15 +80,35 @@ function setState(state) {
   const meta = STATE_META[state] || { label: state, hint: "" };
   $("stateLabel").textContent = meta.label;
   $("stateHint").textContent = meta.hint;
+  refreshHint();
   $("gradingOverlay").hidden = state !== "grading";
   if (state === "grading") startGradeProgress();
   else stopGradeProgress();
+}
+
+// "Listening" must never claim the mic is on when it isn't — the hint tells
+// the truth about the mic and points at the fix (enable / unmute / retry).
+function refreshHint() {
+  if (currentState !== "listening" || !voiceSupported) return;
+  const hint = $("stateHint");
+  if (micRequesting) hint.textContent = "Waiting for mic permission — check the browser prompt.";
+  else if (!audioCtx) hint.textContent = "Mic is OFF — tap “🎤 Enable mic” below, or just type.";
+  else if (!micOn) hint.textContent = "Muted — tap the mic button to speak, or type.";
+  else hint.textContent = STATE_META.listening.hint;
 }
 
 function setError(text) {
   const el = $("status");
   el.textContent = text;
   el.className = "status err";
+  voiceBanner = false;
+}
+
+function clearStatus() {
+  const el = $("status");
+  el.textContent = "";
+  el.className = "status";
+  voiceBanner = false;
 }
 
 // Every reply the interviewer has made, oldest first. The stage still shows only
@@ -181,6 +203,7 @@ function handle(m) {
       track("case_started", { case_title: m.title, archetype: m.archetype, voice: !!m.voice });
       voiceSupported = !!m.voice;
       if (!voiceSupported) {
+        cleanupMic(); // tear down anything the start click optimistically opened
         const b = $("micBtn");
         b.textContent = "🎤 voice off (no key)";
         b.classList.add("off");
@@ -188,7 +211,7 @@ function handle(m) {
         $("startBtn").textContent = "Start interview (text only)";
         $("startNote").textContent = "No voice key configured — you can type everything.";
         if (userStarted) setState("textonly");
-      } else if (userStarted && !audioCtx) {
+      } else if (userStarted && !audioCtx && !micRequesting) {
         startMic();
       }
       break;
@@ -211,7 +234,13 @@ function handle(m) {
       }, 2600);
       break;
     case "status":
-      if (m.text && m.text.includes("reconnect")) setError(m.text);
+      if (!m.text) break;
+      if (m.text.includes("reconnect")) {
+        setError(m.text);
+        voiceBanner = true;
+      } else if (m.text.includes("connected") && voiceBanner) {
+        clearStatus(); // voice recovered — a stale red banner is a lie
+      }
       break;
     case "scorecard":
       setGradePct(100);
@@ -229,7 +258,11 @@ $("startBtn").onclick = () => {
   userStarted = true;
   track("interview_started", { voice: voiceSupported });
   $("startOverlay").hidden = true;
-  if (voiceSupported) startMic();
+  // Ask for the mic INSIDE this click (mobile browsers want the permission
+  // prompt and AudioContext tied to a user gesture) — even if the server's
+  // "case" message hasn't landed yet. If it later says voice is off, the
+  // capture is torn down again.
+  if (voiceSupported !== false) startMic();
   else setState(currentState === "connecting" ? "connecting" : "textonly");
   $("textInput").focus();
 };
@@ -262,8 +295,8 @@ $("doneBtn").onclick = () => {
   }
 };
 $("micBtn").onclick = () => {
-  if (!voiceSupported) return;
-  if (!audioCtx) { startMic(); return; }
+  if (voiceSupported === false) return;
+  if (!audioCtx) { startMic(); return; } // enable, or RETRY after a denial
   micOn = !micOn;
   updateMicUi();
   if (micOn && audioCtx.state === "suspended") audioCtx.resume();
@@ -275,9 +308,20 @@ document.addEventListener("visibilitychange", () => {
 
 function updateMicUi() {
   const b = $("micBtn");
-  b.textContent = micOn ? "🎤 Mic is live" : "🔇 Muted — click to unmute";
-  b.classList.toggle("off", !micOn);
-  $("eq").hidden = !micOn;
+  if (micRequesting) {
+    b.textContent = "🎤 Awaiting permission…";
+    b.classList.remove("off");
+  } else if (!audioCtx) {
+    // Not capturing — either never enabled or permission was denied. The
+    // button IS the retry: tapping it re-asks for permission.
+    b.textContent = "🎤 Enable mic";
+    b.classList.add("off");
+  } else {
+    b.textContent = micOn ? "🎤 Mic is live" : "🔇 Muted — tap to unmute";
+    b.classList.toggle("off", !micOn);
+  }
+  $("eq").hidden = !(audioCtx && micOn);
+  refreshHint();
 }
 
 // --- Microphone: capture -> gate -> resample to 16k Int16 -> stream ----------
@@ -334,8 +378,17 @@ function gate(frame) {
   return silenceFrame;
 }
 
+function cleanupMic() {
+  try { if (micStream) micStream.getTracks().forEach((t) => t.stop()); } catch (e) { /* gone */ }
+  try { if (audioCtx) audioCtx.close(); } catch (e) { /* gone */ }
+  micStream = audioCtx = workletNode = micSource = null;
+  micOn = false;
+}
+
 async function startMic() {
-  if (audioCtx) return;
+  if (audioCtx || micRequesting) return;
+  micRequesting = true;
+  updateMicUi();
   try {
     micStream = await navigator.mediaDevices.getUserMedia({
       // voiceIsolation: newer Chrome/Safari suppress non-primary voices at the
@@ -343,12 +396,15 @@ async function startMic() {
       audio: { echoCancellation: true, noiseSuppression: true, voiceIsolation: true },
     });
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Mobile browsers start contexts suspended outside a gesture — a suspended
+    // context captures NOTHING while the UI would claim the mic is live.
+    if (audioCtx.state === "suspended") await audioCtx.resume();
     await audioCtx.audioWorklet.addModule("/static/worklet.js");
     micSource = audioCtx.createMediaStreamSource(micStream);
     workletNode = new AudioWorkletNode(audioCtx, "pcm-worklet");
     const inRate = audioCtx.sampleRate;
     workletNode.port.onmessage = (e) => {
-      if (!micOn || ended || !ws || ws.readyState !== 1) return;
+      if (!micOn || ended || voiceSupported === false || !ws || ws.readyState !== 1) return;
       meter(e.data);
       // gate() returns ONE frame (voice or digital silence) — send it whole.
       // Never send an empty buffer: a zero-byte binary frame is Deepgram's
@@ -361,13 +417,17 @@ async function startMic() {
     sink.gain.value = 0; // keep the graph pulling frames without audible output
     workletNode.connect(sink).connect(audioCtx.destination);
     micOn = true;
-    updateMicUi();
+    clearStatus(); // a stale "mic blocked" banner is now false
   } catch (err) {
-    micOn = false;
-    $("micBtn").textContent = "🎤 mic blocked";
-    $("micBtn").classList.add("off");
-    track("mic_blocked", {});
-    setError("mic permission needed — you can still type");
+    cleanupMic(); // leave a clean slate so tapping “Enable mic” can retry
+    const denied = err && (err.name === "NotAllowedError" || err.name === "SecurityError");
+    track("mic_blocked", { reason: (err && err.name) || "unknown" });
+    setError(denied
+      ? "Mic blocked. Tap “🎤 Enable mic” to try again — if no prompt appears, allow the microphone in your browser's site settings (🔒 next to the address bar), then reload."
+      : "Couldn't start the mic — you can still type everything.");
+  } finally {
+    micRequesting = false;
+    updateMicUi();
   }
 }
 

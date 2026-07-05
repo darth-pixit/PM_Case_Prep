@@ -330,8 +330,19 @@ async def health() -> JSONResponse:
 
 
 class Voice:
-    """Supervised Deepgram streaming channel: KeepAlive + auto-reconnect, and it
-    never raises into the session (voice can drop without killing text)."""
+    """Supervised Deepgram streaming channel. Auto-reconnects while audio is
+    flowing, goes DORMANT (closed, waiting, silent) when it isn't — a muted or
+    permission-less session must not churn reconnects or hold a paid stream.
+    Never raises into the session (voice can drop without killing text).
+
+    KeepAlive is sent on nova-3 ONLY: Flux rejects it as an unparsable client
+    message (its protocol allows just CloseStream/Configure). Flux doesn't
+    need it anyway — while the mic is on, the browser streams continuously
+    (silence-gated frames included), and when audio stops we go dormant
+    instead of holding the stream open."""
+
+    # No audio for this long = the mic is off/blocked/muted -> dormant.
+    IDLE_AUDIO_S = 5.0
 
     def __init__(
         self,
@@ -345,22 +356,46 @@ class Voice:
         self._dg: DeepgramLive | None = None
         self._task: asyncio.Task | None = None
         self._closed = False
+        self._url = DG_URL
+        self._last_audio = 0.0
+        self._audio_evt = asyncio.Event()
 
     async def start(self) -> None:
+        self._last_audio = asyncio.get_event_loop().time()
         self._task = asyncio.create_task(self._supervise())
+
+    def _audio_flowing(self) -> bool:
+        return asyncio.get_event_loop().time() - self._last_audio <= self.IDLE_AUDIO_S
+
+    async def _say(self, msg: str) -> None:
+        try:
+            await self._notify(msg)
+        except Exception:  # noqa: BLE001
+            pass
 
     async def _supervise(self) -> None:
         backoff = 1.0
-        url = DG_URL
         fast_fails = 0  # consecutive near-instant drops (bad model/params)
         while not self._closed:
+            if not self._audio_flowing():
+                # Dormant: nothing to transcribe. Wait for send() to wake us —
+                # no reconnect spam, no paid stream held open.
+                self._audio_evt.clear()
+                try:
+                    await self._audio_evt.wait()
+                except asyncio.CancelledError:
+                    break
+                if self._closed:
+                    break
             keeper = None
             started = asyncio.get_event_loop().time()
             try:
-                self._dg = DeepgramLive(self._key, url)
+                self._dg = DeepgramLive(self._key, self._url)
                 await self._dg.__aenter__()
                 backoff = 1.0
-                keeper = asyncio.create_task(self._keepalive())
+                await self._say("voice connected")  # client clears any banner
+                if self._url == NOVA_URL:
+                    keeper = asyncio.create_task(self._keepalive())
                 async for evt in self._dg.events():
                     fast_fails = 0
                     await self._handle(evt)
@@ -381,25 +416,22 @@ class Voice:
                 break
             # Experimental Flux model failing on connect? Fall back to nova-3
             # rather than looping — voice must keep working no matter what.
-            if url == FLUX_URL and asyncio.get_event_loop().time() - started < 5.0:
+            if self._url == FLUX_URL and asyncio.get_event_loop().time() - started < 5.0:
                 fast_fails += 1
                 if fast_fails >= 2:
-                    url = NOVA_URL
-                    try:
-                        await self._notify("voice: flux unavailable — using standard model")
-                    except Exception:  # noqa: BLE001
-                        pass
-            try:
-                await self._notify("voice reconnecting…")
-            except Exception:  # noqa: BLE001
-                pass
-            await asyncio.sleep(min(backoff, 5.0))
-            backoff *= 2
+                    self._url = NOVA_URL
+                    await self._say("voice: flux unavailable — using standard model")
+            # Only announce a reconnect the candidate would feel — mid-speech.
+            # A drop with no audio flowing just parks us dormant, silently.
+            if self._audio_flowing():
+                await self._say("voice reconnecting…")
+                await asyncio.sleep(min(backoff, 5.0))
+                backoff *= 2
 
     async def _keepalive(self) -> None:
-        # Deepgram closes an idle stream ~10s after audio stops; this heartbeat is
-        # what keeps "always listening" true through long thinking pauses. One
-        # failed send must NOT kill the loop — skip the tick and keep beating.
+        # nova-3 only (Flux rejects KeepAlive): holds the stream open through
+        # long thinking pauses while the mic is muted. One failed send must
+        # NOT kill the loop — skip the tick and keep beating.
         while not self._closed:
             try:
                 await asyncio.sleep(5)
@@ -413,6 +445,8 @@ class Voice:
                     pass
 
     async def send(self, data: bytes) -> None:
+        self._last_audio = asyncio.get_event_loop().time()
+        self._audio_evt.set()  # wakes a dormant supervisor
         dg = self._dg
         if self._closed or dg is None:
             return
@@ -694,14 +728,6 @@ async def _run_session(ws: WebSocket, uid: str) -> None:
     worker = asyncio.create_task(interviewer_worker())
     voice = None
     try:
-        if voice_on:
-            voice = Voice(
-                os.environ["DEEPGRAM_API_KEY"],
-                handle_dg,
-                lambda msg: send_json({"type": "status", "text": msg}),
-            )
-            await voice.start()
-
         # Session clock: a hard duration cap (bounds STT + model spend even if
         # someone parks a tab or scripts the socket) and an idle cap (voice
         # streams audio continuously, so true silence on the wire means the
@@ -737,8 +763,19 @@ async def _run_session(ws: WebSocket, uid: str) -> None:
             if msg.get("bytes") is not None:
                 # Drop empty frames: a zero-byte binary message is Deepgram's
                 # end-of-stream signal and would close the voice connection.
-                if voice is not None and msg["bytes"]:
-                    await voice.send(msg["bytes"])  # never raises
+                if msg["bytes"]:
+                    # Lazy: the paid STT stream opens on the FIRST audio bytes.
+                    # A session that never grants the mic never touches Deepgram
+                    # (and never shows voice status noise).
+                    if voice is None and voice_on:
+                        voice = Voice(
+                            os.environ["DEEPGRAM_API_KEY"],
+                            handle_dg,
+                            lambda text: send_json({"type": "status", "text": text}),
+                        )
+                        await voice.start()
+                    if voice is not None:
+                        await voice.send(msg["bytes"])  # never raises
             elif msg.get("text") is not None:
                 data = json.loads(msg["text"])
                 mtype = data.get("type")
