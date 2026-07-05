@@ -137,6 +137,23 @@ links it to that identity; entering the same email on another device restores
 it. This is deliberately password-less for now — fine for a prep tool MVP,
 but add real auth (Google OAuth / magic links via Clerk or Auth0) before
 promoting it widely, since anyone who knows an email could claim it.
+(`/api/login` is rate-limited per IP so claiming can't be scripted at scale.)
+
+### Abuse guards (public deploys)
+
+Every interview session spends real money (Claude per turn + a Deepgram
+stream), so the WebSocket is gated: connections must come from the app's own
+origin with a visitor cookie, and are capped — hourly opens per IP
+(`PMCP_WS_HOURLY_PER_IP`), concurrent sessions per IP / per visitor / global
+(`PMCP_MAX_SESSIONS_PER_IP` / `PMCP_MAX_SESSIONS_PER_UID` /
+`PMCP_MAX_SESSIONS`), model calls per session (`PMCP_MAX_TURNS`), session
+length (`PMCP_MAX_SESSION_MIN`), idle time (`PMCP_IDLE_MIN`), and typed-turn
+size (`PMCP_MAX_TEXT_CHARS`). Hitting a session limit grades what exists, so
+a real candidate still gets their scorecard. API docs (`/docs`, `/redoc`,
+`/openapi.json`) and verbose `/health` are disabled in production; set
+`PMCP_DEV_DOCS=1` locally to get them back. Belt-and-braces: also set spend
+caps + alerts in the Anthropic console and Deepgram dashboard — those hold
+even if the app-level guards fail.
 
 ### Turn detection: Flux (default) vs nova-3
 

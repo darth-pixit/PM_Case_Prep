@@ -397,6 +397,57 @@ def test_empty_audio_never_reaches_deepgram():
     assert dg.ws.sent == [b"\x01\x02"]
 
 
+def test_rate_limit_and_gauge():
+    """The /ws + /api/login abuse guards: sliding-window limits actually
+    expire, and concurrent-session gauges pair inc/dec cleanly."""
+    try:
+        from pmcaseprep.web.app import Gauge, SlidingLimit
+    except ImportError as exc:
+        print(f"  (skipped test_rate_limit_and_gauge — missing dep: {exc.name})")
+        return
+
+    t = [0.0]
+    lim = SlidingLimit(2, 60, now_fn=lambda: t[0])
+    assert lim.allow("ip1") and lim.allow("ip1")
+    assert not lim.allow("ip1")  # third hit inside the window is refused
+    assert lim.allow("ip2")  # other keys unaffected
+    t[0] = 61.0
+    assert lim.allow("ip1")  # window slid — allowed again
+
+    g = Gauge()
+    assert g.get("k") == 0
+    g.inc("k")
+    g.inc("k")
+    assert g.get("k") == 2
+    g.dec("k")
+    g.dec("k")
+    assert g.get("k") == 0
+    g.dec("k")  # over-dec must not go negative
+    assert g.get("k") == 0
+
+
+def test_ws_gate_helpers():
+    """Origin allow-list and proxy-aware client IP extraction."""
+    from types import SimpleNamespace
+
+    try:
+        from pmcaseprep.web.app import _client_ip, _same_origin
+    except ImportError as exc:
+        print(f"  (skipped test_ws_gate_helpers — missing dep: {exc.name})")
+        return
+
+    def conn(headers, host="1.2.3.4"):
+        return SimpleNamespace(headers=headers, client=SimpleNamespace(host=host))
+
+    site = "pm-prep.onrender.com"
+    assert _same_origin(conn({"origin": f"https://{site}", "host": site}))
+    assert not _same_origin(conn({"origin": "https://evil.example", "host": site}))
+    assert _same_origin(conn({"host": site}))  # non-browser: no Origin header
+
+    assert _client_ip(conn({"x-forwarded-for": "9.9.9.9, 10.0.0.1"})) == "9.9.9.9"
+    assert _client_ip(conn({})) == "1.2.3.4"  # local dev: socket peer
+
+
 def test_weighted_result_is_deterministic():
     case = load_case(default_case_path())
     card = ScoreCard(
