@@ -110,7 +110,8 @@ header h1 { font-size: 1.05rem; margin: 0; }
   background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
   padding: 1.6rem 1.6rem 1.3rem;
 }
-.start-card h2 { margin: 0 0 1.1rem; font-size: 1.3rem; }
+.start-card h2 { margin: 0 0 0.4rem; font-size: 1.3rem; }
+.start-sub { margin: 0 0 1.1rem; color: var(--muted); font-size: 0.9rem; }
 .start-row { display: flex; gap: 0.8rem; margin-bottom: 0.95rem; }
 .start-row .start-ico { font-size: 1.3rem; flex: 0 0 auto; }
 .start-row div { color: var(--muted); font-size: 0.92rem; }
@@ -343,6 +344,8 @@ pre.graph {
 }
 
 /* Save-your-progress login on the scorecard */
+.sc-why { margin: 0.4rem 0 0.2rem; padding-left: 1.1rem; }
+.sc-why li { margin: 0.3rem 0; font-size: 0.9rem; }
 .sc-login .login-row { display: flex; gap: 0.5rem; margin: 0.7rem 0 0.4rem; flex-wrap: wrap; }
 .sc-login input[type="email"] {
   flex: 1 1 200px; min-width: 0;

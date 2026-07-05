@@ -574,15 +574,20 @@ function renderScorecard(m) {
       </details>
 
       ${signedInEmail
-        ? `<div class="sc-card sc-login"><h3>💾 Progress</h3>
-            <p class="sc-dim-note">Signed in as <b>${esc(signedInEmail)}</b> — your scores and trajectory save automatically.</p></div>`
-        : `<div class="sc-card sc-login"><h3>💾 Save your progress</h3>
-            <p>Right now this scorecard lives only in this browser. Add your email to keep your
-            skill graph and trajectory — and pick them up on any device.</p>
+        ? `<div class="sc-card sc-login"><h3>✅ You're in</h3>
+            <p class="sc-dim-note">Signed in as <b>${esc(signedInEmail)}</b> — your scores and trajectory
+            save automatically, and you'll get new cases as they're added.</p></div>`
+        : `<div class="sc-card sc-login"><h3>📧 Enter your email — no password</h3>
+            <p class="sc-dim-note">Two reasons to add it:</p>
+            <ul class="sc-why">
+              <li><b>Unlock more cases &amp; full analytics</b> — practice across PM archetypes and get
+              early access to new cases as they drop.</li>
+              <li><b>Save your progress</b> — your skill graph and trajectory follow you on any device.</li>
+            </ul>
             <div class="login-row">
               <input id="loginEmail" type="email" inputmode="email" autocomplete="email"
                 placeholder="you@email.com">
-              <button id="loginBtn">Log in &amp; save</button>
+              <button id="loginBtn">Continue with email</button>
             </div>
             <small id="loginMsg" class="sc-dim-note"></small></div>`}
 
@@ -621,10 +626,10 @@ function renderScorecard(m) {
         if (d.ok) {
           signedInEmail = d.email;
           track("login", { restored: d.restored, sessions: d.sessions });
-          $("loginBtn").textContent = "✓ Signed in";
+          $("loginBtn").textContent = "✓ You're in";
           $("loginMsg").textContent = d.restored
             ? `Welcome back — ${d.sessions} past case${d.sessions === 1 ? "" : "s"} linked to this email are yours again.`
-            : "Saved. Use this email on any device to pick your progress back up.";
+            : "Done. Use this email on any device to pick up where you left off — new cases coming soon.";
         } else {
           $("loginMsg").textContent = d.error || "That didn't work — check the email.";
           $("loginBtn").disabled = false;
