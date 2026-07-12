@@ -444,7 +444,9 @@ def test_ws_gate_helpers():
     assert not _same_origin(conn({"origin": "https://evil.example", "host": site}))
     assert _same_origin(conn({"host": site}))  # non-browser: no Origin header
 
-    assert _client_ip(conn({"x-forwarded-for": "9.9.9.9, 10.0.0.1"})) == "9.9.9.9"
+    # LAST hop: written by the trusted proxy — the first is client-forgeable.
+    assert _client_ip(conn({"x-forwarded-for": "9.9.9.9, 10.0.0.1"})) == "10.0.0.1"
+    assert _client_ip(conn({"x-forwarded-for": "8.8.8.8"})) == "8.8.8.8"
     assert _client_ip(conn({})) == "1.2.3.4"  # local dev: socket peer
 
 

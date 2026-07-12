@@ -10,7 +10,13 @@
 //    score gauge, band ladder, trajectory sparkline and learning links.
 
 const $ = (id) => document.getElementById(id);
-const wsUrl = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "/ws";
+// Which experiment is this room running under? The tutor at "/" is the default;
+// /arena/room injects PMCP_EXPERIMENT="arena" + the chosen case id, which rides
+// the WebSocket URL so the server opens THAT case.
+const EXPERIMENT = window.PMCP_EXPERIMENT || "tutor";
+const CASE_ID = window.PMCP_CASE_ID || "";
+const wsUrl = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host
+  + "/ws" + (CASE_ID ? "?case=" + encodeURIComponent(CASE_ID) : "");
 
 // --- Analytics (PostHog) -------------------------------------------------
 // The key comes from /config (server env), is publishable by design, and when
@@ -41,6 +47,9 @@ function track(name, props) {
         defaults: "2025-05-24",
         person_profiles: "always", // every visitor becomes a distinct person
       });
+      // Experiment separation: every event from this room (autocapture included)
+      // carries the experiment name, so each experiment's funnel stays its own.
+      window.posthog.register({ experiment: EXPERIMENT });
       phReady = true;
       phQueue.splice(0).forEach(([n, p]) => window.posthog.capture(n, p));
     };
@@ -669,7 +678,12 @@ function renderScorecard(m) {
     if (g) g.style.strokeDashoffset = g.dataset.target;
   }));
   track("scorecard_viewed", { band: m.band, weighted: m.weighted, sessions: m.trajectory && m.trajectory.sessions });
-  $("newCaseBtn").onclick = () => { track("new_case_clicked", {}); location.reload(); };
+  // In the arena, "another case" means back to the picker — not the same case again.
+  $("newCaseBtn").onclick = () => {
+    track("new_case_clicked", {});
+    if (EXPERIMENT === "arena") location.href = "/arena";
+    else location.reload();
+  };
   if ($("loginBtn")) {
     $("loginEmail").addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); $("loginBtn").click(); }

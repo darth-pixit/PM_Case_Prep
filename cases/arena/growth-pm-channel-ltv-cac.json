@@ -1,0 +1,47 @@
+{
+  "id": "growth-pm-channel-ltv-cac",
+  "archetype": "growth-pm",
+  "type": "estimation",
+  "company_persona": "a grocery-delivery service operating in 12 US metros",
+  "interviewer_name": "Ivy",
+  "title": "The $3M podcast bet",
+  "minutes": 18,
+  "prompt": "You're a growth PM at Cartlane, a grocery-delivery service live in 12 US metros. Our core acquisition channel is paid search at roughly $35 per new customer. Last quarter we piloted something new in 4 of our metros: sponsored segments on regional food podcasts. We spent $300K and brought in about 6,000 first-time customers — call it $50 CAC. The head of growth loves it and wants to commit $3M to podcasts next year. A few numbers you can take as given: average order value is about $60, contribution margin after picking, delivery, and payment costs runs about 15% — call it $9 an order — and a retained customer places about 2 orders a month. Finance's rule of thumb: a channel earns more budget only if a cohort's cumulative contribution margin pays back its acquisition cost within 12 months. Before we sign anything, I want your read on the unit economics: estimate the lifetime value of a customer from this channel, compare it to what they cost, and tell me whether — and how far — we should scale. I have the rest of the pilot data when you need numbers.",
+  "hidden_facts": {
+    "cac_composition": "The $50 CAC is media spend only. Every podcast signup also redeemed a $20 first-basket credit booked under promo spend, so fully loaded CAC is ~$70. Paid search's $35 excludes the same $20 credit (~$55 fully loaded).",
+    "activation_rate": "50% of podcast-acquired customers placed a second, full-price order within 30 days. Paid-search cohorts activate at about 40%.",
+    "retention_by_channel": "Among activated customers, the podcast cohort has retained ~90% month over month so far; paid-search cohorts run ~85%. If the candidate wants to extrapolate, tell them to assume those rates hold flat.",
+    "cohort_age": "The pilot cohort is only 4 months old. Everything beyond month 4 is extrapolation, not observed data.",
+    "incrementality": "Signups came through show-specific promo codes, and a geo holdout comparison suggests ~90% of podcast signups are incremental rather than cannibalized from paid search.",
+    "finance_bar": "Finance applies the 12-month rule mechanically: cumulative cohort contribution margin, including observed churn decay, measured against fully loaded CAC (promo credits included). Finance does not haircut CAC for incrementality — that debate belongs to marketing — and there is no formal LTV/CAC ratio target. Applied strictly, today's paid-search cohorts would be marginal; that channel is grandfathered.",
+    "channel_capacity": "The pilot's $300K per quarter is already a ~$1.2M/year run rate, and it bought essentially all of the top regional food podcasts in the 4 pilot metros. The agency estimates the remaining 8 metros support about $1.3M/year more of comparable inventory — roughly $2.5M/year total across all 12 metros. Beyond that it's national shows at a projected $80-100 media-only CAC ($100-120 fully loaded).",
+    "geography_mix": "The 4 pilot metros were chosen partly for unusually strong local food-podcast scenes, which is why the other 8 metros add less inventory per metro. Customer demographics and cohort quality look uniform across metros — expect similar cohort economics elsewhere, just thinner inventory."
+  },
+  "ideal_answer_notes": [
+    "Clarifies what the $50 CAC includes before modeling — surfaces the $20 first-basket credit, reframes fully loaded CAC as ~$70 (paid search ~$55), and counts the credit exactly once: in CAC, not again against first-order margin.",
+    "Sets the frame out loud: LTV = first-order contribution + activation rate x (orders/month x contribution per order x churn-implied lifetime), built on the given $9/order contribution and 2 orders/month ($18/month per active customer) — contribution margin, never revenue or GMV.",
+    "Elicits the cohort data by question: 50% activation; ~90% month-over-month retention among activated customers, so ~10% monthly churn and a ~10-month expected life — while flagging that the cohort is only 4 months old, so months 5+ are extrapolation.",
+    "Computes cleanly: podcast LTV per acquired customer = $9 + 0.5 x (20 orders x $9) = ~$100; LTV/CAC = ~1.4 fully loaded.",
+    "Payback reference model graders should accept: apply the same 10% monthly churn to the contribution stream — cumulative contribution = $9 + $90 x (1 - 0.9^n), which crosses the $70 loaded CAC at ~11 months, inside finance's 12-month bar with almost no slack (the bar implies a max loaded CAC of ~$74). A flat no-decay stream (~7-8 months) is acceptable only if the candidate explicitly names the no-decay assumption as optimistic.",
+    "Runs the same decayed model on the incumbent: paid search at 40% activation and 15% churn gives LTV ~$57 vs ~$55 loaded — LTV/CAC ~1.0 and ~20-month payback, failing the same bar. Podcasts beat search on both LTV/CAC and payback despite the higher headline CAC; the comparison must use one consistent payback model for both channels, not flat for one and decayed for the other.",
+    "Stress-tests the fragile assumptions: retention is the swing variable — at 15% churn, podcast LTV falls to ~$69, below the $70 loaded CAC. And since only ~90% of signups are incremental, true incremental payback stretches to ~14 months even though finance's mechanical no-haircut test passes; a strong candidate names this as risk without re-deriving the whole model.",
+    "Asks about channel capacity before recommending: the pilot is already a ~$1.2M/year run rate that saturated the 4 pilot metros, the other 8 metros add only ~$1.3M of comparable inventory (~$2.5M/year total), and beyond that national shows cost $100-120 fully loaded against a ~$100 LTV — underwater.",
+    "Lands a dollar-sized, stage-gated recommendation: grow regional spend from ~$1.2M to ~$2.5M/year, releasing the 8-new-metro tranche only if month-6 pilot-cohort retention holds near 90%; cap national shows at a ~$300-500K test gated on measured loaded CAC clearing the 12-month bar (roughly ≤$74); decline the full $3M as specced.",
+    "Names follow-on levers: test shrinking the $20 credit, reallocate budget away from near-breakeven paid search, and instrument cohorts by show so the LTV model updates as the pilot cohort matures."
+  ],
+  "resource_tags": [
+    "growth_loops",
+    "sql_metrics"
+  ],
+  "extra_checklist": [
+    "Computes a numeric LTV and payback using contribution margin (not revenue/GMV), counts the $20 credit exactly once in a fully loaded ~$70 CAC, and applies the same monthly churn to the payback stream as to the LTV — or explicitly flags a flat no-decay stream as an optimistic approximation.",
+    "Runs the identical unit-economics math on incumbent paid search (~$55 loaded, 40% activation, 15% churn, LTV ~$57) and explicitly compares the two channels under one consistent model before giving a recommendation.",
+    "Final recommendation is dollar-sized and stage-gated — cites the ~$2.5M/year comparable regional inventory cap and the underwater national-show economics, with named kill/scale criteria such as month-6 retention and marginal loaded CAC per tranche, rather than a binary yes/no on the $3M."
+  ],
+  "anchors": {
+    "strong": "Surfaces the $20 credit unprompted and models a fully loaded ~$70 CAC. Builds LTV from $9 contribution per order, 50% activation, and 10% churn to land ~$100; runs churn-decayed payback to ~11 months — inside the bar with no slack. Shows paid search is near breakeven by the same math, flags the 4-month cohort, the 15%-churn break point, and the ~$2.5M inventory cap; recommends ~$2.5M stage-gated regional spend plus a small gated national test instead of the $3M ask.",
+    "at_bar": "Builds a coherent LTV model and lands near $100, but needs nudges — Ivy prompts them to ask what the $50 CAC includes or to keep the $20 credit out of first-order margin. Computes payback of roughly 10-11 months with decay (or a flagged flat-stream 7-8) against the 12-month bar. The paid-search comparison and the capacity question surface only after hints; the recommendation is directionally right — scale regionally, not the full $3M — but never fully dollar-sized or gated.",
+    "weak": "Jumps to a verdict off the $50-versus-$35 headline comparison or recites a memorized 3x LTV/CAC rule without building the model. Uses revenue or GMV instead of contribution margin, never asks what CAC includes, ignores activation and churn, treats the 4-month cohort as mature data, and never asks whether $3M of podcast inventory even exists. Recommends funding or killing the $3M outright with no sensitivity check and no paid-search benchmark."
+  },
+  "teaser": "A $50-CAC podcast pilot looks pricey — should this grocery app bet $3M on it?"
+}

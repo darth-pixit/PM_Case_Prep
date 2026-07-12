@@ -1,0 +1,48 @@
+{
+  "id": "data-pm-ship-or-not-ab",
+  "archetype": "data-pm",
+  "company_persona": "a serialized-fiction reading app",
+  "interviewer_name": "Ravi",
+  "title": "Green metric, red guardrail",
+  "type": "execution",
+  "prompt": "You're the PM for reading experience at Loreleaf, a serialized-fiction app where authors release new chapters weekly. For the past three weeks you've been running an A/B test of Flow Mode, which auto-advances readers into the next chapter instead of showing an end-of-chapter interstitial. Results are in: chapters read per active day are up 19% and session length is up 14%, both highly significant. But your D14 retention guardrail is down 1.4 points, from 46.0% to 44.6%, also significant. Your growth lead says ship it, your content lead says kill it, and the decision review is Thursday. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "experiment_design": "Clean 50/50 split, 120k users per arm, users enter the experiment the first time they reach a chapter end. Sample-ratio check passes (50.1 / 49.9). The test has run 21 days.",
+    "guardrail_stats": "The D14 retention dip is measured on the ~60k users per arm enrolled in week one; by day 21, every daily week-one enrollment cohort has matured past D14. It's -1.4pp with p<0.01 — properly powered. Comparing those cohorts by enrollment date, the gap is the same size for the earliest and latest week-one enrollees — no shrinkage cohort-over-cohort — so it cannot be waved away as noise or a fading novelty effect. (Note the axis: this fact compares separate cohorts by WHEN they enrolled; the onset_shape fact tracks a single cohort by days SINCE enrollment. Keep the two straight when answering.)",
+    "onset_shape": "Within any single enrollment cohort, tracked by days since enrollment, the retention gap is not immediate: treatment and control track together for a user's first ~4 days, then diverge, and the gap widens with additional days of exposure — consistent with something that builds up, not an instant dislike of auto-advance. This within-cohort exposure curve is the complement of the cohort-over-cohort stability in guardrail_stats: the mechanism takes days to bite for each user, but it bites every enrollment cohort equally hard.",
+    "segment_catchup": "The dip is concentrated in users who 'catch up' — finish every released chapter of the serial they're reading. Treatment users catch up 2.6x as often (31% vs 12% within 14 days). Among users who have NOT caught up, treatment retention is flat to +0.3pp. Caught-up readers return at a rate roughly 15 points below everyone else.",
+    "release_cadence": "Most Loreleaf serials release one new chapter per week. A reader who catches up may wait 5-7 days for any new content in that story.",
+    "catchup_dead_end": "The end-of-serial 'you're all caught up' screen shows no recommendations and no new-chapter notification opt-in — it's a dead end. Only 18% of caught-up treatment users ever start a second serial.",
+    "latency_red_herring": "p95 chapter-load latency is ~80ms higher in treatment because of next-chapter prefetch. If the candidate digs in: segmenting by device class and network speed shows zero relationship between latency and the retention dip.",
+    "outage_red_herring": "A push-notification provider outage on day 9 cut notification delivery ~30% for one day. It hit both arms identically, and the arm-vs-arm daily retention gap did not move that day.",
+    "instrumentation": "No changes to metric definitions or event logging shipped in this window. Retention is a server-side app-open metric computed identically for both arms.",
+    "tier_and_mix": "Free and paid tiers, iOS and Android all show the same pattern. No pricing, paywall, or onboarding changes shipped during the test; traffic mix is unchanged."
+  },
+  "ideal_answer_notes": [
+    "Frame the real question up front: both results are significant, so the job is to find WHY engagement is up while retention is down, whether the dip is causal and mitigable, and only then decide — not to arbitrate between the growth and content leads' opinions.",
+    "Validate the experiment before interpreting it: ask about sample-ratio mismatch, guardrail power, metric-definition or logging changes, and whether later-enrolling cohorts show a smaller gap than earlier ones (which would suggest novelty). Learns it's clean and powered, and the gap is the same size for early and late week-one enrollment cohorts — the dip is real, not fading.",
+    "Read the onset shape — a different axis from the cohort-over-cohort check above: within any single enrollment cohort, arms track together for ~4 days after enrollment, then diverge and widen with days of exposure — a mechanism that accumulates per user, ruling out immediate aversion to auto-advance.",
+    "Segment the retention dip: by tenure, tier, platform, and crucially by content state. Discovers treatment users catch up on their serial 2.6x as often (31% vs 12%), and the entire dip sits in caught-up readers; non-caught-up treatment users retain flat to slightly positive.",
+    "Assemble the causal story: Flow Mode makes reading faster, chapters release weekly, so bingers hit a content wall days sooner; the catch-up screen is a dead end (no recommendations, only 18% start a second serial), so they don't come back.",
+    "Actively check and discard the red herrings: the +80ms prefetch latency shows no correlation with the dip across device/network segments, and the day-9 notification outage hit both arms symmetrically.",
+    "Reframe the decision: the engagement lift is genuine and the retention loss is a fixable product gap at the catch-up moment, not an inherent flaw of Flow Mode — so neither 'ship as-is' nor 'kill' is right.",
+    "Propose the path: ship Flow Mode paired with a catch-up hand-off (next-serial recommendations, one-tap new-chapter notification opt-in, or slowing auto-advance near catch-up), and validate with a v2 test plus a long-term holdout that D14/D28 goes neutral-or-positive.",
+    "Prepare the Thursday review: quantify the trade explicitly (what -1.4pp D14 means for LTV vs +19% reading depth for author payouts/subscription value), state the decision criteria for the v2 test in advance, and name who owns the follow-up metrics."
+  ],
+  "resource_tags": [
+    "ab_testing",
+    "metric_debugging"
+  ],
+  "extra_checklist": [
+    "Candidate checks experiment validity (SRM, guardrail power/significance, whether the gap shrinks for later enrollment cohorts, i.e. novelty) before taking any position on shipping.",
+    "Candidate segments the retention dip by content state and identifies accelerated catch-up against the weekly release cadence — not latency or the notification outage — as the driver.",
+    "Candidate's recommendation is a mitigate-and-retest plan (catch-up hand-off, recommendations, or gated auto-advance, with explicit success criteria), not a binary ship/kill verdict."
+  ],
+  "anchors": {
+    "strong": "Validates the experiment first (SRM, power, logging, cohort-over-cohort gap stability), rules out novelty, then segments to the mechanism: Flow Mode users catch up 2.6x faster on weekly-release serials and hit a dead-end screen, which is where the whole -1.4pp lives. Tests and discards the latency and outage herrings. Recommends shipping only with a catch-up hand-off, a v2 test plus long-term holdout, and quantifies the retention-vs-engagement trade in LTV terms for Thursday.",
+    "at_bar": "Asks about significance, duration, and novelty effects, and segments retention with some nudging — reaching the caught-up-reader concentration after Ravi steers toward content state. May chase the +80ms latency briefly before dropping it when the data doesn't correlate. Lands on a sensible mitigation-and-retest recommendation, but the causal story, the long-term holdout, or explicit v2 success criteria stay thin.",
+    "weak": "Opens with a ship-or-kill opinion or a generic engagement-versus-retention speech without validating the experiment. Never segments by content state — stops at platform or tier — so never finds the catch-up mechanism. Latches onto the 80ms prefetch latency or the day-9 notification outage even though both arms were hit equally. Ends with 'ship it, engagement wins' or 'kill it, retention is sacred,' with no mitigation, retest, or quantified trade-off."
+  },
+  "teaser": "Engagement up 19%, retention down 1.4 points — same experiment. Ship it or kill it?",
+  "minutes": 20
+}

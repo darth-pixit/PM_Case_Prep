@@ -1,0 +1,47 @@
+{
+  "id": "data-pm-seller-analytics",
+  "archetype": "data-pm",
+  "company_persona": "a handmade-and-vintage goods marketplace",
+  "interviewer_name": "Maya",
+  "title": "Numbers sellers act on",
+  "type": "product-design",
+  "prompt": "You're the data PM at Vintora, a marketplace where roughly 90,000 independent sellers list handmade and vintage home goods. Today sellers get a bare-bones stats page: lifetime views and total sales, refreshed daily. In our last seller survey, \"I can't tell why my sales went up or down\" was a top-three complaint, and 32% of new sellers churn by month six. Leadership has funded a real seller analytics dashboard for next quarter. I want you to design it — specifically, which metrics and views go in v1 so the numbers actually change seller behavior rather than decorate a page. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "business_goal": "This is a retention play, not monetization — leadership wants to lift month-6 retention of sellers who haven't yet reached 10 lifetime sales. Analytics stays free in v1.",
+    "seller_segments": "About 70% are hobbyists (<5 sales/month), 25% side-business sellers (5-50/month), and 5% power sellers (>50/month) who drive 60% of GMV. Churn is concentrated in the first two segments.",
+    "what_exists": "The current stats page shows only lifetime views and total sales. About 22% of sellers open it in a given month, and those openers skew heavily toward power sellers.",
+    "past_attempt": "A 2024 'Insights beta' shipped ~30 charts — traffic sources, hourly heatmaps, geo maps. The median seller opened it once and never returned; exit interviews said 'interesting, but what do I do with it?'",
+    "data_available": "The event pipeline already captures search impressions, listing views, favorites, add-to-carts, and purchases at the listing level with ~24-hour latency. Real-time is not feasible this quarter.",
+    "action_retention_link": "Internal analysis, scoped to new sellers who opened their stats page: those who made a shop improvement (new photos, a price change, a new listing) within 7 days of a visit retained about 85% at month six, versus about 61% for openers who didn't act. Only about a third of openers act, and openers skew slightly more engaged than non-openers, so the math reconciles with the 32% overall new-seller churn. The DS team stresses it's correlational, not proven causation.",
+    "benchmarks_privacy": "Legal will approve category-level benchmarks only when the comparison cohort is at least 50 sellers. Showing any individual competitor seller's numbers is off the table.",
+    "constraints": "Team is 2 engineers plus 1 data scientist for one quarter, and 65% of sellers manage their shop primarily from the mobile app.",
+    "success_metric": "Leadership has not defined success for the dashboard — they expect the PM to propose it, and they will push back if the answer is 'dashboard visits.'"
+  },
+  "ideal_answer_notes": [
+    "Opens by clarifying the goal and learns it's a retention play aimed at pre-10-sale sellers, not a monetization or power-seller feature — and lets that reshape every later choice.",
+    "Segments the 90,000 sellers (hobbyist / side-business / power) and explicitly designs v1 for hobbyist and side-business sellers, since churn and the 'why did my sales move' pain concentrate there; notes power sellers need exports or an API later, not this quarter.",
+    "Asks what exists and what was tried; extracts the lesson from the abandoned 30-chart Insights beta — the failure was actionability, not chart volume — and commits to a deliberately small metric set paired with recommended actions.",
+    "Grounds metric selection in the shopper funnel the pipeline already tracks — search impressions, listing views, favorites/add-to-cart, purchase — and maps each stage to a lever the seller actually controls: keywords/titles for impressions, photos and price for click-through, price and shipping for conversion, stock for lost sales.",
+    "Proposes roughly three v1 surfaces: a per-listing funnel with stage conversion rates, a category benchmark comparison (e.g., 'your CTR is 1.1% vs a 2.4% category median', cohort >= 50 sellers per legal), and a ranked next-best-action card keyed to the weakest funnel stage.",
+    "Kills vanity metrics on purpose — lifetime views gets demoted or removed — and articulates why a benchmark plus a lever changes behavior when a raw cumulative count never will.",
+    "Handles tradeoffs explicitly: 24-hour data freshness is acceptable for v1 and says why sellers don't need real-time; designs mobile-first because 65% of sellers manage their shop on the app; scopes to what 2 engineers and 1 data scientist can ship in a quarter.",
+    "Defines success as a behavior-change metric — the percentage of sellers taking a shop-improvement action within 7 days of a dashboard visit — citing the internal finding that acting stats-viewers retained ~85% at month six versus ~61% for non-acting viewers, flags that this is correlational so the rollout must test causation, keeps month-6 retention as the lagging outcome, and adds a guardrail against degenerate behavior like race-to-the-bottom price cuts.",
+    "Closes with a validation plan: prototype with ~20 sellers across segments, A/B roll out against the old stats page measuring action rate and retention lift, and instrument the dashboard itself — which cards get viewed and which seller actions follow within the week."
+  ],
+  "resource_tags": [
+    "north_star",
+    "sql_metrics"
+  ],
+  "extra_checklist": [
+    "Asks about prior attempts, and after hearing about the abandoned 30-chart Insights beta, explicitly limits v1 scope and justifies the cut using the actionability lesson.",
+    "Ties every proposed metric to a specific seller-controlled lever (photos, price, keywords, stock) and explicitly drops or demotes at least one vanity metric such as lifetime views.",
+    "Proposes a success metric based on seller action within a time window (not dashboard visits or DAU), names month-6 retention as the lagging outcome, and adds at least one guardrail metric."
+  ],
+  "anchors": {
+    "strong": "Clarifies the goal (retention of pre-10-sale sellers), segments the base and picks a target with rationale, mines the failed Insights beta for the actionability lesson, builds v1 around the impressions-to-purchase funnel with cohort benchmarks and a next-best-action card, kills lifetime views, accepts daily refresh and goes mobile-first, and defines success as action-within-7-days with month-6 retention lagging plus a price-cut guardrail — all unprompted.",
+    "at_bar": "Reaches a sensible metric set — funnel stages, some benchmark — but needs nudges to ask about the failed beta or the action-retention analysis. Segments sellers only when prompted, or designs partly for power sellers before correcting. Success metric starts as dashboard engagement; with pushback, upgrades it to seller actions taken. Tradeoffs like daily refresh and mobile-first get handled when the interviewer raises them rather than surfaced independently.",
+    "weak": "Lists a laundry list of charts — traffic sources, heatmaps, geo maps — echoing exactly what the failed beta shipped, without ever asking what exists or what was tried. Never segments the 90,000 sellers, designs for power sellers by default, and keeps lifetime views. Success metric is dashboard DAU or NPS with no link to seller behavior or the 32% month-6 churn the prompt handed them."
+  },
+  "teaser": "Ninety thousand sellers, one stats page, and nobody knows why sales moved.",
+  "minutes": 22
+}

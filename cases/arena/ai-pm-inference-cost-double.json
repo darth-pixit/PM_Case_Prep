@@ -1,0 +1,48 @@
+{
+  "id": "ai-pm-inference-cost-double",
+  "archetype": "ai-pm",
+  "company_persona": "an AI coding assistant for professional developers",
+  "interviewer_name": "Ana",
+  "title": "The margin squeeze",
+  "type": "execution",
+  "prompt": "You're the PM for Marlow, an AI coding assistant with about 60,000 weekly active developers, sold at a flat $20 per seat per month. Finance just flagged that inference cost per weekly active user has doubled over the last six weeks — from about $1.10 to $2.30 per user per week — while revenue hasn't moved at all. Gross margin on the plan has slid from roughly 75% to 50%, and the CFO wants answers before the board meeting in two weeks. Walk me through how you'd figure out what's going on and what you'd do about it.",
+  "hidden_facts": {
+    "onset": "The rise is gradual and compounding — roughly +12% week over week for six weeks. There is no single-day step change anywhere in the cost curve.",
+    "instrumentation": "Cost dashboards reconcile to the model provider's invoice, and neither the cost-attribution logic nor the WAU definition changed in this window. The doubling is real dollars.",
+    "decomposition": "Requests per active user are up ~1.15x and tokens per request are up ~1.9x. Blended price per token is roughly flat: the provider's 8% price cut was offset by mix shifting toward the frontier model.",
+    "segment_plan": "Nearly all of the increase comes from ~9,000 power users on the flat-rate Pro Unlimited plan — their cost per user is up ~4x. The other 51,000 users are roughly flat.",
+    "release": "'Autopilot', an agentic mode that plans a task, edits multiple files, runs tests, and retries on failure, went GA six weeks ago. Power-user adoption has climbed steadily from 3% to 38% of sessions — the adoption curve matches the cost curve.",
+    "usage_mix": "An Autopilot task averages ~22 model calls and ~180K tokens, versus ~1.2K tokens for a normal completion or chat turn. Autopilot is about 1% of requests but ~60% of total tokens, and it defaults every step — even trivial ones like renaming a variable — to the frontier model.",
+    "pricing_model": "Pricing is flat per-seat with no usage metering or caps, so heavy Autopilot use generates zero incremental revenue. Seats, ARPU, and WAU (~60K) are all flat — no trial surge or traffic-mix change.",
+    "retries_quality": "Autopilot's task success rate is 71%; failed tasks auto-retry up to 3 times and every retry is billed. p95 latency is up, but only because agent runs are long — there is no infra regression.",
+    "provider_pricing": "The model provider did not raise prices — it actually cut frontier-model per-token prices 8% four weeks ago.",
+    "cache_incident": "Prompt-cache hit rate fell from 62% to 20% for about 36 hours three weeks ago during a cache-cluster migration, then fully recovered. It explains under 3% of the six-week increase."
+  },
+  "ideal_answer_notes": [
+    "Confirm the metric is real before diagnosing: check that cost dashboards reconcile to the provider invoice and that neither cost-attribution logic nor the WAU definition changed (they didn't — it's real dollars).",
+    "Establish onset shape: a smooth ~12%-per-week compounding rise with no step change — this points to adoption or mix shift, not a one-off deploy, config flip, or provider price change.",
+    "Decompose cost per WAU into requests per user x tokens per request x price per token; discover tokens per request (~1.9x) is the dominant mover while blended price per token is flat — killing the 'provider raised prices' hypothesis early.",
+    "Segment by plan and cohort: ~9,000 flat-rate Pro Unlimited power users are up ~4x while the other 51,000 users are flat — the problem is concentrated, not systemic.",
+    "Ask what shipped in the window: Autopilot went GA six weeks ago and its power-user adoption curve (3% to 38% of sessions) tracks the cost curve; confirm mechanically via token mix — ~1% of requests but ~60% of tokens, frontier model on every step, billed retries at a 71% success rate.",
+    "Explicitly dismiss the red herrings with numbers: the cache-migration dip lasted 36 hours and explains under 3% of the increase; rising p95 latency is a symptom of long agent runs, not an infra regression to fix.",
+    "Name the business mechanism: flat per-seat pricing with no metering means Autopilot's marginal cost has no marginal revenue — power users now cost roughly $10/week against about $4.60/week of revenue.",
+    "Propose mitigations along the cost/latency/quality frontier: route planning and trivial steps to a cheaper model, cap or smart-degrade retries, prompt-cache repo context, set per-task token budgets — each paired with a guardrail (Autopilot task success rate, suggestion acceptance) and validated with offline evals plus an A/B test before rollout.",
+    "Address the structural fix: metered Autopilot credits or a usage-based tier for agent tasks, plus a standing margin-per-cohort dashboard and cost-per-task alerting so the next drift is caught in days, not weeks."
+  ],
+  "resource_tags": [
+    "metric_debugging",
+    "ai_evals"
+  ],
+  "extra_checklist": [
+    "Candidate decomposes cost per active user into volume, tokens per request, and price per token (or an equivalent factorization) before committing to a root cause.",
+    "Candidate quantitatively dismisses at least one red herring (the 36-hour cache dip or the provider price change) rather than building their plan around it.",
+    "Candidate pairs every proposed cost mitigation with an explicit quality guardrail metric (e.g., Autopilot task success rate or suggestion acceptance) and a validation method."
+  ],
+  "anchors": {
+    "strong": "Verifies the cost is invoice-real, reads the compounding onset as adoption rather than a config change, decomposes cost per WAU into requests, tokens, and price, and segments straight to the 9K Pro Unlimited cohort. Connects Autopilot's adoption curve to its token mix (1% of requests, ~60% of tokens), quantifies the flat-rate pricing mismatch, numerically dismisses the cache dip and provider-pricing herrings, then proposes model routing, retry caps, and metered pricing with task-success guardrails and A/B validation.",
+    "at_bar": "Reaches Autopilot as the driver but needs nudges — asks what shipped before establishing onset or segmenting, or spends a few minutes on the cache incident before letting it go. Decomposition is partial: notices tokens per request rose but doesn't isolate the power-user cohort unprompted. Proposes sensible mitigations like cheaper-model routing or retry caps, but stays vague on quality guardrails and only connects flat revenue to unmetered pricing after prompting.",
+    "weak": "Opens with a hypothesis dump — provider raised prices, user growth, an infra bug — without asking about onset shape, segments, or what shipped. Latches onto the cache incident or rising latency and builds a fix plan around it. Never decomposes cost per user, never connects flat revenue to unmetered flat-rate pricing, and jumps to 'switch everything to a cheaper model' with no quality guardrail or validation plan."
+  },
+  "teaser": "Inference spend per user doubled in six weeks; revenue didn't move an inch.",
+  "minutes": 20
+}

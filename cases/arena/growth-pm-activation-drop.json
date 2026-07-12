@@ -1,0 +1,48 @@
+{
+  "id": "growth-pm-activation-drop",
+  "archetype": "growth-pm",
+  "company_persona": "a B2B SaaS for building client-facing data dashboards",
+  "interviewer_name": "Mei",
+  "title": "The activation cliff",
+  "type": "execution",
+  "prompt": "You're the growth PM at Slateform, a B2B SaaS that ops teams use to build client-facing dashboards on top of their data. Three weeks ago your team shipped a revamped self-serve onboarding flow — new checklist UI, streamlined steps. Since then, signup-to-activation — defined as a new workspace connecting a data source and publishing its first dashboard within seven days — has dropped from about 34% to about 22%. The VP of Product wants to roll the entire revamp back on Monday. Walk me through how you'd figure out what's going on and what you'd recommend.",
+  "hidden_facts": {
+    "onset": "It's a sharp step change, not a slide: seven-day activation dropped starting exactly with the cohort that signed up on the revamp's launch day, three weeks ago.",
+    "funnel_steps": "Step-level completion, each measured as a share of users who completed the previous step: email verification (~90% of signups) and workspace creation (~85% of verified users) are flat pre/post. 'Connect a data source' fell from 62% to 40% of created workspaces. Publish-after-connect is flat at ~72%. Multiplied through, that's ~34% end-to-end activation before and ~22% after — the leak is entirely in the connect step.",
+    "browser_segment": "The connect-step drop is concentrated by browser: Safari fell from ~60% to ~12% and Edge/managed enterprise Chrome from ~58% to ~15%. Unmanaged Chrome is unchanged at ~62%. Safari plus managed browsers are roughly 45% of B2B signups — which blends out to the 62%-to-40% connect-step drop overall.",
+    "release_contents": "The revamp replaced the old full-page OAuth redirect for connecting data sources with a popup window that opens after an async permissions check. It also added an optional 'invite a teammate' step and the new checklist UI. Because the popup opens after an async call, it loses user-gesture attribution and is silently blocked by Safari and by enterprise popup-blocker policies — no error is shown; the button appears to do nothing.",
+    "rollout_design": "The revamp shipped straight to 100% of new signups with no A/B test and no holdout — the team wanted it live before a marketing push, so there is no control arm to compare against.",
+    "traffic_mix": "A paid LinkedIn campaign launched the same week and signups are up 25%. But paid acquisition predates that campaign: long-running paid-search cohorts fell by roughly the same relative amount as organic and referral, and the brand-new LinkedIn cohort — which has no pre-period of its own — shows the same browser-segmented connect rates as every other channel. Traffic mix does not explain the drop. (Red herring.)",
+    "invite_step": "The new invite-a-teammate step is optional: 78% of users skip it, its completion rate hasn't moved since launch, and downstream conversion is identical for skippers and inviters. (Red herring.)",
+    "instrumentation": "No tracking or metric-definition changes shipped in this window; dashboard numbers match raw warehouse counts, so the drop is real, not a logging artifact.",
+    "support_tickets": "Support tickets saying 'the connect button does nothing' or describing a blank flash have roughly tripled since launch; several mention corporate-managed laptops.",
+    "external": "No competitor launch, pricing change, or seasonal effect; the same weeks last year were flat."
+  },
+  "ideal_answer_notes": [
+    "Confirms the metric before trusting it: restates activation as connect-a-source plus publish within 7 days, and asks whether tracking or the definition changed (Mei confirms instrumentation is clean, so the drop is real).",
+    "Establishes onset shape: a step change starting with the launch-day cohort points at the release itself rather than gradual market or seasonal drift.",
+    "Decomposes signup-to-activation into its funnel steps and isolates the leak: email verify (~90%) and workspace creation (~85%) flat, connect-a-data-source down 62%-to-40% of created workspaces, publish-after-connect flat at ~72% — and notes the step rates multiply through to the 34%-to-22% headline, so the investigation narrows to one step.",
+    "Tests the mix-shift red herring properly: the LinkedIn campaign raised volume 25%, but activation fell by a similar relative amount within every channel that predates the campaign — organic, referral, and long-running paid search — and the new LinkedIn cohort matches other channels once browser mix is accounted for; low-intent paid traffic is ruled out with per-channel rates, not blended ones.",
+    "Checks the invite-teammate step and dismisses it fast: optional, 78% skip, completion unchanged, skippers convert identically downstream.",
+    "Segments the connect step by browser/device: Safari at 12% and managed browsers at 15% versus unchanged unmanaged Chrome smells like a silent client-side failure, not a motivation problem.",
+    "Ties the segment pattern to what actually shipped: the new popup-based OAuth opened after an async call loses user-gesture attribution and gets silently blocked; corroborates with the tripled 'connect button does nothing' tickets and asks for a quick repro on Safari or session replays to confirm.",
+    "Recommends a surgical fix over wholesale rollback: open the OAuth window synchronously on click (or fall back to the full-page redirect) and surface an error state when a popup is blocked — pushes back on the VP's Monday rollback with the step-level evidence, since the rest of the revamp is performing fine.",
+    "Closes the loop like a growth PM: relaunch the fix behind a holdout, add connect-completion-by-browser as a standing guardrail, run a win-back email to the three weeks of stuck signups, and flags the process lesson that shipping to 100% with no holdout is what made diagnosis slow."
+  ],
+  "resource_tags": [
+    "metric_debugging",
+    "ab_testing"
+  ],
+  "extra_checklist": [
+    "Decomposed activation into step-level funnel conversion and identified connect-a-data-source as the only leaking step before proposing any fix.",
+    "Ruled out the LinkedIn campaign by comparing activation within channels that predate it — including long-running paid search — rather than relying on the blended rate.",
+    "Recommended a targeted connect-flow fix with a holdout and browser-segmented guardrail metric, explicitly arguing against rolling back the entire revamp."
+  ],
+  "anchors": {
+    "strong": "Verifies instrumentation first, pins the step-change onset to launch day, decomposes the funnel to isolate the connect step, kills the LinkedIn mix-shift herring with pre-existing-channel rates, and dismisses the invite step using skip data. Segments by browser, connects Safari/managed-browser collapse to the async popup OAuth change, corroborates with support tickets and a repro. Proposes a gesture-safe popup or redirect fallback with error surfacing, argues against full rollback, and relaunches behind a holdout with browser guardrails.",
+    "at_bar": "Reaches the funnel decomposition and finds the connect-step leak, but needs nudges to segment by browser, or spends time on the invite-teammate step before dropping it when told it's optional and unchanged. Lands on the popup change once Mei volunteers the support tickets. Recommends a reasonable fix and hesitates on full rollback, but the relaunch plan is vague — mentions monitoring without a concrete holdout or a browser-level guardrail metric.",
+    "weak": "Blames the revamp's UX wholesale or starts redesigning onboarding without ever breaking activation into steps. Chases the LinkedIn campaign using blended rates or fixates on the invite step despite the skip data, never segments by browser, and never asks what technically changed in the connect flow. Accepts the VP's Monday rollback without evidence and closes with generic 'run an A/B test and talk to users' next steps."
+  },
+  "teaser": "Activation cratered right after the shiny new onboarding shipped — rollback or dig deeper?",
+  "minutes": 20
+}

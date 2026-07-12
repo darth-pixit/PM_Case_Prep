@@ -1,0 +1,47 @@
+{
+  "id": "ai-pm-summarizer-launch-gate",
+  "archetype": "ai-pm",
+  "type": "ai-pm",
+  "company_persona": "a B2B collaboration suite with an AI meeting summarizer",
+  "interviewer_name": "Farah",
+  "title": "The summarizer launch gate",
+  "minutes": 20,
+  "prompt": "You're the PM for Recap, the AI meeting summarizer inside Loopnote, a B2B collaboration suite. Recap has been in beta with about 800 workspaces for three months, generating roughly 3,000 summaries a day. GA is planned in six weeks, which would take you to about 40,000 summaries a day. Your VP has one question before signing off: \"How will we know it's good enough to ship?\" Right now the team tracks a thumbs-up rate, which sits at 78%. Your job is to define the evals and launch-gate metrics for GA. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "current_eval_stack": "The only automated eval today is a ROUGE-style overlap score against the transcript, plus the thumbs-up/down button. There is no human grading rubric, no golden set, and no error taxonomy.",
+    "feedback_signal": "Only 9% of summaries receive any thumbs rating. Among raters, thumbs-up is 78% and roughly flat across meeting sizes and use cases — it does not correlate with the fabrication errors found in the audit.",
+    "human_audit": "A 200-summary human audit finished last week: 11% of summaries contain at least one fabricated or mis-attributed action item, 7% omit a key decision, and 3% have only tone or verbosity complaints.",
+    "severity_incidents": "Both beta escalations to date came from mis-attributed action items — in one, a customer emailed their client about a commitment the client never made. No escalation has ever come from latency or verbosity.",
+    "diarization_segment": "Fabricated or mis-attributed action items run about 4% on calls with 2-3 speakers but about 23% on calls with 6+ speakers and overlapping speech. Word-level speaker-attribution (diarization) accuracy drops from 96% to 81% on those calls. Calls with 6+ speakers are roughly 35% of beta volume.",
+    "latency": "p50 time-to-summary is 28 seconds after the meeting ends; p95 is 90 seconds. Behavioral data shows the median user first opens the summary 25 minutes after the meeting, so latency is not a gating concern.",
+    "cost_pressure": "Each summary costs $0.021 in inference on the current large model. Finance is pushing a distilled model at $0.006 per summary, but in offline evals the distilled model roughly doubles the fabrication rate.",
+    "llm_judge": "A prototype LLM-as-judge agrees with human graders 85% of the time on omission errors but only 70% on attribution errors, so it cannot be the sole gate for the most severe error class without calibration and human spot-checks.",
+    "marketing_claim": "Sales wants to announce '98% accuracy' at GA. No defined metric sits behind that number today."
+  },
+  "ideal_answer_notes": [
+    "Reframe the question: 'good enough to ship' for non-deterministic output means a severity-weighted error taxonomy — fabricated/mis-attributed action items, omitted decisions, style issues — not one accuracy number.",
+    "Ask what evals exist today; learn it's only a ROUGE-style overlap score plus thumbs. Explain why both fail here: overlap metrics reward transcript similarity, not truthfulness, and thumbs has a 9% response rate with heavy selection bias.",
+    "Ask for ground truth and surface the 200-summary human audit: 11% of summaries contain a fabricated or mis-attributed action item — the highest-severity class, responsible for both beta escalations.",
+    "Segment the failure: fabrication is ~4% on 2-3 speaker calls vs ~23% on 6+ speaker calls, tracking diarization accuracy falling from 96% to 81% — the worst errors originate upstream of the LLM in speaker attribution.",
+    "Check and dismiss the latency red herring: p95 is 90 seconds, but the median user opens the summary 25 minutes post-meeting, so latency should not be a launch gate.",
+    "Define concrete gates on a stratified golden set (e.g., ~500 meetings deliberately overweighting 6+ speaker calls): critical fabrication/mis-attribution at most ~2% overall and ~5% on the hardest stratum; key-decision omission at most ~5%; pair gates with mitigations like suppressing or flagging action-item owners when diarization confidence is low.",
+    "Design the eval harness for GA scale: human-graded golden set as source of truth, LLM-as-judge for coverage (85% agreement on omissions but only 70% on attribution, so mandatory human spot-checks on attribution), run as regression evals on every model or prompt change.",
+    "Defend quality against the cost swap: moving from $0.021 to $0.006 per summary doubles fabrications in offline evals; commit to revisiting the distilled model only once it passes the same gates.",
+    "Propose a staged rollout: hold GA behind the golden-set thresholds, ramp 5% then 25% then 100% with online proxies (action-item edit/delete rate, escalation count) and explicit rollback criteria, and push back on the unfounded '98% accuracy' claim by tying marketing to the defined metric."
+  ],
+  "resource_tags": [
+    "ai_evals",
+    "metric_debugging"
+  ],
+  "extra_checklist": [
+    "Candidate defines a severity-weighted error taxonomy (fabrication/mis-attribution vs omission vs style) before proposing any numeric launch gate.",
+    "Candidate explicitly discredits the 78% thumbs-up rate by citing its 9% response rate and lack of correlation with audited fabrications, and replaces it with a human-graded golden set or rubric.",
+    "Candidate states at least one numeric launch threshold stratified by the 6+ speaker segment and pairs it with a staged rollout that includes explicit rollback criteria."
+  ],
+  "anchors": {
+    "strong": "Opens by defining a harm-weighted error taxonomy, asks what evals exist, and dismisses the 78% thumbs-up after learning only 9% rate and it doesn't track fabrications. Pulls the audit, finds 11% fabricated action items, segments to 6+ speaker calls and names diarization as the driver. Sets numeric stratified gates on a golden set, calibrates the LLM-judge with human spot-checks on attribution, waves off latency, resists the distilled-model swap, and stages rollout with rollback criteria.",
+    "at_bar": "Reaches human evaluation and an error taxonomy with a nudge or two. Finds the fabrication problem from the audit but needs prompting to segment by speaker count or to connect it to diarization accuracy. Proposes launch gates but with vague thresholds like 'low hallucination rate' and a rollout plan without explicit rollback criteria. May spend a few minutes on latency or the cost swap before self-correcting.",
+    "weak": "Treats the 78% thumbs-up as the launch metric and proposes raising it. Never asks what the errors actually look like, so never finds the fabricated action items or the multi-speaker segment. Chases the 90-second p95 latency or champions the $0.006 distilled model for margin. Ends with a generic 'ship when accuracy is high' plan — no taxonomy, no golden set, no numeric gates, no rollback plan."
+  },
+  "teaser": "Your meeting summarizer hits GA in six weeks — prove it's good enough to ship."
+}

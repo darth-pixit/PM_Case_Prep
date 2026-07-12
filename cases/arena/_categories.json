@@ -1,0 +1,35 @@
+{
+  "comment": "The five highest-hiring PM specializations of 2025-26, per Lenny's job-market reports and prep-platform coverage (see PR notes). Keys must have a rubric tilt in rubric.ARCHETYPE_WEIGHTS. Order = display order.",
+  "categories": [
+    {
+      "key": "core-pm",
+      "name": "Core Product PM",
+      "icon": "🧩",
+      "blurb": "The classic loop every PM faces: product sense, execution, strategy. The biggest slice of PM hiring by far."
+    },
+    {
+      "key": "ai-pm",
+      "name": "AI PM",
+      "icon": "🤖",
+      "blurb": "Evals, hallucinations, cost-vs-quality calls. The fastest-growing PM interview — AI fluency is now tested everywhere."
+    },
+    {
+      "key": "growth-pm",
+      "name": "Growth PM",
+      "icon": "📈",
+      "blurb": "Funnels, loops, experiments, LTV/CAC. Diagnose the drop, design the test, grow the number."
+    },
+    {
+      "key": "platform-pm",
+      "name": "Platform / Technical PM",
+      "icon": "🔌",
+      "blurb": "APIs, system design, migrations, SLOs — where your customer is an engineer and the tradeoffs are technical."
+    },
+    {
+      "key": "data-pm",
+      "name": "Data PM",
+      "icon": "📊",
+      "blurb": "Metric trees, ambiguous A/B calls, instrumentation forensics. The loop with a real numbers round."
+    }
+  ]
+}

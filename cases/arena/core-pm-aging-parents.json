@@ -1,0 +1,49 @@
+{
+  "id": "core-pm-aging-parents",
+  "archetype": "core-pm",
+  "company_persona": "a consumer family-organizer app",
+  "interviewer_name": "Elena",
+  "title": "The sibling group text",
+  "type": "product-design",
+  "prompt": "You're a PM at Hollyhock, a shared family-organizer app with about 5 million monthly actives — mostly parents juggling kids' schedules. Lately we've noticed roughly 18 percent of our users are over 45, and in interviews many describe hacking Hollyhock to coordinate care for their own aging parents — splitting pharmacy runs, doctor visits, and check-in calls with siblings over group texts and shared notes. The CEO believes this is our next big product and has asked you to design a dedicated experience for families coordinating care for an aging parent. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "business_goal": "Leadership wants a second growth engine: a dedicated caregiving product that could eventually support a premium family subscription. For v1 (first six months post-launch), success is engagement — weekly-active care circles — not revenue.",
+    "target_market": "US-only at launch. Research focused on adult children aged 45-60 coordinating care for a parent 75+ who still lives at home. The over-45 cohort is roughly 900K users; survey-based estimates put about 300K of them in this active-caregiving profile today.",
+    "coordinator_dynamics": "In the 40 families Hollyhock interviewed, one adult child — the 'primary coordinator' — handled about 70% of tasks. Siblings helped sporadically and often said they didn't know what was needed until it was urgent.",
+    "top_pain_points": "Ranked from the research: 1) knowing who's doing what — tasks get dropped or duplicated; 2) sharing updates after doctor visits; 3) scrambling during emergencies; 4) sibling resentment over unequal load. Bill-paying and medical-record storage ranked notably lower.",
+    "parent_tech_comfort": "The aging parent will typically not adopt an app. Most are 75+, on a basic smartphone or landline. Any parent-facing touchpoint must work over SMS or a phone call; parent participation must be optional.",
+    "past_attempt": "Last year Hollyhock shipped a 'Care Tasks' checklist add-on. Only 8% of invited users tried it and week-4 retention was near zero. The postmortem: coordinators created tasks but siblings never joined, so lists went stale — a single-player experience for a multiplayer problem.",
+    "regulatory_constraint": "Legal wants v1 to remain a consumer coordination tool: no storing medical records, no medication dosing guidance, nothing that could classify it as a medical device or create HIPAA obligations. The boundary legal drew: informal family-authored notes and visit recaps are fine; uploaded clinical records, structured health-data fields, and dosing guidance are not.",
+    "team_and_timeline": "One squad — six engineers, one designer, and you — with two quarters to a launchable v1.",
+    "competition": "A handful of standalone caregiving apps exist and churn fast. The internal view is that the real competitor is the sibling group text plus a shared notes doc.",
+    "monetization": "Freemium hypothesis: free for one care circle, roughly $14/month family plan for premium features later. Pricing design is explicitly out of scope for this conversation."
+  },
+  "ideal_answer_notes": [
+    "Opens by clarifying the goal: is this engagement/retention for existing users or a new revenue line? Learns v1 success is weekly-active care circles, not revenue, and lets that shape scope.",
+    "Asks what already exists and what's been tried — uncovers the failed Care Tasks add-on and diagnoses why it died: coordinators created tasks into a void because siblings never onboarded.",
+    "Maps the family as a system, not one user: primary coordinator (one adult child doing ~70% of the work), secondary siblings (intermittent, often unaware of needs), the parent (won't use an app), and an outer ring of neighbors/aides. Explicitly picks the primary coordinator as the design target and the coordinator-to-sibling handoff as the core interaction.",
+    "Enumerates needs and prioritizes against the research ranking: visibility into who's-doing-what first, post-appointment updates second; consciously deprioritizes finances and medical-record storage, citing both lower pain and the legal constraint.",
+    "Proposes a focused v1 — a shared care circle with a canonical task-and-visit board where every task has an explicit owner and due state, plus a lightweight 'visit recap' broadcast after appointments — and argues why not medication management (regulatory) or a caregiver marketplace (cold-start, off-goal). If asked, confirms recaps stay on the legal side of the line: family-authored notes, not clinical records.",
+    "Handles the parent deliberately: the parent never needs the app — SMS/phone bridge for check-ins, a printable weekly schedule — and frames dignity/privacy of the parent's information as a design tension worth naming.",
+    "Applies the Care Tasks lesson to activation: v1 fails unless at least two family members join, so onboarding centers on inviting a sibling with a concrete first task attached, not on empty-state setup by the coordinator alone.",
+    "Names the packaging tradeoff — new standalone app versus a distinct space inside Hollyhock — and defends a choice (e.g., inside Hollyhock to leverage the ~300K in-profile users as distribution, with separated privacy boundaries from the kid-calendar).",
+    "Defines the primary metric at the family level: weekly-active care circles with 2+ contributing members, with guardrails like task-completion rate and reported dropped-task incidents; explicitly ties it back to the stated engagement goal.",
+    "Closes with de-risking next steps: a concierge pilot with ~50 families before full build to test whether the ownership model and recap ritual actually change coordination behavior."
+  ],
+  "resource_tags": [
+    "north_star",
+    "growth_loops"
+  ],
+  "extra_checklist": [
+    "Candidate explicitly identifies the primary coordinator (one adult child) as the target user and designs the core flow around sibling coordination, rather than treating the aging parent as the app's main user.",
+    "Candidate asks about prior attempts, surfaces the failed Care Tasks add-on, and visibly incorporates its lesson (multiplayer activation / explicit task ownership) into their v1 or onboarding design.",
+    "Candidate defines a primary success metric at the care-circle (family) level requiring multiple contributing members, plus at least one guardrail or counter-metric, and links it to the stated business goal."
+  ],
+  "anchors": {
+    "strong": "Opens by pinning the goal (new growth engine, engagement-first) and asks what exists — surfacing the failed Care Tasks add-on and the 70/30 coordinator split. Targets the primary coordinator, designs v1 around explicit task ownership plus a visit-recap ritual, keeps the parent on an SMS/phone bridge, defends in-app versus standalone, and proposes weekly-active care circles with 2+ contributing members as the metric, with a dropped-task guardrail.",
+    "at_bar": "Builds a sensible structure — clarifies the goal, segments adult children versus the parent, and lands on a shared calendar-and-tasks v1 — but needs nudges to ask about the failed Care Tasks attempt or the parent's tech comfort. Prioritization is asserted rather than argued from the research ranking, and the proposed metric tracks individual engagement instead of family-level coordination until Elena pushes.",
+    "weak": "Jumps straight to a feature list — medication reminders, GPS check-ins, a caregiver marketplace — without clarifying the business goal or asking what Hollyhock already tried. Designs for the aging parent as the primary app user despite the adoption reality, never segments the sibling dynamics, offers no prioritization rationale or tradeoffs, and proposes downloads or DAU as success with no link to whether families actually coordinate better."
+  },
+  "teaser": "Design the product that replaces the sibling group text for eldercare.",
+  "minutes": 22
+}

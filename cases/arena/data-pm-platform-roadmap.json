@@ -1,0 +1,46 @@
+{
+  "id": "data-pm-platform-roadmap",
+  "archetype": "data-pm",
+  "company_persona": "a B2B logistics SaaS with an overstretched internal data platform",
+  "interviewer_name": "Sofia",
+  "title": "Four teams, one roadmap",
+  "type": "strategy",
+  "prompt": "You're the PM for the internal data platform at Corvia, a B2B logistics SaaS doing about $38 million in ARR. Four teams are pounding the table for your roadmap: Marketing wants self-serve dashboards, Finance wants one trusted revenue number, the ML team wants real-time pipelines for a churn model, and Sales operations wants a CRM data sync. You have seven engineers, a year of roadmap to allocate, and a vendor pitching an off-the-shelf BI and governance suite. Leadership wants a recommendation on what the platform builds, buys, and says no to over the next two quarters. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "growth_context": "Corvia's growth has slowed from 60% to 25% YoY. The board's top priority this year is moving upmarket into enterprise accounts; internal tooling budgets are under scrutiny.",
+    "enterprise_deal": "There is a signed LOI with a Fortune-500 shipper worth $4M in ARR, contingent on passing the customer's data-governance audit (access controls, data lineage, data retention) within two quarters. This is the single biggest revenue item tied to the platform.",
+    "governance_gap": "Today there is no column-level access control and no lineage tracking, customer PII (shipment contact details) has been copied into 14 downstream warehouse tables, and there is no retention policy — old shipment records are kept indefinitely. As-is, Corvia would fail all three audit areas outright.",
+    "team_capacity": "The platform team is seven engineers, but three are fully consumed keeping roughly 200 brittle batch pipelines alive, and headcount is frozen for the year. The other four handle everything else — but the ad-hoc request load described in ticket_load eats about half of their time, so true project capacity today is roughly two engineers unless that load is reduced. Capacity recovery is itself a roadmap lever.",
+    "ticket_load": "About 45% of the team's ticket volume is ad-hoc dashboard and data-pull requests, mostly from Marketing and Sales ops, with a median turnaround of 9 days. This load falls on the four non-firefighting engineers and consumes roughly half their time — it is included in, not on top of, the two-engineer effective capacity in team_capacity. Self-serve BI would recover most of it.",
+    "revenue_trust": "Two revenue definitions exist — the billing system and the warehouse — and executive dashboards disagreed in 3 of the last 6 months. The CFO has said openly she no longer trusts warehouse numbers. Rolling out self-serve BI on top of this would scale the confusion.",
+    "ml_ask": "The ML team's churn model is still in a notebook: no production version, no measured lift. Its features can be computed from daily batch runs; sub-hour latency is not actually required. Their VP is the loudest voice in roadmap meetings.",
+    "buy_option": "The vendor suite (self-serve BI, semantic layer, column-level access controls, and an automated lineage catalog) is quoted at $140K/yr and could be live in about 6 weeks; $180K of the $500K annual tooling budget is still unallocated, enough to cover it this year. Building an equivalent in-house is estimated at 3 engineers for 3 quarters (~9 engineer-quarters). The vendor covers access controls, metric definitions, and lineage out of the box, but not remediation of the PII sprawl in the 14 tables or defining and enforcing a retention policy — that in-house work is roughly two engineers for one quarter.",
+    "crm_ask": "Sales ops' CRM sync is a one-way nightly export, roughly two engineer-weeks of work, and the vendor suite ships a CRM connector out of the box. Low effort, low strategic weight."
+  },
+  "ideal_answer_notes": [
+    "Starts with business context, not the four asks: asks what the company strategy needs from data this year — uncovers the enterprise push and the $4M LOI contingent on passing a data-governance audit (access controls, lineage, retention) within two quarters, and names that as the forcing function for the roadmap.",
+    "Sizes real capacity before promising anything: elicits that three of seven engineers are lost to firefighting ~200 brittle pipelines, headcount is frozen, and ad-hoc tickets consume about half of the remaining four's time — so plans against roughly two engineers of true project capacity and treats capacity recovery as a first-class roadmap goal.",
+    "Quantifies each team's ask in business terms instead of taking them at face value: pulls ticket data and learns 45% of volume is ad-hoc dashboard pulls with 9-day turnaround, already eating half of the non-firefighting engineers' time — reframes self-serve BI as a capacity-recovery investment, not a courtesy to Marketing.",
+    "Probes the trust problem behind Finance's ask: two revenue definitions, exec dashboards disagreeing 3 of 6 months, CFO distrust — and articulates that a semantic layer with agreed metric definitions is a prerequisite for self-serve BI, because self-serve on untrusted data scales chaos.",
+    "Pressure-tests the loudest ask rather than caving to the ML VP: asks about model maturity and true latency needs, learns the churn model is notebook-stage with batch-computable features, and defers real-time streaming — offering a daily batch feature pipeline as the compromise.",
+    "Runs build-vs-buy explicitly with numbers: $140K/yr vendor live in 6 weeks versus 3 engineers for 3 quarters (~9 engineer-quarters) to build, checks the $180K unallocated budget, notes BI/semantic-layer tooling is not differentiating for Corvia — recommends buy, while flagging that the vendor covers access controls and lineage but not PII remediation or retention.",
+    "Sequences a two-quarter plan that demonstrably covers all three audit areas: Q1 — vendor procurement and setup (access controls, lineage catalog, semantic layer) in parallel with engineer-led PII cleanup across the 14 tables, a defined and enforced retention policy, and a canonical revenue definition with CFO sign-off; Q2 — self-serve rollout to Marketing and Sales ops (CRM connector via vendor) and a batch feature pipeline for ML.",
+    "Gives explicit no/not-now decisions with revisit triggers: no real-time streaming until the churn model shows lift in production on batch data; no custom-built BI; frames the CRM ask as nearly free via the vendor connector.",
+    "Closes with success metrics and a stakeholder mechanism: audit passed by the deadline, ad-hoc ticket share down from 45% toward ~15%, one CFO-endorsed revenue metric, firefighting time reduced — plus a transparent intake/scoring forum so the four teams see why they were sequenced."
+  ],
+  "resource_tags": [
+    "metric_debugging"
+  ],
+  "extra_checklist": [
+    "Candidate asks about company-level context and surfaces the enterprise audit deadline (or the $4M LOI) before allocating any roadmap capacity, and explicitly uses it to order the plan.",
+    "Candidate runs an explicit build-vs-buy comparison using the elicited numbers ($140K/yr and 6 weeks versus ~9 engineer-quarters to build) rather than defaulting to build or buy on instinct.",
+    "Candidate delivers a justified 'no' or 'not now' to at least one team — e.g., ML's real-time streaming — including a concrete revisit condition, instead of splitting capacity across all four asks."
+  ],
+  "anchors": {
+    "strong": "Opens by asking what the business needs from data — surfaces the $4M enterprise LOI and two-quarter audit deadline and anchors sequencing on it. Elicits real capacity: three engineers firefighting, half the remaining four lost to ad-hoc tickets. Maps the full audit scope — access controls, lineage, retention — recommends buying the $140K suite within the unallocated budget, sequences governance and the semantic layer before self-serve rollout, declines ML streaming with a batch-feature compromise, and closes with audit-passage and ticket-reduction metrics.",
+    "at_bar": "Reaches a sensible sequence with nudges. Asks about team size and budget but discovers the audit deadline or the vendor option only when Sofia hints. Sees that self-serve BI needs trusted data, though may not connect the semantic layer to Finance's revenue dispute. Says no to one team but justifies it thinly, and offers generic success metrics like dashboard adoption rather than audit passage or ticket-load reduction.",
+    "weak": "Jumps straight into a scoring framework and ranks the four asks without eliciting company context, so never learns about the enterprise audit deadline or that three engineers are lost to pipeline firefighting. Takes the ML VP's real-time streaming demand at face value because it sounds strategic. Splits capacity four ways to appease everyone, never explores the vendor buy option, and closes without metrics, sequencing, or a stakeholder communication plan."
+  },
+  "teaser": "Seven engineers, four screaming teams, one data platform — what gets built, bought, refused?",
+  "minutes": 20
+}

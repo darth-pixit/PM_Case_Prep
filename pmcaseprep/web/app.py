@@ -37,15 +37,29 @@ except ImportError:
 
 import anthropic
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 
-from ..case_loader import default_case_path, load_case
+from ..case_loader import (
+    arena_case_by_id,
+    arena_catalog,
+    default_case_path,
+    load_case,
+)
 from ..delivery import FILLERS_CORE, DeliveryTracker, Word
 from ..grader import grade, weighted_result
 from ..interviewer import Interviewer
+from ..models import Case
+from ..recruiter_kb import recruiter_guide, recruiter_system_prompt
 from ..resources import resources_for
 from ..skill_graph import SkillGraph
+from . import auth
 from .deepgram_live import DG_URL, FLUX_ACTIVE, FLUX_URL, NOVA_URL, DeepgramLive
 
 # Two model tiers: the interviewer runs on a FAST model (conversational turns,
@@ -95,6 +109,15 @@ MAX_TURNS = int(os.environ.get("PMCP_MAX_TURNS", "80"))  # model calls per sessi
 MAX_SESSION_S = 60 * int(os.environ.get("PMCP_MAX_SESSION_MIN", "90"))
 IDLE_S = 60 * int(os.environ.get("PMCP_IDLE_MIN", "15"))
 MAX_TEXT_CHARS = int(os.environ.get("PMCP_MAX_TEXT_CHARS", "8000"))
+# Recruiter copilot (its own experiment, its own dials): each reply is one paid
+# model call, so it gets per-IP rate limits and hard caps on history and size.
+RECRUITER_MODEL = os.environ.get(
+    "PMCP_RECRUITER_MODEL", _MODEL_OVERRIDE or "claude-sonnet-5"
+)
+RECRUITER_HOURLY_PER_IP = int(os.environ.get("PMCP_RECRUITER_HOURLY_PER_IP", "40"))
+RECRUITER_MAX_HISTORY = 30  # messages of context kept per request
+RECRUITER_MAX_CHARS = 6000  # per-message input cap
+AUTH_HOURLY_PER_IP = int(os.environ.get("PMCP_AUTH_HOURLY_PER_IP", "20"))
 
 
 class SlidingLimit:
@@ -141,16 +164,26 @@ class Gauge:
 
 WS_OPENS = SlidingLimit(WS_HOURLY_PER_IP, 3600)
 LOGIN_ATTEMPTS = SlidingLimit(LOGIN_HOURLY_PER_IP, 3600)
+AUTH_ATTEMPTS = SlidingLimit(AUTH_HOURLY_PER_IP, 3600)
+# Per-EMAIL brakes, independent of IP: a code request sends a real email to a
+# real inbox (bombing + Resend quota burn), and capping verifies per address
+# stops the reset-the-attempt-counter-with-a-fresh-code guessing loop.
+CODE_REQUESTS_PER_EMAIL = SlidingLimit(3, 3600)
+VERIFIES_PER_EMAIL = SlidingLimit(10, 3600)
+RECRUITER_CALLS = SlidingLimit(RECRUITER_HOURLY_PER_IP, 3600)
 ACTIVE = Gauge()
 
 
 def _client_ip(conn) -> str:
-    """Real client IP. Behind Render's proxy the socket peer is the proxy, so
-    prefer the first X-Forwarded-For hop (set by the proxy; the container is
-    not directly reachable). Falls back to the socket peer for local dev."""
+    """Real client IP for rate-limit keys. Behind Render's proxy the socket
+    peer is the proxy, so read X-Forwarded-For — but take the LAST hop, not
+    the first: the last entry is written by the trusted proxy in front of us,
+    while the first is whatever the client typed into the header. Keying
+    limits on the first hop would let anyone reset their own limit per
+    request with a forged header. Falls back to the socket peer for local dev."""
     xff = conn.headers.get("x-forwarded-for")
     if xff:
-        return xff.split(",")[0].strip()
+        return xff.split(",")[-1].strip()
     return conn.client.host if conn.client else "unknown"
 
 
@@ -245,43 +278,86 @@ async def index(request: Request) -> FileResponse:
     return resp
 
 
+def _auth_flags() -> dict:
+    """Which login doors exist on this deploy — served by /config AND /api/me
+    so the room page and the login widget can never disagree."""
+    return {
+        "google_client_id": auth.GOOGLE_CLIENT_ID,
+        "email_login": auth.email_enabled()
+        or bool(os.environ.get("PMCP_DEV_DOCS") and not os.environ.get("RENDER")),
+    }
+
+
 @app.get("/config")
 async def config(request: Request) -> JSONResponse:
-    """Public, browser-safe config. No secrets — the PostHog key is publishable."""
-    email = None
-    uid = request.cookies.get(UID_COOKIE)
-    if uid:
-        g = SkillGraph(DB_PATH, uid)
-        email = g.email_for_uid(uid)
-        g.close()
+    """Public, browser-safe config. No secrets — the PostHog key is publishable
+    and the Google client id is public by design (it's in every login page)."""
     return JSONResponse(
-        {"posthog_key": POSTHOG_KEY, "posthog_host": POSTHOG_HOST, "email": email}
+        {
+            "posthog_key": POSTHOG_KEY,
+            "posthog_host": POSTHOG_HOST,
+            "email": _email_for_request(request),
+            **_auth_flags(),
+        }
     )
 
 
 @app.post("/api/login")
 async def login(request: Request) -> JSONResponse:
-    """Email-linked progress (MVP — no password yet, see README).
+    """The tutor scorecard's "save my progress" box (legacy, no verification).
 
-    New email  -> links this browser's uid to it ("save my progress").
-    Known email -> switches this browser to the saved uid ("restore my progress").
-
-    Email is the ONLY key here (no password/code yet — see README), so the
-    endpoint is rate-limited per IP to keep enumeration and account takeover
-    from being scriptable. Proper fix is an emailed one-time code.
-    """
+    New email -> links this browser's uid to it. But a KNOWN email now refuses
+    to switch uids: handing over a stored account on a bare typed email would
+    let anyone claim anyone, and since the arena/recruiter gates trust an
+    email-linked cookie, that would also unlock the paid features as the
+    victim. Restoring an existing account requires the PROVEN doors
+    (/api/auth/google or the emailed code)."""
     if not LOGIN_ATTEMPTS.allow(_client_ip(request)):
         return JSONResponse(
             {"ok": False, "error": "too many attempts — try again later"}, status_code=429
         )
     try:
         data = await request.json()
+        assert isinstance(data, dict)  # "hi" / [1] are valid JSON, not requests
     except Exception:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": "bad request"}, status_code=400)
     email = str(data.get("email") or "").strip().lower()
-    if "@" not in email or "." not in email.rsplit("@", 1)[-1] or len(email) > 254:
+    if not auth.valid_email(email):
         return JSONResponse({"ok": False, "error": "invalid email"}, status_code=400)
 
+    uid = request.cookies.get(UID_COOKIE) or uuid.uuid4().hex
+    g = SkillGraph(DB_PATH, uid)
+    try:
+        existing = g.uid_for_email(email)
+        if existing and existing != uid:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": "That email already has saved progress. To restore "
+                    "it, sign in on the Arena page (Google or a code we email "
+                    "you) — your history follows automatically.",
+                },
+                status_code=409,
+            )
+        g.link_email(email, uid)
+        sessions = g.sessions_count()
+    finally:
+        g.close()
+
+    resp = JSONResponse(
+        {"ok": True, "email": email, "restored": False, "sessions": sessions}
+    )
+    resp.set_cookie(UID_COOKIE, uid, max_age=COOKIE_MAX_AGE, samesite="lax")
+    return resp
+
+
+# --- Shared auth (all experiments) --------------------------------------------
+# One login, two passwordless doors: a verified Google ID token, or a one-time
+# emailed code. Both land in _finish_login, which links the verified email to
+# the visitor's uid exactly like /api/login — but here the email is PROVEN,
+# so an arena/recruiter account can't be claimed by typing someone's address.
+
+def _finish_login(request: Request, email: str) -> JSONResponse:
     anon_uid = request.cookies.get(UID_COOKIE) or uuid.uuid4().hex
     uid = anon_uid
     g = SkillGraph(DB_PATH, uid)
@@ -294,19 +370,302 @@ async def login(request: Request) -> JSONResponse:
             g.link_email(email, uid)
         g2 = SkillGraph(DB_PATH, uid)
         if restored:
-            # Cases finished on this device BEFORE logging in (e.g. the one
-            # just graded) must follow the person into their saved account.
             g2.merge_from(anon_uid)
         sessions = g2.sessions_count()
         g2.close()
     finally:
         g.close()
-
     resp = JSONResponse(
         {"ok": True, "email": email, "restored": restored, "sessions": sessions}
     )
     resp.set_cookie(UID_COOKIE, uid, max_age=COOKIE_MAX_AGE, samesite="lax")
     return resp
+
+
+def _email_for_request(request: Request) -> str | None:
+    uid = request.cookies.get(UID_COOKIE)
+    if not uid:
+        return None
+    g = SkillGraph(DB_PATH, uid)
+    try:
+        return g.email_for_uid(uid)
+    finally:
+        g.close()
+
+
+@app.get("/api/me")
+async def me(request: Request) -> JSONResponse:
+    return JSONResponse({"email": _email_for_request(request), **_auth_flags()})
+
+
+@app.post("/api/auth/google")
+async def auth_google(request: Request) -> JSONResponse:
+    if not AUTH_ATTEMPTS.allow(_client_ip(request)):
+        return JSONResponse(
+            {"ok": False, "error": "too many attempts — try again later"}, status_code=429
+        )
+    try:
+        data = await request.json()
+        assert isinstance(data, dict)  # "hi" / [1] are valid JSON, not requests
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=400)
+    email = await asyncio.to_thread(
+        auth.verify_google_token, str(data.get("credential") or "")
+    )
+    if not email:
+        return JSONResponse(
+            {"ok": False, "error": "Google sign-in failed — try the email code instead"},
+            status_code=401,
+        )
+    return _finish_login(request, email)
+
+
+@app.post("/api/auth/email/request")
+async def auth_email_request(request: Request) -> JSONResponse:
+    if not AUTH_ATTEMPTS.allow(_client_ip(request)):
+        return JSONResponse(
+            {"ok": False, "error": "too many attempts — try again later"}, status_code=429
+        )
+    try:
+        data = await request.json()
+        assert isinstance(data, dict)  # "hi" / [1] are valid JSON, not requests
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=400)
+    email = str(data.get("email") or "").strip().lower()
+    if not auth.valid_email(email):
+        return JSONResponse({"ok": False, "error": "invalid email"}, status_code=400)
+    if not CODE_REQUESTS_PER_EMAIL.allow(email):
+        # Independent of IP: stops inbox-bombing a victim from many addresses.
+        return JSONResponse(
+            {"ok": False, "error": "a code was already sent — check your inbox"},
+            status_code=429,
+        )
+    codes = auth.AuthCodes(DB_PATH)
+    try:
+        code = codes.issue(email)
+    finally:
+        codes.close()
+    if auth.email_enabled():
+        sent = await asyncio.to_thread(auth.send_code_email, email, code)
+        if not sent:
+            return JSONResponse(
+                {"ok": False, "error": "couldn't send the email — try again"},
+                status_code=502,
+            )
+        return JSONResponse({"ok": True})
+    if os.environ.get("PMCP_DEV_DOCS") and not os.environ.get("RENDER"):
+        # Local dev without a Resend key: hand the code back so the flow is
+        # testable end-to-end. Two independent guards keep it out of prod:
+        # the dev flag must be ON and we must NOT be on Render (which sets
+        # RENDER=true on every service) — so a stray PMCP_DEV_DOCS on the
+        # deployed instance can't turn login codes into an open door.
+        return JSONResponse({"ok": True, "dev_code": code})
+    return JSONResponse(
+        {"ok": False, "error": "email login isn't configured on this deploy"},
+        status_code=503,
+    )
+
+
+@app.post("/api/auth/email/verify")
+async def auth_email_verify(request: Request) -> JSONResponse:
+    if not AUTH_ATTEMPTS.allow(_client_ip(request)):
+        return JSONResponse(
+            {"ok": False, "error": "too many attempts — try again later"}, status_code=429
+        )
+    try:
+        data = await request.json()
+        assert isinstance(data, dict)  # "hi" / [1] are valid JSON, not requests
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=400)
+    email = str(data.get("email") or "").strip().lower()
+    code = str(data.get("code") or "").strip()
+    if not auth.valid_email(email) or not code:
+        return JSONResponse({"ok": False, "error": "invalid email or code"}, status_code=400)
+    if not VERIFIES_PER_EMAIL.allow(email):
+        # Without this, requesting a fresh code resets the per-code attempt
+        # counter — capping verifies per ADDRESS closes that guessing loop.
+        return JSONResponse(
+            {"ok": False, "error": "too many attempts for this email — wait a bit"},
+            status_code=429,
+        )
+    codes = auth.AuthCodes(DB_PATH)
+    try:
+        ok = codes.verify(email, code)
+    finally:
+        codes.close()
+    if not ok:
+        return JSONResponse(
+            {"ok": False, "error": "wrong or expired code — request a new one"},
+            status_code=401,
+        )
+    return _finish_login(request, email)
+
+
+# --- Experiment pages -----------------------------------------------------------
+# Each experiment is its own page with its own analytics namespace, but they all
+# share this one deploy, one domain, and one login. Keeping them at separate
+# paths keeps funnels, heatmaps, and experience changes cleanly separable.
+
+def _page(name: str, request: Request) -> FileResponse:
+    resp = FileResponse(STATIC_DIR / name)
+    if not request.cookies.get(UID_COOKIE):
+        resp.set_cookie(
+            UID_COOKIE, uuid.uuid4().hex, max_age=COOKIE_MAX_AGE, samesite="lax"
+        )
+    return resp
+
+
+@app.get("/arena")
+async def arena_page(request: Request) -> FileResponse:
+    return _page("arena.html", request)
+
+
+@app.get("/recruiter")
+async def recruiter_page(request: Request) -> FileResponse:
+    return _page("recruiter.html", request)
+
+
+@app.get("/referrals")
+async def referrals_page(request: Request) -> FileResponse:
+    return _page("referrals.html", request)
+
+
+_CASE_ID_RE = re.compile(r"^[a-z0-9-]{1,80}$")
+
+
+@app.get("/arena/room", response_model=None)
+async def arena_room(request: Request, case: str = "") -> HTMLResponse | RedirectResponse:
+    """The interview room, arena flavor: same static room page, but with the
+    experiment + case id injected so analytics stay in the arena namespace and
+    the WebSocket opens the chosen case. Login-gated — the arena asks for the
+    account up front, so a bare/foreign uid goes back to the picker."""
+    if not _CASE_ID_RE.match(case) or arena_case_by_id(case) is None:
+        return RedirectResponse("/arena")
+    if _email_for_request(request) is None:
+        return RedirectResponse("/arena?login=1")
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    # The room page carries an explicit injection marker; matching on it (not
+    # on script-tag syntax) means an innocent index.html edit can't silently
+    # turn arena sessions into default-tutor sessions.
+    marker = "<!-- PMCP_INJECT"
+    if marker not in html:
+        raise RuntimeError("index.html lost its PMCP_INJECT marker")
+    inject = (
+        f'<script>window.PMCP_EXPERIMENT="arena";window.PMCP_CASE_ID="{case}";</script>'
+    )
+    html = html.replace(marker, inject + "\n  " + marker, 1)
+    return HTMLResponse(html)
+
+
+@app.get("/api/arena/catalog")
+async def api_arena_catalog(request: Request) -> JSONResponse:
+    """Categories, cases (public metadata only), and which ones THIS user has
+    completed — so the picker can show progress ticks per category."""
+    done: list[str] = []
+    uid = request.cookies.get(UID_COOKIE)
+    if uid:
+        g = SkillGraph(DB_PATH, uid)
+        try:
+            done = sorted({h["case_id"] for h in g.history()})
+        finally:
+            g.close()
+    return JSONResponse({"categories": arena_catalog(), "completed": done})
+
+
+@app.post("/api/recruiter/chat")
+async def recruiter_chat(request: Request) -> JSONResponse:
+    """The recruiter copilot: one careful model call per message, grounded in
+    the researched interview-landscape knowledge base. Login required (each
+    call costs real money) and rate-limited per IP."""
+    if _email_for_request(request) is None:
+        return JSONResponse(
+            {"ok": False, "error": "sign in first"}, status_code=401
+        )
+    if not RECRUITER_CALLS.allow(_client_ip(request)):
+        return JSONResponse(
+            {"ok": False, "error": "you're sending messages very fast — take a breath"},
+            status_code=429,
+        )
+    try:
+        data = await request.json()
+        assert isinstance(data, dict)  # "hi" / [1] are valid JSON, not requests
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=400)
+    raw = data.get("messages")
+    if not isinstance(raw, list) or not raw:
+        return JSONResponse({"ok": False, "error": "no messages"}, status_code=400)
+    messages = []
+    for m in raw[-RECRUITER_MAX_HISTORY:]:
+        if not isinstance(m, dict):
+            continue  # a malformed item is a 400 below, never a 500 here
+        role = m.get("role")
+        text = str(m.get("text") or "").strip()[:RECRUITER_MAX_CHARS]
+        if role in ("user", "assistant") and text:
+            messages.append({"role": role, "content": text})
+    # The Messages API requires the FIRST turn to be the user and rejects
+    # consecutive same-role turns — both shapes appear naturally once the
+    # history window trims mid-conversation, so normalize instead of 502ing.
+    while messages and messages[0]["role"] != "user":
+        messages.pop(0)
+    merged: list[dict] = []
+    for m in messages:
+        if merged and merged[-1]["role"] == m["role"]:
+            merged[-1]["content"] += "\n" + m["content"]
+        else:
+            merged.append(m)
+    messages = merged
+    if not messages or messages[-1]["role"] != "user":
+        return JSONResponse({"ok": False, "error": "no user message"}, status_code=400)
+
+    client = anthropic.Anthropic()
+
+    def call() -> str:
+        resp = client.messages.create(
+            model=RECRUITER_MODEL,
+            max_tokens=2500,
+            system=[
+                {
+                    "type": "text",
+                    "text": recruiter_system_prompt(),
+                    # Stable prefix reused across every recruiter on the site.
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=messages,
+        )
+        return "".join(b.text for b in resp.content if b.type == "text").strip()
+
+    try:
+        reply = await asyncio.to_thread(call)
+    except Exception as exc:  # noqa: BLE001
+        # Log the real error server-side; the client gets a generic message —
+        # raw SDK exceptions leak model/config details worth nothing to users.
+        print(f"recruiter chat model error: {exc!r}", flush=True)
+        return JSONResponse(
+            {"ok": False, "error": "the copilot hit a snag — try that again"},
+            status_code=502,
+        )
+    return JSONResponse({"ok": True, "reply": reply})
+
+
+@app.get("/api/recruiter/guide")
+async def api_recruiter_guide() -> JSONResponse:
+    """The static field guide (question archetypes, concepts in plain english,
+    learning links) — browsable without login; only the chat costs money."""
+    return JSONResponse(recruiter_guide())
+
+
+_FAVICON = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+    '<text y=".9em" font-size="90">🎯</text></svg>'
+)
+
+
+@app.get("/favicon.ico")
+async def favicon() -> Response:
+    """Browsers request this on every page automatically — a real answer beats
+    a 404 in every console."""
+    return Response(_FAVICON, media_type="image/svg+xml")
 
 
 @app.get("/health")
@@ -492,6 +851,18 @@ async def session_ws(ws: WebSocket) -> None:
     if not WS_OPENS.allow(ip):
         await reject("too many new interviews from your network — try again later")
         return
+    # Arena sessions name their case (?case=<id>) and require a signed-in user —
+    # the page gates too, but the socket must hold on its own against scripts.
+    case: Case | None = None
+    case_id = ws.query_params.get("case") or ""
+    if case_id:
+        case = arena_case_by_id(case_id) if _CASE_ID_RE.match(case_id) else None
+        if case is None:
+            await reject("unknown case — pick one from the arena")
+            return
+        if _email_for_request(ws) is None:  # ws carries cookies just like a Request
+            await reject("sign in on the arena page to start a case")
+            return
     if (
         ACTIVE.get("all") >= MAX_SESSIONS
         or ACTIVE.get(f"ip:{ip}") >= MAX_SESSIONS_PER_IP
@@ -504,14 +875,14 @@ async def session_ws(ws: WebSocket) -> None:
     for k in keys:
         ACTIVE.inc(k)
     try:
-        await _run_session(ws, uid)
+        await _run_session(ws, uid, case)
     finally:
         for k in keys:
             ACTIVE.dec(k)
 
 
-async def _run_session(ws: WebSocket, uid: str) -> None:
-    case = load_case(default_case_path())
+async def _run_session(ws: WebSocket, uid: str, case: Case | None = None) -> None:
+    case = case or load_case(default_case_path())
     client = anthropic.Anthropic()
     interviewer = Interviewer(client, case, INTERVIEWER_MODEL)
     tracker = DeliveryTracker()

@@ -1,0 +1,48 @@
+{
+  "id": "core-pm-fitness-b2b-entry",
+  "archetype": "core-pm",
+  "company_persona": "a consumer fitness and habit-tracking app",
+  "interviewer_name": "Sam",
+  "title": "The corporate wellness question",
+  "type": "strategy",
+  "prompt": "You're a senior PM at Moventra, a consumer fitness app with 4 million monthly actives and $28 million in ARR from $9.99-a-month subscriptions. Consumer growth has slowed from 60% year-over-year to about 15%, and paid acquisition costs keep climbing. Meanwhile, HR and benefits teams keep emailing us, asking to buy Moventra for their employees. The CEO wants a recommendation by Friday: should Moventra enter the corporate wellness market — selling to employers who offer the app to their workforce — and if so, how? Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "cash_and_burn": "Moventra has $15M in cash and burns about $800K/month — roughly 18 months of runway. The company is not profitable and the board does not want another raise at current growth rates.",
+    "consumer_trajectory": "Paid CAC — measured per new paying subscriber, not per install — rose from $38 to $65 over the last 18 months. Free-to-paid conversion of new signups is stuck around 6%, and monthly churn of paying subscribers has held steady at 5% throughout. Net consumer ARPU is ~$7.50/month after app-store fees.",
+    "inbound_signal": "40 unsolicited inquiries from HR and benefits teams over the last two quarters, mostly mid-market companies of 500–5,000 employees. Moventra has never done any outbound B2B effort.",
+    "pilot_results": "A quiet free pilot ran with 3 companies (~4,000 eligible employees, via founder connections): 22% of eligible employees activated in the first month, and their 60-day retention was 41% versus ~30% for typical consumer signups.",
+    "engagement_lever": "Users who join Moventra's team-challenge feature retain roughly 2x better than solo users. Challenges are the product's strongest retention lever and map naturally onto coworker groups.",
+    "enterprise_gaps": "Moventra has no SSO, no admin dashboard, no HRIS integrations, and no SOC 2. Engineering estimates 8 of the company's 40 engineers for about 6 months to reach mid-market readiness, plus a 4–5 month SOC 2 audit that can run in parallel.",
+    "sales_capacity": "There is no sales team — one BD person, and the 3 pilots were founder-led. A loaded enterprise AE plus sales engineer would cost roughly $500K/year.",
+    "competitive_landscape": "Incumbent Wellstrata holds ~40% of enterprise corporate-wellness deals at the top of market pricing, but its typical employee activation is only ~15% and its app reviews are poor. Moventra's closest consumer rival, Fitmara, announced a partnership with a national benefits broker last month.",
+    "buy_option": "A banker's teaser recently crossed the CEO's desk: TeamSpark, a small B2B wellness platform with $2.5M ARR, 60 mid-market clients, and an enterprise-ready stack, asking around $25M.",
+    "pricing_economics": "Market pricing is $3–6 per employee per month (PEPM), billed on all eligible employees whether or not they activate. Across the industry, roughly 20% of eligible employees is a typical activation rate."
+  },
+  "ideal_answer_notes": [
+    "Clarifies the objective before touching the market: is the CEO optimizing for revenue growth, runway extension, or defensibility — and re-anchors the whole case on the 18-month runway once they elicit cash and burn.",
+    "Diagnoses why consumer growth stalled before evaluating the new market: elicits that CAC per new paying subscriber nearly doubled ($38 to $65) while monthly churn held flat at 5%, and concludes on their own that the slowdown is an acquisition-cost problem, not a churn problem — exactly the cost that employer-paid B2B2C distribution removes.",
+    "Asks for demand evidence instead of assuming it: surfaces the 40 inbound mid-market inquiries and the 3-company pilot showing 22% activation and 41% 60-day retention versus ~30% consumer baseline.",
+    "Runs the unit-economics math out loud from raw inputs: at $4 PEPM billed on all eligible employees with ~20% activation, revenue per engaged user works out to about $20/month versus $7.50 net consumer ARPU, with near-zero per-employee acquisition cost — B2B2C beats consumer economics if activation holds.",
+    "Sizes the capability gap honestly: SSO, admin, HRIS, and SOC 2 cost 8 of 40 engineers for ~6 months plus a parallel audit, and asks what that pulls off the consumer roadmap.",
+    "Evaluates build vs buy vs partner explicitly: the $25M TeamSpark ask against $15M total cash kills the acquisition; a benefits-broker partnership (the move Fitmara just made) is the fast distribution play; building a minimal mid-market feature set is the affordable middle path.",
+    "Positions against the competition on engagement, not features: Wellstrata wins enterprise deals but activates only ~15% of employees, while Moventra's team challenges drive 2x retention — the sales pitch is 'employees actually use it.'",
+    "Recommends a staged entry: convert the free pilot into 5–10 paid mid-market deals at $3–4 PEPM with founder-led sales plus one AE, build only SSO plus a basic admin dashboard, start SOC 2 now, and review in 6 months.",
+    "Defines scale/kill criteria and names risks: scale if activation stays at or above 20% and pilot logos renew; kill if sales cycles exceed ~2 quarters; flags cannibalization of existing $9.99 subscribers and starving the consumer roadmap as the two biggest risks."
+  ],
+  "resource_tags": [
+    "growth_loops",
+    "north_star"
+  ],
+  "extra_checklist": [
+    "Asks about cash, burn, or runway before recommending, and the final recommendation explicitly respects the $15M constraint (e.g., rejects the $25M TeamSpark acquisition on affordability).",
+    "Performs the PEPM-versus-consumer-ARPU comparison out loud using elicited numbers (e.g., $4 PEPM at ~20% activation is roughly $20 per engaged user versus $7.50 net consumer ARPU).",
+    "Delivers a conditional, staged recommendation with at least one numeric success threshold and one explicit kill criterion, rather than an unconditional yes or no."
+  ],
+  "anchors": {
+    "strong": "Diagnoses the stall as a CAC problem from the raw numbers, elicits the pilot results and PEPM pricing, and computes ~$20/month per engaged user at $4 PEPM and 20% activation versus $7.50 net consumer ARPU. Rejects the $25M TeamSpark acquisition against $15M cash, then delivers a staged mid-market entry — paid pilot conversions, SSO plus basic admin only, SOC 2 started now — with a numeric scale threshold, an explicit kill criterion, and cannibalization flagged.",
+    "at_bar": "Asks enough situational questions to find the inbound demand and pilot results, but needs nudges from Sam to probe cash position or the acquisition teaser. Does rough revenue math without cleanly comparing PEPM economics to consumer ARPU. Lands on a reasonable pilot-first entry recommendation, but success metrics stay vague and the 8-engineer, 6-month enterprise build cost only surfaces after prompting.",
+    "weak": "Jumps to a framework or an unconditional 'yes, the TAM is huge' without eliciting cash, pilot data, or competitor moves. Never asks what enterprise readiness costs or who would sell the product, and ignores or mishandles the TeamSpark buy option. Offers no staging, no success metrics, and no kill criteria — treating a resource-constrained strategy decision as a market-sizing exercise."
+  },
+  "teaser": "Growth is stalling and HR teams keep calling — should Moventra sell to employers?",
+  "minutes": 20
+}

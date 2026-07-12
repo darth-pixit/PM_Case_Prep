@@ -1,0 +1,45 @@
+{
+  "id": "growth-pm-podcast-creators-2x",
+  "archetype": "growth-pm",
+  "company_persona": "a podcast creation, hosting, and distribution platform",
+  "interviewer_name": "Omar",
+  "title": "Double the podcasters",
+  "type": "strategy",
+  "prompt": "You're the growth PM at Castline, a platform where people record, edit, host, and distribute podcasts. We have about 41,000 weekly active creators — people who published, recorded, or edited an episode in the past seven days — and that number has been flat for two quarters. The CEO just committed to the board that we'll double weekly active creators to 82,000 within 12 months. Marketing is pushing to pour our budget into paid acquisition; a few engineers argue we should build referral and collaboration loops instead. You've been asked to own the plan and recommend where the money and headcount go. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "signup_funnel": "~13,000 new creator signups per month, but only 22% publish a first episode within 30 days — the biggest drop-off is the editing-and-publishing step, which beginners find intimidating. Of those who do publish, only ~57% are still weekly active 30 days later, so sustained inflow is 13,000 x 22% x 57% ≈ 1,630 creators per month.",
+    "podfade_churn": "About 4% of weekly active creators churn each month ('podfade') — roughly 1,640 at today's 41,000, which almost exactly cancels the ~1,630 sustained monthly adds; that is why the topline is flat. Creators who publish 3 episodes and get 50+ total listens in their first month retain roughly 2.5x better than average.",
+    "paid_economics": "Blended paid CAC is ~$70 per creator signup; at 22% activation that is ~$320 per activated creator. Average lifetime value per activated creator is only ~$60: the 8% who take the $12/month hosting plan stay paid about 20 months (≈$19 blended), and Castline's 15% cut of creator ad-marketplace and listener-support earnings adds roughly $41.",
+    "organic_loop_signal": "31% of signups — about 4,000 per month — already arrive organically, via guest/co-host invites and the 'Made with Castline' link on shared episode pages. Invited guests activate at roughly 3x the rate of paid-ad traffic.",
+    "listener_pool": "Castline's listening apps have 9 million weekly listeners, but only ~0.4% have ever started a show. The recording tool is buried three menus deep in the listener app.",
+    "competitor_move": "Castline's largest competitor launched free unlimited hosting plus an AI editing suite last quarter and is outspending Castline roughly 5:1 on ads; Castline's paid CPCs are up 30% year over year.",
+    "budget_team_board": "$4M annual growth budget and about 20 months of runway. The growth pod is 4 engineers, 1 designer, and 1 data scientist; marketing runs paid channels separately. A Series C raise is planned in about 12 months, and the board treats creator growth as the headline metric — near-term creator revenue matters less than a credible, compounding growth story."
+  },
+  "ideal_answer_notes": [
+    "Frame the gap before anything else: 41,000 weekly active creators, flat for two quarters, must reach 82,000 in 12 months — roughly +3,400 net creators per month versus approximately zero today. Every proposal gets judged against that number.",
+    "Model WAC as stock-and-flow before picking tactics: ask Omar for monthly signups (13,000), 30-day activation (22%), the day-30 sustain rate of new publishers (57%), and monthly podfade (4%) — then verify the baseline reconciles: ~1,630 sustained adds against ~1,640 churned, which is exactly why growth is flat.",
+    "Spot the leaky bucket: only ~12.5% of signups (22% x 57%) ever become sustained weekly actives, so acquisition spend leaks out the bottom; improving activation and first-month retention changes the economics of every channel, so it sequences first.",
+    "Run the paid math out loud: $70 CAC / 22% activation ≈ $320 per activated creator against ~$60 LTV, with CPCs up 30% because a competitor outspends 5:1 — reject 'scale paid now' on arithmetic, not vibes; paid returns later only for warm audiences where measured cost per activated creator clears LTV.",
+    "Elicit the platform-native supply loops: guest/co-host invites already drive 31% of signups (~4,000/month) and activate at ~3x the rate of paid traffic, and 'Made with Castline' surfaces on shared episode pages — easier, instrumented invites can add ~2,000-2,500 signups per month, and loops compound while paid is linear.",
+    "Size the listener-to-creator crossover: 9M weekly listeners and only 0.4% have ever created; a first-class 'start a show' entry point moving penetration toward ~1% over the year is ~54,000 warm signups (~5,500/month at full ramp) at near-zero CAC.",
+    "Answer the competitor on activation rather than price: build the AI editing suite because editing is the #1 first-episode drop-off, and differentiate on distribution and collaboration — with 20 months of runway, a free-hosting price war against a 5:1 spender is unwinnable.",
+    "Sequence to the 4-engineer pod's capacity: Q1 attacks time-to-first-episode (templates, AI editing) plus a first-month milestone program pushing 3 episodes and 50 listens; Q2 amplifies the invite loop and the listener entry point; the $4M shifts from ads toward product headcount and modest creator incentives.",
+    "Close with a compounding model that actually reaches 82k: signups 13,000→21,000 (invites plus listener crossover), blended activation 22%→38% (warm channels activate ~3x paid), day-30 sustain 57%→73%, podfade 4%→2.7%. Full-ramp inflow ≈ 21,000 x 38% x 73% ≈ 5,800/month against ~2,200 churn even at the 82k level — and month-by-month, with all levers live by end of Q1, the stock crosses 82,000 in month 12. Flag the Q1 ship date as the biggest risk, add counter-metrics for spam shows and listener experience, and set 90-day checkpoints with kill criteria."
+  ],
+  "resource_tags": [
+    "growth_loops",
+    "north_star"
+  ],
+  "extra_checklist": [
+    "Computes cost per activated creator (CAC divided by activation rate, ~$320) and compares it to the ~$60 activated-creator LTV before recommending or rejecting paid acquisition.",
+    "Proposes at least one podcast-native supply loop (guest/co-host invites or listener-to-creator conversion) and sizes it using the 31%-organic/4,000-invites-per-month or 9M-listener numbers elicited from the interviewer.",
+    "Builds an explicit stock-and-flow model — signups x activation x day-30 sustain, minus podfade churn — and quantifies how their chosen lever targets move net adds from ~zero toward the ~+3,400/month pace, honestly flagging any shortfall rather than asserting the plan works without arithmetic."
+  ],
+  "anchors": {
+    "strong": "Computes the +3,400-net-per-month gap unprompted, elicits the full funnel — 13k signups, 22% activation, 57% day-30 sustain, 4% podfade — and shows why it nets to zero. Does the $320-per-activated-creator versus $60 LTV math and rejects scaling paid. Sizes the invite loop and listener crossover, sequences activation fixes before amplifying loops, treats the competitor as an activation problem, and closes with a compounding model that credibly reaches 82k plus guardrails and checkpoints.",
+    "at_bar": "Asks reasonable clarifying questions and uncovers activation, early retention, and churn with some nudging. Once told CAC and LTV, correctly concludes paid is underwater and pivots toward invite loops and the listener pool, but sizes them loosely and only partially connects fixing activation to channel economics. Delivers a sequenced plan and acknowledges the competitor's free tier, yet the arithmetic to 2x stays rough and guardrails or kill criteria get one passing mention.",
+    "weak": "Jumps straight to tactics — ads, influencer partnerships, SEO, referral bonuses — without asking for funnel numbers. Never computes cost per activated creator, misses that most signups never become sustained weekly actives, and treats the 9 million listeners and 41,000 creators as one undifferentiated audience. Panics about the competitor's free hosting by proposing matching spend, and ends with an unprioritized tactic list and no model showing how anything doubles weekly active creators in 12 months."
+  },
+  "teaser": "Flat creator growth, a bold board promise, and one budget to spend wisely.",
+  "minutes": 20
+}
