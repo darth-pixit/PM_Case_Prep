@@ -58,6 +58,10 @@ class Case(BaseModel):
     # Concept keys (see resources.py) this case exercises beyond the six
     # dimensions — used to attach "go deeper" learning links to the scorecard.
     resource_tags: list[str] = Field(default_factory=list)
+    # Arena catalog metadata (browser-safe): a one-line hook shown on the case
+    # card, and a rough time estimate. Both optional — the tutor case skips them.
+    teaser: str = ""
+    minutes: int = 20
 
 
 class Observation(BaseModel):

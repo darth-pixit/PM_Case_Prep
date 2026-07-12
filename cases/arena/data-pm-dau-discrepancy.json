@@ -1,0 +1,48 @@
+{
+  "id": "data-pm-dau-discrepancy",
+  "archetype": "data-pm",
+  "company_persona": "a cross-platform collaborative notes app",
+  "interviewer_name": "Nina",
+  "title": "The 500K DAU gap",
+  "type": "execution",
+  "prompt": "You're a PM at Driftpad, a cross-platform collaborative notes app. The board meeting is in ten days, and there's a problem: the Growth team's product-analytics dashboard shows 2.1 million DAU, up 27% this quarter, while the data platform team's warehouse reports 1.6 million DAU, roughly flat. Until recently the two numbers agreed within a few percent. Each team insists its pipeline is correct, and the CEO has asked you to figure out why they disagree, which number goes in the board deck, and how to make sure this never happens again. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "history_onset": "The two numbers tracked within ~5% of each other — a stable ~80K difference, with Growth's number always the higher one — for over a year. The gap opened six weeks ago, widened steadily for about two weeks, then plateaued at ~500K users (~31% of the warehouse number). It was neither a step change nor a slow year-long drift.",
+    "definitions": "Growth's DAU: any device or user that fires at least one client-SDK event in a local-time calendar day, in a third-party product-analytics tool. Data platform's DAU: unique authenticated users with at least one server-logged content action (view, edit, comment, share) in a UTC day, computed in the warehouse.",
+    "segment_platform": "The gap is entirely on mobile. Warehouse DAU by platform: Android ~1.15M, iOS ~300K, web ~150K (sums to 1.6M). Growth-tool DAU: Android ~1.59M, iOS ~357K, web ~153K (sums to ~2.1M). Absolute gaps: Android ~440K (~38%), iOS ~57K (~19%), web ~3K (~2%) — totaling ~500K. If the candidate cuts by geography or plan tier instead, the gap looks uniform.",
+    "release_smart_sync": "Six weeks ago mobile shipped 'Smart Sync' — OS-initiated background refresh that wakes the app to pre-sync notes. Staged rollout: 10% to 100% over two weeks, mobile only. Android's implementation wakes the app process far more aggressively than iOS's, which is why Android's gap percentage is roughly double iOS's. Nothing else shipped on mobile in the window; web shipped a redesigned sidebar (irrelevant).",
+    "instrumentation_status": "No analytics SDK version change, no event-schema change, no ETL incidents; both pipelines pass their data-quality checks. However, the client SDK has always fired session_start on ANY process launch — including background wakes — because until Smart Sync, background launches basically didn't happen.",
+    "confirming_query": "If the candidate asks for users with sessions but no foreground activity: ~420K mobile 'DAU' per day in the Growth tool have a session_start but zero screen_view events (~375K Android, ~45K iOS), all in cohorts with Smart Sync enabled. The daily gap also tracks the Smart Sync rollout percentage almost exactly.",
+    "timezone_difference": "Red herring: local-day vs UTC-day boundaries do cause a discrepancy, but it has always been ~25K users (~1.5%), is spread roughly in proportion to each platform's DAU (web's entire ~3K gap is just this), and is unchanged in the window.",
+    "guest_accounts": "Red herring: Growth counts anonymous guest devices; the warehouse counts only signed-in users. Guests are ~55K of client DAU (~3%), almost all on mobile — the apps allow quick notes before sign-in, while web requires login — and stable for a year. Guests (~55K) plus timezone (~25K) equal the ~80K the two systems have always disagreed by; adding background wakes (~420K) fully reconciles the ~500K gap.",
+    "brazil_campaign": "Red herring: a paid install campaign in Brazil started five weeks ago. It added ~40K DAU, but those users appear in BOTH systems, so it cannot explain any of the gap.",
+    "board_context": "Last quarter's board deck used the Growth number (then ~1.65M) with a 2.0M year-end target. The CEO has already mentioned '2 million DAU' to two prospective investors."
+  },
+  "ideal_answer_notes": [
+    "Before hypothesizing, gets both teams' exact DAU definitions and decomposes them along three axes: qualifying activity (any SDK event vs server-logged content action), identity key (device/guest vs authenticated user), and day boundary (local vs UTC).",
+    "Establishes the shape of the divergence: agreement within ~5% (a stable ~80K delta) for over a year, gap opening six weeks ago, widening for two weeks, then plateauing — recognizes this as a rollout-shaped curve rather than a step change (single bad deploy) or slow drift (identity decay).",
+    "Sizes the known definitional deltas — timezone (~25K) and guest devices (~55K) — recognizes they sum to the ~80K the systems have always disagreed by, and explicitly dismisses them as stable and an order of magnitude too small to explain the new ~420K of gap, rather than chasing them.",
+    "Segments the gap by platform in absolute terms: Android ~440K of the gap (~38%), iOS ~57K (~19%), web ~3K (~2%) — concludes the anomaly lives in client-side mobile measurement, not the warehouse ETL, since web (same warehouse pipeline) reconciles.",
+    "Asks what shipped on mobile ~6 weeks ago and connects Smart Sync's staged 10%-to-100% two-week rollout to the two-week widening of the gap — and notes Android's more aggressive background refresh explains why its gap percentage is roughly double iOS's.",
+    "Articulates the mechanism precisely: the SDK has always counted any process launch as a session; Smart Sync created OS-initiated background wakes, so the Growth tool now counts ~420K users per day who never actually foregrounded the app. Notes this is a feature-instrumentation interaction — nothing 'broke' and all data-quality checks pass.",
+    "Confirms before concluding: queries for session_start with zero screen_view events (~420K/day — ~375K Android, ~45K iOS — all in Smart Sync cohorts) and checks that the gap tracks the rollout percentage; shows the full reconciliation 420K + 55K + 25K ≈ 500K.",
+    "Makes a call for the board: recommends one canonical DAU based on intentional foreground/authenticated activity (~1.6M, roughly flat), with a restated historical series and a bridge slide explaining the inflation — flags the CEO's '2 million' investor conversations as a communication risk to handle before the meeting.",
+    "Prevents recurrence: publish the DAU definition in a metrics dictionary with a single owner, filter background-initiated sessions in the SDK or ETL, and add an automated client-vs-warehouse reconciliation check that alerts on >5% divergence."
+  ],
+  "resource_tags": [
+    "metric_debugging",
+    "sql_metrics"
+  ],
+  "extra_checklist": [
+    "Candidate asks for both teams' precise DAU definitions (qualifying event, identity key, day boundary) before proposing any root-cause hypotheses.",
+    "Candidate numerically rules out the timezone (~25K) and guest-device (~55K) differences — recognizing they sum to the stable ~80K baseline the systems have always disagreed by, far too small to explain the new ~420K — instead of stopping at the first definitional difference found.",
+    "Candidate specifies a concrete confirming analysis (sessions with no screen_view / foreground events, or gap tracking the Smart Sync rollout cohort) before declaring the root cause and choosing a board number."
+  ],
+  "anchors": {
+    "strong": "Decomposes both DAU definitions on event, identity, and day-window axes; gets the timeline and reads the two-week widening as rollout-shaped. Cuts by platform with absolute numbers, isolates mobile, ties Smart Sync background wakes to session_start inflation, and confirms with the zero-screen_view query, reconciling 420K + 55K + 25K to the full gap. Dismisses timezone, guests, and the Brazil campaign numerically. Recommends a canonical foreground-based DAU, a restated series for the board, and a divergence alert.",
+    "at_bar": "Asks for definitions and eventually segments by platform, though may need a nudge to look at the timeline or to cut mobile vs web. Briefly chases the timezone difference or Brazil campaign but drops them when the sizes don't add up. Once told about Smart Sync, correctly explains the background-wake mechanism, but may not propose a confirming query unprompted. Picks the warehouse number for the board; prevention and the CEO-communication risk are thin.",
+    "weak": "Hypothesis-dumps — bots, seasonality, a competitor, 'the warehouse must be dropping events' — without ever asking how each team defines DAU. Latches onto the timezone boundary or the Brazil campaign as the answer without sizing either. Never segments by platform, never asks what shipped six weeks ago, never links onset shape to a rollout. Ends by proposing the teams 'align on a number' with no mechanism, no confirmation, and no recommendation for the board deck."
+  },
+  "teaser": "Two dashboards, one product, 500,000 missing users — which DAU goes to the board?",
+  "minutes": 20
+}

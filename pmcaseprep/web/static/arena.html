@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Case Arena — PM Case Prep</title>
+  <link rel="stylesheet" href="/static/hub.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="hub">
+      <h1>🏟️ Case Arena</h1>
+      <span class="sub">5 PM tracks · 5 cases each · live AI interviewer</span>
+      <span class="whoami" id="whoami"></span>
+    </header>
+    <p class="lede">Pick the kind of PM you're interviewing to be. Every case is a full
+    mock interview — voice or typing — graded against a real hiring rubric, and your
+    skill graph builds across all of them.</p>
+
+    <!-- Gate: the arena asks who you are FIRST, so every case lands in an
+         account that follows you across devices (and so we can let you in
+         on any of them later). -->
+    <div class="card" id="gateCard">
+      <h2>Sign in to enter</h2>
+      <div id="authMount"><p class="hint">Checking your session…</p></div>
+    </div>
+
+    <div id="cats" hidden>
+      <div class="cat-grid" id="catGrid"></div>
+    </div>
+
+    <div id="caseList" hidden>
+      <p class="crumb"><a id="backToCats">← All tracks</a></p>
+      <div class="card">
+        <h2 id="clTitle"></h2>
+        <p class="hint" id="clBlurb"></p>
+        <div id="clRows"></div>
+      </div>
+    </div>
+
+    <p class="footer-nav">Also on this site: <a href="/recruiter">Hiring for AI/DS? — recruiter copilot</a>
+      · <a href="/referrals">Find your referral paths</a></p>
+  </div>
+  <script src="/static/shared.js?v=1"></script>
+  <script src="/static/arena.js?v=1"></script>
+</body>
+</html>

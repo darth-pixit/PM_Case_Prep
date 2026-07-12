@@ -150,6 +150,38 @@ RESOURCES: dict[str, list[dict[str, str]]] = {
             "PM-oriented framing: evals as regression tests across model versions.",
         ),
     ],
+    "growth_loops": [
+        _r(
+            "Growth Loops are the New Funnels",
+            "Brian Balfour, Reforge",
+            "https://www.reforge.com/blog/growth-loops",
+            "Why compounding loops beat linear funnels — the mental model growth cases reward.",
+        ),
+    ],
+    "north_star": [
+        _r(
+            "Every Product Needs a North Star Metric",
+            "John Cutler, Amplitude",
+            "https://amplitude.com/blog/product-north-star-metric",
+            "Choosing one metric tied to customer value, plus the input-metric tree under it.",
+        ),
+    ],
+    "api_design": [
+        _r(
+            "API Design Guide",
+            "Google Cloud",
+            "https://cloud.google.com/apis/design",
+            "The canonical public guide to resource-oriented API design and its tradeoffs.",
+        ),
+    ],
+    "sql_metrics": [
+        _r(
+            "Mode SQL Tutorial",
+            "Mode Analytics",
+            "https://mode.com/sql-tutorial/",
+            "Hands-on SQL from zero through analytical joins — the standard free tutorial.",
+        ),
+    ],
 }
 
 

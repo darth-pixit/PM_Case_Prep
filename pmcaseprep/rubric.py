@@ -76,6 +76,11 @@ ARCHETYPE_WEIGHTS: dict[str, dict[str, float]] = {
     "b2b": {"prioritization": 1.4, "data_business": 1.3, "creativity": 0.8},
     "data": {"data_business": 1.6, "structure": 1.3, "creativity": 0.7},
     "design": {"user_empathy": 1.6, "creativity": 1.4, "data_business": 0.8},
+    # Arena tracks (the top-5 PM hiring categories). ai-pm above serves both.
+    "core-pm": {"user_empathy": 1.3, "creativity": 1.2, "communication": 1.1},
+    "growth-pm": {"data_business": 1.6, "prioritization": 1.3, "user_empathy": 0.9},
+    "platform-pm": {"structure": 1.5, "data_business": 1.2, "creativity": 0.8},
+    "data-pm": {"data_business": 1.6, "structure": 1.3, "creativity": 0.7},
 }
 
 # Aggregate bands over the (weighted) 1-4 average, AFTER the <=2 gate.
@@ -140,6 +145,16 @@ CATEGORY_CHECKLISTS: dict[str, list[str]] = {
         "Considers eval-set regression and hallucination, not just UX",
         "Reasons about model tradeoffs (quality vs latency vs cost)",
         "Proposes an experiment-based confirmation before concluding",
+    ],
+    "system-design": [
+        "Clarifies who the customer is (internal teams / external developers) and "
+        "what job the system does for them before drawing boxes",
+        "States requirements and scale assumptions (traffic, latency, consistency) "
+        "explicitly instead of designing in a vacuum",
+        "Reasons about tradeoffs (build vs buy, latency vs cost, reliability vs "
+        "velocity) rather than reciting one architecture",
+        "Defines success metrics and an SLA/SLO for the system",
+        "Plans rollout/migration and failure modes, not just the happy path",
     ],
 }
 

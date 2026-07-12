@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Referral Paths — PM Case Prep</title>
+  <link rel="stylesheet" href="/static/hub.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="hub">
+      <h1>🤝 Referral Paths</h1>
+      <span class="sub">find the people who'd actually refer you</span>
+    </header>
+    <p class="lede">A referral multiplies your interview odds. You already know the
+    people — close friends, college batchmates, old teammates — this tool just
+    surfaces them from your own LinkedIn data, grouped by how you know them.</p>
+
+    <div class="notice">🔒 <b>Your connections never leave this page.</b> The file is
+    read entirely in your browser — nothing is uploaded, nothing is stored on any
+    server. Close the tab and it's gone.</div>
+
+    <div class="card" id="importCard">
+      <h2>1 · Get your LinkedIn connections file</h2>
+      <ol class="steps">
+        <li>On LinkedIn: <b>Settings &amp; Privacy → Data privacy → Get a copy of your data</b></li>
+        <li>Pick <b>“Want something in particular?” → Connections</b> and request the archive</li>
+        <li>LinkedIn emails you a download link (usually within ~10 minutes)</li>
+        <li>Unzip it and drop <b>Connections.csv</b> below</li>
+      </ol>
+      <p class="hint">Why a file and not a “Connect LinkedIn” button? LinkedIn shut down
+      its connections API years ago — no app can read your network directly anymore.
+      The official export is the one ToS-clean way, and it keeps your data in your hands.</p>
+      <div class="drop" id="drop">
+        <b>Drop Connections.csv here</b> — or click to choose the file
+        <input type="file" id="file" accept=".csv,text/csv" hidden />
+      </div>
+    </div>
+
+    <div class="card" id="aboutYou" hidden>
+      <h2>2 · A few quick facts (better grouping)</h2>
+      <p class="hint">The export lists each person's company and when you connected —
+      but not where they studied. These answers unlock smarter buckets, starting with
+      the one that matters most: who you know at the company you're targeting.</p>
+      <div class="preset-row" style="align-items:center">
+        <input type="text" id="targetCompany" placeholder="Company you're applying to (optional)" style="max-width:280px" />
+        <input type="text" id="myCompanies" placeholder="Companies you've worked at (comma-separated)" style="max-width:340px" />
+        <input type="text" id="collegeYears" placeholder="College years, e.g. 2014-2018" style="max-width:200px" />
+        <button class="btn" id="groupBtn">Show my paths</button>
+      </div>
+    </div>
+
+    <div id="groups" hidden></div>
+
+    <div class="card">
+      <h2>What else could we connect?</h2>
+      <p class="hint">Honest status of every other door into “people who'd refer you”.
+      Tap the ones you'd actually use — that's how we pick what to build next.</p>
+      <div id="connectors"></div>
+    </div>
+
+    <p class="footer-nav">Also on this site: <a href="/arena">Case Arena — practice PM interviews</a>
+      · <a href="/recruiter">Recruiter copilot</a></p>
+  </div>
+  <script src="/static/shared.js?v=1"></script>
+  <script src="/static/referrals.js?v=1"></script>
+</body>
+</html>

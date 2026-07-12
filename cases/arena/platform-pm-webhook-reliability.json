@@ -1,0 +1,49 @@
+{
+  "id": "platform-pm-webhook-reliability",
+  "archetype": "platform-pm",
+  "company_persona": "a payments API platform serving online merchants",
+  "interviewer_name": "Tara",
+  "title": "The sliding webhook SLO",
+  "type": "execution",
+  "minutes": 20,
+  "prompt": "You're the PM for the eventing platform at Ledgerline, a payments API company — think card processing and payouts for online businesses. Every payment event — charge succeeded, refund issued, payout sent — reaches merchants via webhooks. Our headline reliability metric, webhook delivery success within 24 hours, has slid from 99.9% three weeks ago to about 97% today. Our published SLO is 99.9%, some enterprise contracts carry service credits below 99.5% monthly, and a few merchants are complaining about missed order events. Leadership wants a diagnosis and a plan by end of week. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "metric_definition": "Delivery success = % of webhook events that receive a 2xx from the merchant endpoint within 24 hours, counting up to 8 retry attempts. It is volume-weighted across all events, not averaged per merchant. Definition, logging, and dashboards are unchanged.",
+    "onset": "A three-week slide that steepens week over week — roughly 99.9 → 99.5 → 98.3 → 97.0 — with each week's drop larger than the last. Not a step change and not a one-day cliff: the curve bends downward the way something ramping would.",
+    "segment_merchant": "Failures are heavily concentrated: Velora, a large marketplace that migrated from a competitor ~3 weeks ago, now receives ~15% of all webhook volume and has ~81% delivery success. Excluding Velora, platform-wide success is 99.85%.",
+    "volume_mix": "Total webhook volume is up ~18% in 3 weeks, almost entirely from Velora's staged migration (10% → 50% → 100% of their traffic in weekly stages). Each ramp stage lines up with a steeper segment of the slide: Velora was ~2% of volume in week one, ~8% in week two, ~15% now.",
+    "error_signature": "New failures are connect timeouts and HTTP 429s to a small set of destination IPs, spiking during Velora's peak hours. Backoff retries often land in the next peak and fail again, so events exhaust the 24-hour window.",
+    "release": "A delivery-worker deploy (connection-pooling refactor) shipped 12 days ago. Tempting — but the slide began ~9 days before that deploy, and during the staged rollout failure rates were identical for old and new worker versions.",
+    "external": "A 90-minute outage at a major cloud provider 8 days ago caused a sharp one-day dip that fully recovered the next day. It does not explain the three-week trend.",
+    "retry_policy": "Retry policy has been unchanged for 2 years: 8 attempts over 24 hours with exponential backoff, no jitter, no per-endpoint rate limiting, and no endpoint-level circuit breaker.",
+    "support_signal": "Six of the eight open tickets about missed events are from Velora's ops team; the other two are small merchants affected only on the cloud-outage day.",
+    "slo_context": "Ledgerline publishes a 99.9% delivery SLO. Service credits are per-merchant: each enterprise contract keys off that merchant's own monthly delivery rate and pays credits below 99.5%. The standard MSA carves out failures caused by the merchant's own endpoint (4xx/timeouts), but Velora negotiated that carve-out removed during the migration deal — burned by their previous provider, they insisted every undelivered event count. All other enterprise merchants sit above 99.5%, so Finance's ~$180K July credit-exposure estimate is essentially all Velora, assuming their delivery stays near 81%."
+  },
+  "ideal_answer_notes": [
+    "Pin the metric before hypothesizing: confirm delivery success means 2xx within 24h across up to 8 retries, that it is volume-weighted across events (not per-merchant), and that no instrumentation or definition change occurred.",
+    "Ask for the onset shape: a three-week slide that steepens week over week (99.9 → 99.5 → 98.3 → 97.0) points to something ramping — a traffic-mix shift or a staged rollout — not a one-time bad deploy or outage.",
+    "Segment failures by merchant/endpoint, error code, region, and worker version. Discover the concentration: Velora, a marketplace that migrated ~3 weeks ago on a 10% → 50% → 100% staged ramp, is now ~15% of volume with ~81% success; excluding them the platform sits at 99.85%.",
+    "Do the mix arithmetic out loud: 15% of volume × 19% failure ≈ 2.9 points — this single endpoint fully explains the aggregate slide, and the week-by-week steepening matches Velora's ramp stages. The platform is not broadly degrading; a volume-weighted metric is being dragged by one whale.",
+    "Actively kill the red herrings with evidence: the worker deploy shipped 9 days after the slide began and old vs. new worker versions show identical failure rates; the cloud-provider outage was a one-day dip that fully recovered.",
+    "Explain the mechanism: Velora's under-provisioned receiver returns 429s and times out at peak; exponential backoff without jitter re-collides retries into the next peak, so events burn through all 8 attempts inside the 24h window.",
+    "Probe how credits are actually contracted: they key off each merchant's own monthly rate, and while the standard MSA excludes receiver-caused failures, Velora negotiated that carve-out away — so the ~$180K exposure is real but sits almost entirely in one contract, not across the merchant base.",
+    "Immediate mitigation: engage Velora's ops team (they've already filed 6 tickets) to scale or queue their receiver; offer smeared/off-peak retries or a temporary per-endpoint delivery rate cap; brief leadership that the credit exposure is concentrated in Velora's contract, with a per-merchant view showing everyone else above 99.5%.",
+    "Platform-level fixes, not just this merchant: per-endpoint delivery health metrics and top-N endpoint alerting, retry jitter and adaptive backpressure, endpoint circuit breakers, and a load-readiness check in enterprise onboarding so the next big migration doesn't repeat this.",
+    "Metric and SLO hygiene: report the per-merchant distribution (e.g., % of merchants meeting 99.9%) alongside the volume-weighted aggregate, add mix-adjusted alerting so one giant endpoint can neither cause nor mask a platform regression, and standardize the receiver-fault carve-out in future enterprise contracts."
+  ],
+  "resource_tags": [
+    "metric_debugging",
+    "api_design"
+  ],
+  "extra_checklist": [
+    "Asks for a per-merchant/per-endpoint failure breakdown and identifies that one high-volume merchant accounts for essentially the entire decline, doing the 15% × 19% ≈ 3-point arithmetic (or equivalent) to confirm it.",
+    "Explicitly rules out the delivery-worker deploy using onset timing and the old-vs-new worker version comparison, instead of anchoring on 'what shipped'.",
+    "Proposes at least one platform-level guardrail beyond fixing the one merchant — per-endpoint circuit breaker or rate limiting, retry jitter, per-merchant SLO reporting, or onboarding load-readiness checks."
+  ],
+  "anchors": {
+    "strong": "Pins the metric definition and its volume weighting first, gets the steepening onset curve, and segments by merchant within minutes. Catches that one migrating marketplace at 15% of volume with 81% success arithmetically explains the whole slide, and that the weekly steepening tracks the staged ramp. Dismisses the worker deploy via timing and version-split evidence, articulates the retry re-collision mechanism, separates merchant remediation from platform guardrails, and pressure-tests the contract terms behind the $180K credit exposure.",
+    "at_bar": "Eventually segments by merchant after a nudge and finds the concentrated endpoint, but spends early minutes on the deploy red herring before checking onset timing. Understands the mix effect qualitatively without doing the arithmetic. Proposes working with the merchant and mentions retries, but platform-level fixes stay vague ('better monitoring') and the per-merchant credit structure and contract-carve-out implications only surface when Tara prompts.",
+    "weak": "Lists hypotheses — bad deploy, DNS, cloud outage, seasonality — without asking for onset shape or a per-merchant breakdown. Chases the worker deploy or the cloud incident despite disconfirming timing, and never notices the metric is volume-weighted or that a single endpoint is dragging it. Jumps to fixes like 'roll back' or 'add retries' (retries already exist) and never addresses SLO reporting or systemic guardrails."
+  },
+  "teaser": "Webhook delivery is quietly bleeding from 99.9% to 97% — find the leak before credits hit."
+}

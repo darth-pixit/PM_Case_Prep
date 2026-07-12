@@ -1,0 +1,48 @@
+{
+  "id": "core-pm-cancellation-spike",
+  "archetype": "core-pm",
+  "company_persona": "a three-sided food-delivery marketplace",
+  "interviewer_name": "Priya",
+  "title": "The cancellation spike",
+  "type": "execution",
+  "prompt": "You're a PM at Zesto, a food-delivery app operating in about 30 US cities, connecting customers, couriers, and restaurants. Over the past week, our order cancellation rate — the share of placed orders that never get delivered — jumped from about 3% to about 7%. Every cancelled order means a refund, wasted courier time, and an annoyed restaurant, so leadership wants answers by end of week. You own the ordering experience end to end. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "onset": "The jump started 6 days ago as a step change: the rate climbed from ~3% to ~7% over about 48 hours and has held flat at the new level since. No gradual drift.",
+    "cancellation_party": "Split by who initiates: customer-initiated cancellations (~1.5% of orders) and courier-initiated (~0.8%) are unchanged. The entire increase is in system auto-cancellations coded 'restaurant did not confirm order within 10 minutes' — up from ~0.7% to ~4.7% of all orders.",
+    "segment_tablet_version": "Orders to restaurants running tablet app v5.0 cancel at ~13% vs ~3% for restaurants still on v4.9. About 40% of restaurants are on v5.0. The gap sits entirely in the 'restaurant did not confirm' bucket.",
+    "tablet_release": "Tablet app v5.0 began a staged rollout to restaurant tablets 6 days ago, reaching 40% of restaurants over its first two days, then holding per the rollout plan. It redesigned the incoming-orders screen and notification behavior. Nothing else shipped on the restaurant side.",
+    "checkout_redesign": "The customer app shipped a checkout redesign — but that was 2 weeks ago, before the spike, and its A/B holdout shows no difference in cancellation rate between arms.",
+    "instrumentation": "No changes to cancellation event logging, metric definitions, or the dashboard query in this window.",
+    "volume_mix": "Order volume is flat week-over-week; city mix, cuisine mix, new-vs-returning customer mix, and peak-hour share are all normal.",
+    "courier_supply": "Courier acceptance rates, online hours, and delivery times are normal across every metro; no courier pay or incentive changes shipped.",
+    "competitor_campaign": "A rival launched a 40%-off coupon blitz this week in two of Zesto's cities. But the cancellation increase is uniform across all ~30 cities, including cities where the rival doesn't operate.",
+    "support_signal": "Restaurant support tickets saying 'didn't hear the new-order alert' or 'order appeared late on the tablet' have roughly tripled since the rollout began."
+  },
+  "ideal_answer_notes": [
+    "Clarify the metric first: what counts as a cancellation, who can initiate one (customer, courier, restaurant, system auto-cancel), and confirm no logging or metric-definition changes — instrumentation is clean here.",
+    "Establish onset shape: a step change 6 days ago that ramped over 48 hours then plateaued — a signature of a discrete change rolling out, not seasonality or gradual drift.",
+    "Make the highest-leverage cut for a three-sided marketplace: segment by initiating party. Discover customer- and courier-initiated cancels are flat and the entire delta is system auto-cancels coded 'restaurant did not confirm within 10 minutes.'",
+    "Rule out courier supply with data (acceptance rates and online hours normal) and de-prioritize the competitor coupon blitz because the spike is uniform across all 30 cities, including ones the rival isn't in.",
+    "Ask what shipped in the window on each side of the marketplace: find the tablet app v5.0 staged rollout starting exactly 6 days ago; note the customer checkout redesign predates the spike by 2 weeks and has a clean A/B holdout.",
+    "Confirm the correlation quantitatively: restaurants on v5.0 cancel at ~13% vs ~3% on v4.9, and 40% penetration times that delta reproduces the blended 3%-to-7% move — the mix math closes.",
+    "Chase mechanism, not just correlation: tripled restaurant tickets about missed order alerts point to v5.0's redesigned incoming-orders screen suppressing or hiding new-order notifications, so orders silently time out into auto-cancel.",
+    "Mitigate immediately: halt or roll back the v5.0 rollout (or hotfix the alert), and add short-term guardrails — SMS/phone fallback ping to the restaurant before auto-cancelling, or a temporarily extended confirm window for v5.0 restaurants.",
+    "Repair harm and prevent recurrence: proactive refunds/credits to affected customers, an apology-and-fix note to affected restaurants, then release guardrails — per-tablet-version canary metrics on order-confirm rate and automated alerts on auto-cancel rate by segment."
+  ],
+  "resource_tags": [
+    "metric_debugging",
+    "ab_testing"
+  ],
+  "extra_checklist": [
+    "Asks who initiated the cancellations (customer vs courier vs restaurant/system) and identifies the 'restaurant did not confirm' auto-cancel bucket as the source of the entire increase.",
+    "Explicitly de-prioritizes at least one red herring — the competitor coupon blitz or the customer checkout redesign — by citing the disconfirming evidence (geographic uniformity or timing mismatch with the step change).",
+    "Quantitatively ties tablet v5.0 to the spike (13% vs 3% by version, or the 40%-penetration mix math reproducing 3% to 7%) and names an immediate mitigation such as halting the rollout or adding a fallback alert before auto-cancel."
+  ],
+  "anchors": {
+    "strong": "Pins down the definition, learns it's a 6-day-old step change, and immediately segments by initiating party — isolating the 'restaurant did not confirm' auto-cancel bucket. Asks what shipped on the restaurant side, finds tablet v5.0, verifies with version-level rates (13% vs 3%) and the 40%-penetration math reproducing 3% to 7%. Dismisses the coupon blitz via geography and the checkout redesign via timing. Proposes halting the rollout, fallback paging before auto-cancel, customer make-goods, and per-version canary alerts.",
+    "at_bar": "Reaches segmentation with a nudge and finds the restaurant-side auto-cancel concentration; eventually connects it to the tablet v5.0 rollout but needs prompting to pull version-level rates or check that the mix math explains the full move. Spends a few minutes on the competitor coupons or the checkout redesign before the evidence kills them. Recommends pausing the rollout, though harm repair and longer-term release guardrails stay thin.",
+    "weak": "Rattles off hypotheses — weather, competitor coupons, courier pay — without asking who initiates the cancellations or when the jump started. Anchors on the visible checkout redesign even though it shipped two weeks before the step change. Never asks what changed on the restaurant side, so the tablet v5.0 signal goes unfound, and closes with generic fixes like better ETAs or courier bonuses that don't touch the actual failure."
+  },
+  "teaser": "Order cancellations more than doubled overnight — which side of the marketplace broke?",
+  "minutes": 20
+}

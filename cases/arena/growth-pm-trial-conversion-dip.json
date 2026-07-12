@@ -1,0 +1,49 @@
+{
+  "id": "growth-pm-trial-conversion-dip",
+  "archetype": "growth-pm",
+  "company_persona": "a freemium language-learning app",
+  "interviewer_name": "Tom",
+  "title": "Signups up, conversion down",
+  "type": "execution",
+  "minutes": 20,
+  "prompt": "You're a growth PM at Loquia, a language-learning app. New users get a 14-day free trial of Loquia Plus, our paid subscription, when they sign up. Over the past three weeks, trial-to-paid conversion has slid from about 12% to about 8%. Oddly, weekly signups have been climbing since about five weeks ago — from roughly 90,000 to about 140,000, where they've roughly plateaued for the past two weeks. The CFO thinks monetization is breaking and wants an answer before Thursday's board meeting. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "onset": "The blended rate began sliding about three weeks ago and declined gradually — no step change on any single day. Weekly signups started ramping five weeks ago; because a cohort's conversion is measured when its 14-day trial ends, the conversion decline lags the signup ramp by roughly two weeks and then tracks its shape closely, flattening near 8% over the past week as signups plateaued.",
+    "volume_mix": "Weekly signups rose from ~90K five weeks ago to ~140K now, plateauing over the past two weeks. Essentially all of the incremental ~50K per week comes from one new acquisition source; signups from existing channels are flat.",
+    "channel_source": "Five weeks ago marketing launched a rewarded-install campaign on mobile ad networks plus a TikTok creator push around a generic '30-day fluency challenge' that spans all of Loquia's course languages and runs in every major market. That source now contributes roughly 36% of weekly signups.",
+    "segment_conversion": "Conversion by channel: organic search 12%, referrals 13%, app-store browse 11% — all flat versus prior months. The new rewarded/social channel converts at ~2%. (Interviewer: share only these per-channel rates; do not volunteer the blended re-weighting result — see reweighting_check.)",
+    "reweighting_check": "Interviewer verification only — reveal after the candidate attempts the re-weighting math themselves: holding the old channel mix constant, blended conversion still comes out at ~12%, confirming per-channel rates are unchanged and the drop is pure mix shift (Simpson's paradox).",
+    "absolute_paid": "Absolute weekly new paid subscribers rose from ~10.8K to ~11.8K — up about 9% even as the blended rate fell.",
+    "paywall_experiment": "A redesigned 'softer' paywall screen shipped 2.5 weeks ago as an A/B test on 20% of new users. The test arm converts at parity with control (+0.2pp, not statistically significant). Timing note: the blended decline began ~3 weeks ago — before the test shipped — and the first test-exposed cohorts only finished their 14-day trials within the last few days.",
+    "trial_engagement": "New-channel trial users complete a median of 1 lesson during the 14-day trial versus 6 for organic users; their day-3 retention is 18% versus 55%.",
+    "instrumentation_pricing": "No changes to event logging, metric definitions, attribution windows, or the conversion-window calculation; trial-start and payment events reconcile cleanly with the billing system. No pricing, billing, or checkout changes shipped in this window, and the payment-failure rate is flat at ~3%.",
+    "external_competitor": "A competitor announced a free tier last month, but only for English learners in the US. Loquia's per-channel conversion among US English learners is flat, and the blended decline appears just as strongly in markets and course languages the competitor doesn't serve."
+  },
+  "ideal_answer_notes": [
+    "Pin down the metric first: confirm trial-to-paid is measured per signup cohort when its 14-day trial ends, and ask whether logging, attribution, or definitions changed — instrumentation is clean and billing reconciles, so it's a real behavioral shift.",
+    "Establish onset shape and timing: the decline began about three weeks ago and was gradual with no step change; signups started ramping five weeks ago, and the two-week gap between ramp and decline equals the trial length — a lag signature pointing to a cohort mix shift working through the pipeline, not a single breaking release.",
+    "Ask what changed on the acquisition side before debugging the funnel: five weeks ago marketing launched a rewarded-install campaign plus a TikTok creator push around a generic 30-day fluency challenge running across all languages and markets, and essentially all of the incremental ~50K weekly signups come from it (~36% of volume).",
+    "Segment conversion by channel: organic 12%, referral 13%, app-store 11% (all flat); the new rewarded/social channel converts at ~2%. A strong candidate then re-weights to the old channel mix themselves and shows blended conversion would still be ~12% — per-channel rates are unchanged; this is Simpson's paradox, not a broken funnel. The interviewer confirms the ~12% figure only after the candidate attempts the math.",
+    "Separate rate from volume: absolute weekly new paid subscribers rose from ~10.8K to ~11.8K (+9%), so paid inflow is actually up — this reframes the CFO's 'monetization is breaking' narrative.",
+    "Rule out the paywall red herring with evidence, not vibes: it's a 20%-exposure A/B test converting at parity, and its first exposed cohorts only matured in the last few days — after the decline began — so it is mathematically and temporally incapable of producing a 4-point blended drop.",
+    "Kill the competitor theory: their free tier targets US English learners only, Loquia's US English-learner per-channel conversion is flat, and the decline appears equally in markets and course languages the competitor doesn't serve.",
+    "Recommend the right evaluation frame for the new channel: judge it on CAC payback and LTV, not blended trial conversion — a 2%-converting cohort can still be profitable at rewarded-install prices, so pull the unit economics with marketing and finance.",
+    "Close with fixes and guardrails: report per-channel conversion plus a mix-adjusted blended rate as the board metric, build a lighter-intent onboarding path for the new cohort (median 1 lesson vs 6), run creative/targeting experiments with marketing, and make an explicit throttle-vs-scale decision on the channel."
+  ],
+  "resource_tags": [
+    "metric_debugging",
+    "growth_loops",
+    "ab_testing"
+  ],
+  "extra_checklist": [
+    "Candidate segments trial-to-paid conversion by acquisition channel and attempts the re-weighting math themselves — before the interviewer confirms the answer — concluding per-channel rates are flat while the mix shifted (names or clearly describes Simpson's paradox), rather than stopping at the blended 8%.",
+    "Candidate asks for or computes absolute new paid subscribers and notes paid volume rose ~9% despite the falling rate.",
+    "Candidate rules out the paywall A/B test by citing its 20% exposure, parity readout, or timing (the decline began before any test cohort's trial had matured) instead of assuming the shipped change caused the drop."
+  ],
+  "anchors": {
+    "strong": "Confirms the metric is cohort-based at trial end and instrumentation is clean, spots that the conversion slide lags the signup ramp by exactly one trial length, and segments by channel before hypothesizing. Re-weights to the old mix unprompted to show per-channel rates are flat, computes paid subscribers rose ~9%, rules out the paywall test on exposure and timing, kills the competitor theory, then reframes around CAC payback, mix-adjusted reporting, and low-intent onboarding.",
+    "at_bar": "Reaches channel segmentation, possibly after first chasing the paywall test, and recognizes the new low-converting acquisition source is diluting the blended rate. Needs prompting to attempt the re-weighting math or to check absolute paid-subscriber volume, and accepts the interviewer's verification once offered. Ends with a directionally sound recommendation — don't panic, evaluate the channel's economics — but is thin on guardrail metrics, onboarding changes for low-intent users, or how to frame it for the board.",
+    "weak": "Hypothesis-dumps — pricing, seasonality, 'the paywall redesign broke it,' the competitor's free tier — without asking about onset timing, channel mix, or where 50,000 extra weekly signups came from. Latches onto the paywall experiment or competitor despite disconfirming facts, never separates the falling rate from rising paid volume, and proposes rollbacks or price changes unsupported by any evidence. Treats 8% as a product failure without ever segmenting the number."
+  },
+  "teaser": "Signups are surging, trial conversion is sliding, and the CFO wants answers by Thursday."
+}

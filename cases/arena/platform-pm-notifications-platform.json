@@ -1,0 +1,48 @@
+{
+  "id": "platform-pm-notifications-platform",
+  "archetype": "platform-pm",
+  "type": "system-design",
+  "company_persona": "a food-and-grocery delivery app",
+  "interviewer_name": "Noah",
+  "title": "Twelve teams, one bell",
+  "minutes": 22,
+  "prompt": "You've just joined Harborline, a food-and-grocery delivery app with about 30 million monthly users, as the PM for a new internal platform team. Today, twelve product teams — orders, payments, marketing, and others — each send their own push, email, SMS, and in-app notifications through at least seven separate homegrown systems. Volume is roughly 45 million notifications a day. Leadership has asked your team to build one shared notifications platform that all twelve teams will adopt. I'd like you to design it: who your customers are, what you'd build first, and how you'd get teams onto it. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "scale_volume": "About 45M notifications/day: 60% push, 25% email, 10% SMS, 5% in-app. Peaks near 3,000 sends/sec during dinner-rush promotions. Volume is expected to roughly double in 18 months.",
+    "internal_customers": "Marketing sends ~55% of volume, Orders ~20%, Payments/identity (login OTPs, fraud alerts) ~8% but by far the most critical; the other nine teams split the remainder.",
+    "incident_history": "Four months ago a 6M-push marketing blast queued ahead of login OTPs on a shared push gateway; OTPs took up to 11 minutes to arrive for about 40 minutes. It was a sev-1, exec-visible, and is the reason this platform got funded.",
+    "current_pain": "Seven homegrown senders, three different email vendors, no shared user-preference store, and no idempotency — duplicate sends to the same user happen roughly weekly. No team has delivery observability beyond vendor dashboards.",
+    "team_capacity": "The platform team is 5 engineers plus the candidate. Leadership expects the first team migrated within one quarter, and Marketing plus Payments both on the platform within six months.",
+    "slo_expectations": "No SLOs exist today. If asked: Payments wants OTP end-to-end p99 under 10 seconds, Orders wants under 1 minute for order-status updates, Marketing is fine with minutes-level delivery for campaigns.",
+    "user_opt_outs": "Push opt-out and email unsubscribe rates are up ~30% over six months; heavy users receive up to 9 notifications a day; there is no global frequency cap and no quiet-hours logic anywhere.",
+    "whatsapp_ask": "The Growth team is the loudest internal voice, demanding WhatsApp as a new channel for a single-market pilot — about 0.5% of total volume.",
+    "migration_constraint": "Two of the twelve teams' senders live on a deprecated monolith scheduled for decommission in 3 quarters, and those teams have zero engineers to spare for a migration — they need a shim or white-glove path."
+  },
+  "ideal_answer_notes": [
+    "Frames the twelve internal teams as the customers and asks who sends what: discovers Marketing is ~55% of volume while Payments/OTP is ~8% but mission-critical, and segments senders into transactional vs. promotional with opposite needs.",
+    "Asks about past incidents and current pain: surfaces the sev-1 where a 6M-push marketing blast delayed login OTPs by up to 11 minutes, and draws the case's core conclusion — transactional and promotional traffic must be isolated, so priority isolation rather than feature breadth is the platform's reason to exist.",
+    "Elicits scale and load shape (45M/day, 3k/sec peaks, 2x growth in 18 months) and proposes tiered SLOs with numbers: e.g., P0 transactional p99 under 10 seconds, order updates under 1 minute, promotional best-effort in minutes — with per-tier error budgets.",
+    "Sketches the architecture at PM altitude: one send API in front of priority lanes/queues per tier, per-team rate limits and quotas, channel adapters (push/email/SMS/in-app), a template service, a centralized preference and frequency-cap store, and delivery receipts feeding shared observability.",
+    "Treats the API contract as the product: idempotency keys to kill weekly duplicate sends, sensible defaults, a sandbox, and docs — arguing adoption only happens if integrating is cheaper than maintaining a homegrown sender.",
+    "Ruthlessly scopes v1 for a 5-engineer team: send API + priority lanes + transactional path + observability first; recognizes the WhatsApp ask (0.5% of volume) as a red herring — a sloppy candidate builds channel breadth for the squeaky wheel instead of reliability and isolation — and explicitly defers it along with any WYSIWYG template editor, naming them as distractions.",
+    "Connects the 30% opt-out rise to the missing global frequency caps and quiet hours, sequences the central preference store as phase two, and anticipates Marketing resisting caps — proposing a governance forum or exec-sponsored policy to arbitrate.",
+    "Lays out migration: one design-partner team first (Orders or Payments), dual-send/shadow traffic during cutover, then a hard deadline for the two teams on the deprecated monolith with a white-glove shim since they have no engineers to spare.",
+    "Defines platform success metrics: % of company notification volume on the platform, SLO attainment per tier, sev incidents, duplicate-send rate, opt-out trend, and integration time / internal-customer satisfaction as the developer-experience measure.",
+    "Addresses how one team serves twelve backlogs: an intake process, customer tiering, and published SLAs for feature requests so prioritization is transparent rather than loudest-voice-wins."
+  ],
+  "resource_tags": [
+    "api_design",
+    "north_star"
+  ],
+  "extra_checklist": [
+    "Candidate explicitly separates transactional from promotional traffic and proposes priority lanes, per-team quotas, or both before finalizing the design.",
+    "Candidate asks about incident or reliability history, surfaces the OTP-behind-marketing-blast sev-1, and converts it into a numbered SLO for the transactional tier.",
+    "Candidate explicitly deprioritizes the WhatsApp channel request for v1 with a volume- or impact-based justification rather than adding it to scope."
+  ],
+  "anchors": {
+    "strong": "Segments the twelve teams into transactional vs. promotional customers early; digs into incident history and finds the OTP-behind-marketing-blast sev-1, making priority lanes, per-team quotas, and tiered SLOs (OTP p99 <10s) the design core. Proposes an idempotent send API, channel adapters, and a central preference store with frequency caps tied to the 30% opt-out rise. Explicitly defers WhatsApp (0.5% of volume). Sequences migration: design partner first, shim for the deprecated-monolith teams, and adoption plus SLO-attainment metrics.",
+    "at_bar": "Reaches a sensible architecture — send API, queues, channel adapters — and asks about scale, but needs prompting to uncover the OTP incident or the opt-out trend. Distinguishes transactional from promotional traffic late, and only then adds priority tiers. Migration plan stays vague ('onboard teams gradually'), and they entertain the WhatsApp ask before dropping it when challenged on volume.",
+    "weak": "Jumps straight to boxes and arrows or a feature list without asking who the internal customers are or what broke before. Treats all notifications as equal priority, never sets SLOs or quotas, chases the WhatsApp channel or a template editor, and offers no migration, adoption, or governance plan — designing an end-user engagement feature instead of a platform."
+  },
+  "teaser": "Twelve teams, seven homegrown senders, one platform mandate — what do you build first?"
+}

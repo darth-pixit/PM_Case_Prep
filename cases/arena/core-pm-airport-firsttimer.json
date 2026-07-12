@@ -1,0 +1,46 @@
+{
+  "id": "core-pm-airport-firsttimer",
+  "archetype": "core-pm",
+  "company_persona": "the digital experience team at a large international hub airport",
+  "interviewer_name": "David",
+  "title": "The 20-point gap",
+  "type": "product-design",
+  "prompt": "You're a PM on the digital experience team at Verano International Airport, a major hub serving about 58 million passengers a year — roughly a third on international itineraries. Passenger surveys keep flagging one group: people taking their first international trip through Verano. Their satisfaction scores run about 20 points below the average passenger, and they lean heavily on our info desks and staff. We already have a mobile app, overhead signage, and staffed help points, but the gap isn't closing. Your VP has asked you to meaningfully improve the airport experience for first-time international travelers. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "business_goal": "Leadership's stated goal is closing the satisfaction gap: first-timer CSAT is 59 vs 79 airport-wide — a 20-point gap. Secondary goals are cutting missed connections and reducing info-desk load. Retail revenue and dwell time are explicitly NOT goals for this initiative.",
+    "target_user": "First-time international travelers are ~9% of passengers (~5M/year). About 40% have limited English — the most common languages among them are Spanish, Mandarin, Portuguese, Hindi, and Arabic, so four of the top five aren't covered by current signage. They skew older and family-heavy, and roughly half are connecting through Verano rather than starting or ending their trip there.",
+    "existing_experience": "The airport app offers static maps and flight status, but only ~12% of all passengers install it and under 3% of first-timers. Overhead signage is English and Spanish only. There are 14 staffed info desks, and free Wi-Fi requires a 4-step sign-up.",
+    "connectivity": "Most arriving international passengers have no mobile data until they complete the Wi-Fi sign-up; roughly a third of them never get connected at all during their time in the airport.",
+    "pain_points": "Exit surveys: 38% cite confusion at immigration and security recheck, 27% wayfinding between terminals, 19% language barriers, 11% boarding-time anxiety. Complaints cluster in the international arrivals concourse during the 2-6pm connection peak.",
+    "connection_risk": "First-time connecting passengers miss onward flights at roughly 3x the rate of experienced travelers; each late or missed passenger costs airlines and the airport an estimated $180 in rebooking, handling, and delay costs.",
+    "constraints": "Immigration and customs are government-run — the process itself cannot be changed, only expectations around it. Physical signage changes take 12-18 months of capital approval. The candidate has 6 engineers and is expected to have a pilot live within 6 months.",
+    "past_attempts": "Last year Verano piloted 20 red-vested 'ambassadors' at peak hours — part-time contract staff plus paid coordinators, training, and premiums for multilingual hires. CSAT among passengers they helped rose 11 points, but they reached under 5% of first-timers, and covering every terminal and shift would take roughly 10x the headcount at an estimated $4M+ a year, which leadership declined to fund. The program continues at its small current scale.",
+    "distribution_levers": "Partner airlines have agreed to print a QR code on boarding passes for connecting itineraries, and jet-bridge and queue-line signage placements are cheap and fast to deploy — unlike overhead wayfinding signage."
+  },
+  "ideal_answer_notes": [
+    "Clarify the goal first: confirm with David that success means closing the 20-point CSAT gap (59 vs 79) and reducing missed connections and info-desk load — and that retail revenue is explicitly out of scope for this initiative.",
+    "Ask what exists and who it actually reaches: surface that the app reaches under 3% of first-timers, signage is English/Spanish only, and free Wi-Fi takes a 4-step sign-up — concluding out loud that any app-install-dependent solution is dead on arrival.",
+    "Segment first-timers into originating locals, arriving visitors, and connecting passengers, then commit to a beachhead: connecting passengers are ~half of first-timers, 40% of first-timers have limited English, and connecting first-timers miss onward flights at 3x the rate at ~$180 per miss — so connectors, with language support built in, are the highest-leverage start.",
+    "Journey-map the chosen segment: deplane, immigration (government-run — process unchangeable, expectations settable), terminal transfer, security recheck, gate — naming the emotional job: 'tell me I'm in the right place and that I'll make my flight.'",
+    "Generate three-plus distinct solutions across channels: (a) a no-install QR-launched web 'trip companion' localized in the top first-timer languages (Spanish, Mandarin, Portuguese, Hindi, Arabic), giving step-by-step next actions and live time-to-gate; (b) multilingual dynamic wait-time and reassurance displays at immigration and transfer choke points; (c) at-risk-connection flagging that routes tight-connection passengers to staff or expedited handling; (d) AR in-app navigation.",
+    "Prioritize explicitly against the real constraints (6 engineers, 6-month pilot, no process changes, no signage capex): pick the QR web companion plus choke-point displays; kill AR (sub-3% reach) and physical signage overhaul (12-18-month cycle), and say why.",
+    "Solve distribution and connectivity head-on: use the partner-airline boarding-pass QR, jet-bridge and queue-line placements, and a one-tap Wi-Fi path that deep-links straight into the companion — no download, no account.",
+    "Name risks and mitigations: inaccurate wait estimates destroy trust (show ranges, degrade gracefully), translation quality for the 40% with limited English, and complementing rather than replacing the ambassador program that raised CSAT 11 points for those it reached but was too expensive to scale beyond 5% coverage.",
+    "Define measurement: primary = first-timer CSAT gap and missed-connection rate among users who scanned in; secondary = info-desk contact volume, a stated goal to drive down; guardrails = overall passenger CSAT and Wi-Fi complaint volume; pilot in one international concourse with a comparable concourse as control."
+  ],
+  "resource_tags": [
+    "north_star"
+  ],
+  "extra_checklist": [
+    "Candidate explicitly names one first-timer sub-segment as the beachhead (e.g., connecting passengers, with language support prioritized) and states a reason tied to case data before ideating solutions.",
+    "Candidate surfaces the reach problem — under 3% app install among first-timers and no mobile data on arrival — and proposes at least one no-install channel such as a QR-launched web experience or physical-digital touchpoint.",
+    "Candidate names a primary success metric tied to the CSAT gap or missed-connection rate, treats info-desk contact volume as a secondary metric to drive down (it's a stated goal), and adds at least one true guardrail such as overall passenger CSAT — not just generic engagement."
+  ],
+  "anchors": {
+    "strong": "Nails the sequence unprompted: confirms the goal is the 20-point CSAT gap (59 vs 79) plus missed connections and info-desk load, uncovers sub-3% app reach and the no-data-on-arrival problem, deliberately picks connecting first-timers — many with limited English — as the beachhead, journey-maps immigration to gate, proposes a no-install QR web companion plus multilingual choke-point displays, kills AR and signage capex against the 6-engineer/6-month constraint, and closes with CSAT-gap and missed-connection metrics via a control-concourse pilot.",
+    "at_bar": "Reaches a sensible design but needs nudges: asks about the goal and users, segments loosely ('tourists vs business travelers') without committing to a beachhead, initially proposes app features until David reveals the 12% install rate, then adapts toward QR or display ideas. Prioritization is intuitive rather than explicit against the 6-month constraint. Names CSAT as the metric, but secondary metrics, guardrails, and pilot design only appear when prompted.",
+    "weak": "Jumps straight into a feature list — AR navigation, a chatbot, push notifications — without asking the goal, what exists, or who first-timers are. Never learns that under 3% have the app or that arrivals lack mobile data, so every idea assumes an install. No segmentation, no journey map, no acknowledgment that immigration is unchangeable, and success is 'more engagement' with no baseline, guardrail, or pilot plan."
+  },
+  "teaser": "Fifty-eight million passengers a year, and the newest ones are the most lost.",
+  "minutes": 20
+}

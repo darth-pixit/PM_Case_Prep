@@ -1,0 +1,47 @@
+{
+  "id": "ai-pm-teacher-copilot",
+  "archetype": "ai-pm",
+  "company_persona": "a K-12 education software company whose gradebook and classroom platform serves US school districts",
+  "interviewer_name": "Leo",
+  "title": "Copilot for the staffroom",
+  "type": "product-design",
+  "prompt": "You're a PM at Chalkstone, an edtech company whose gradebook and classroom platform is used by about 40,000 teachers across 900 US school districts. Surveys say our teachers spend eleven-plus hours a week outside the classroom on grading, lesson prep, and admin. The CEO wants an \"AI copilot for teachers\" on the roadmap and has given you two quarters and a small engineering team to ship something. Teachers, as you know, range from AI-curious to openly hostile. Design this copilot: who it's for, what it does first, and how you'd know it's working. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "business_goal": "Retention, not new revenue. Districts renew annually; leadership wants the copilot to lift weekly teacher engagement and defend renewals. Renewal rate is 88%, teacher WAU/MAU is 58%. There is no plan to charge for the copilot in year one.",
+    "target_users": "The existing base: US K-12, but daily usage skews grades 6-12 — elementary teachers barely touch the gradebook. The buyer is the district administrator; the daily user is the teacher.",
+    "existing_assets": "Chalkstone already holds assignments, submissions (typed docs plus photo scans of paper work), teacher-authored rubrics, per-student grade history, and parent messaging — grounding data a generic chatbot doesn't have.",
+    "past_attempt": "Last spring Chalkstone piloted 'AutoScore,' which fully auto-graded short essays. About 70% of pilot teachers disabled it within two weeks after catching scoring errors, and one district's union rep filed a formal complaint. Leadership quietly shelved it.",
+    "teacher_time_breakdown": "A survey of 2,400 teachers: ~5 hrs/week on grading and writing feedback comments, ~4 hrs on lesson prep and differentiating materials, ~2 hrs on admin and parent comms. The top write-in complaint is writing individualized feedback comments — not deciding the scores themselves.",
+    "privacy_constraints": "FERPA plus district data-processing agreements: student work may only go to approved vendors, no training on student data, and roughly 30% of districts currently ban student-facing generative AI outright. District admins require on/off controls per feature.",
+    "ceo_pet_idea": "The CEO keeps pitching a student-facing AI tutor chatbot because 'that's what gets press.' It is banned in ~30% of districts, doesn't serve the renewal goal, and legal has flagged it — a trap for candidates who chase flash over the teacher workflow.",
+    "competitor_pressure": "Sales blames rival Lumenclass's announced AI suite for 3 lost renewals. But exit interviews from churned districts cite pricing and support quality; AI came up exactly once. Panic-matching the competitor's feature list is the wrong read.",
+    "team_and_stack": "3 engineers, 1 designer, 2 quarters. No in-house model training; access to a frontier LLM through an education-approved vendor with a signed DPA."
+  },
+  "ideal_answer_notes": [
+    "Clarifies the business goal before designing: learns the copilot is about renewals and weekly teacher engagement (88% renewal, 58% WAU/MAU), not a new revenue line — so the design should deepen the daily grading/prep workflow, not chase press.",
+    "Asks what exists and what's been tried: surfaces the AutoScore failure (70% of pilot teachers disabled it, a union complaint) and states the design principle it implies — AI drafts, the teacher decides; nothing auto-posts to the gradebook.",
+    "Asks for time-use data and segments the pain: 5 hrs/week grading and feedback plus 4 hrs prep; identifies writing individualized feedback comments — not choosing scores — as the burning problem, concentrated in essay-heavy grades 6-12 humanities teachers, and names them the beachhead segment.",
+    "Brainstorms across the whole workflow (feedback-comment drafter, lesson differentiator, parent-comms drafts, full auto-grading, student tutor), then prioritizes a rubric-grounded feedback drafter first with lesson differentiation as fast-follow — and explicitly kills auto-grading and the student chatbot, citing the AutoScore scar and the 30% district bans.",
+    "Designs trust in, not bolted on: every draft is editable and requires explicit teacher action to send; the AI cites the rubric row and quotes the specific student sentence it is reacting to; low-confidence outputs get a 'needs human' flag; district admins get per-feature controls and a no-training-on-student-data commitment.",
+    "Lays out an AI quality plan: build an eval set from historical teacher-written feedback across subjects and grade levels; track draft acceptance rate and edit distance; run hallucination checks verifying every quoted line actually appears in the student's submission; red-teams wrong-student mixups as a catastrophic failure mode.",
+    "Plans adoption for a skeptical base: opt-in pilot with ~5 AI-friendly districts and teacher champions; positioning is 'you judge, it types' — time returned to teachers, never replacement; no default-on dark patterns.",
+    "Defines success crisply: primary — share of graded assignments where the teacher accepted or lightly edited an AI draft, and median hours-to-return-feedback; guardrails — draft rejection rate, teacher trust survey, spot-checked feedback quality, district complaints; ties these up to WAU and pilot-district renewal.",
+    "Sketches the two-quarter plan with kill criteria: Q1 build plus closed pilot, Q2 GA to opted-in districts only if acceptance clears a pre-set bar (e.g., over 60% of drafts kept rather than discarded)."
+  ],
+  "resource_tags": [
+    "ai_evals",
+    "north_star"
+  ],
+  "extra_checklist": [
+    "Candidate asks what Chalkstone has already built or tried and, after learning about AutoScore, explicitly rules out autonomous grade-posting in favor of teacher-approved drafts.",
+    "Candidate deprioritizes or declines the student-facing tutor chatbot despite the CEO's enthusiasm, citing district AI bans, FERPA, or the renewal goal.",
+    "Candidate proposes at least one measurable AI-quality signal (draft acceptance rate, edit distance, or a hallucination check against the student's actual submission) plus a trust guardrail metric."
+  ],
+  "anchors": {
+    "strong": "Asks about goal, prior attempts, and time-use data in the first minutes; on hearing AutoScore's 70% disable rate, states the teacher-in-the-loop principle unprompted. Picks essay-heavy 6-12 teachers as the beachhead, designs a rubric-grounded feedback drafter with evidence-citing and explicit-post controls, kills the student-tutor idea citing district bans, and defines acceptance-rate and edit-distance evals with trust guardrails, tying success to pilot-district renewal.",
+    "at_bar": "Lands on a sensible grading or lesson-prep assistant but needs nudges: uncovers the AutoScore failure only when Leo hints, segments teachers loosely, and says 'human in the loop' without concrete affordances like evidence-citing or explicit posting. Mentions FERPA when prompted. Metrics are plausible — time saved, adoption — but miss guardrails or an eval set. Briefly entertains the CEO's student chatbot before dropping it.",
+    "weak": "Jumps straight to features — 'auto-grade everything, add a student chatbot' — without asking the goal, what exists, or what failed. Never learns about AutoScore, ignores FERPA and the 30% of districts banning student-facing AI, and treats teacher skepticism as a marketing problem. Chases the Lumenclass panic instead of user pain. Success metric is a vanity count like 'AI outputs generated,' with no eval or failure-mode thinking."
+  },
+  "teaser": "Grading, lesson prep, and a staffroom full of skeptics — design an AI they'll trust.",
+  "minutes": 22
+}

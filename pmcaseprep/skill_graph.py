@@ -213,7 +213,13 @@ class SkillGraph:
         return row[0] if row else None
 
     def email_for_uid(self, uid: str) -> Optional[str]:
-        row = self.conn.execute("SELECT email FROM users WHERE uid = ?", (uid,)).fetchone()
+        # A uid can legitimately hold several emails (saved with one, later
+        # signed in with another) — report the one they signed in with LAST,
+        # not whichever row happens to come back first.
+        row = self.conn.execute(
+            "SELECT email FROM users WHERE uid = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
+            (uid,),
+        ).fetchone()
         return row[0] if row else None
 
     def link_email(self, email: str, uid: str) -> None:

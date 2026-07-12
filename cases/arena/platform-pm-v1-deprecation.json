@@ -1,0 +1,47 @@
+{
+  "id": "platform-pm-v1-deprecation",
+  "archetype": "platform-pm",
+  "company_persona": "a small-business accounting and payments API platform",
+  "interviewer_name": "Marco",
+  "title": "The six-month sunset",
+  "type": "strategy",
+  "prompt": "You're the platform PM at Ledgerline, an accounting-and-payments data platform for small businesses doing about $74M in ARR. Eighteen months ago we launched a v2 API with modern OAuth and webhooks, but 300 external integrators — point-of-sale systems, e-commerce plugins, tax tools — still depend almost entirely on v1 for their production traffic. v1 is costly to maintain, and leadership has asked you to shut it down within six months. Several of those integrators are partners who bring us a meaningful share of revenue. Leadership wants a recommendation on whether and how to sunset v1 — walk me through how you'd approach it.",
+  "hidden_facts": {
+    "deadline_driver": "The six-month deadline comes from a security-compliance certification renewal that two large enterprise deals depend on. The auditors' finding is specifically about v1's legacy static-API-key auth — not about v1's endpoints or data model.",
+    "auditor_position": "The security lead has pre-cleared the remediation with the certifying auditors: the finding closes once raw static keys are no longer stored or validated by v1's legacy auth service. A live key-vaulting gateway qualifies even with every v1 endpoint still running, and it requires zero integrator-side action, so no re-authentication wave is needed before the renewal. What auditors will not accept is a dated remediation plan on paper — the control must be in production before the renewal date.",
+    "usage_concentration": "Of the 300 integrators, 38 generate about 90% of v1 traffic. Roughly 170 have made zero API calls in the last 90 days and appear to be abandoned or hobby integrations.",
+    "revenue_exposure": "Partners integrating via v1 sit in front of merchants worth about $26M of Ledgerline's $74M ARR. Direct API fees are under $2M/year — the real risk is partners re-platforming and taking merchants with them.",
+    "contract_obligations": "Five of the top partners have contracts guaranteeing 18 months' written notice before any breaking API change — defined in those contracts as any change that requires integrator-side code modification. Ledgerline's old docs also publicly promised v1 would be 'supported for the foreseeable future.' A server-side change that integrators never see does not trigger the clauses; an endpoint shutdown absolutely does.",
+    "v2_gaps": "v2 is missing parity on two heavily used v1 capabilities: bulk transaction export and ACH payment-status callbacks. Closing both gaps is roughly two quarters of work for three engineers.",
+    "integrator_readiness": "Only 22 of the 300 integrators have ever called v2 in production. In a recent partner survey, the top blockers were the missing endpoints, no migration guide, and no sandbox with production-like data.",
+    "team_capacity": "The platform team is nine engineers. Fronting v1 with a key-vaulting auth gateway — integrators keep sending their existing keys; the gateway validates them and exchanges them internally for short-lived, scoped v2 OAuth tokens, so no client-side change is required — is estimated at one quarter for two engineers. A translation proxy that maps v1 calls onto v2 would cover about 80% of endpoints.",
+    "competitor_move": "Competitor Numera forced a 90-day hard cutoff of its legacy API last quarter. The backlash was public, and four of Numera's largest integrators are now actively evaluating Ledgerline.",
+    "maintenance_cost": "v1 accounts for about 35% of the team's on-call pages and blocks a planned database migration worth roughly $400K/year in infrastructure savings — real money, but small next to the ARR exposure."
+  },
+  "ideal_answer_notes": [
+    "[Must-have] Interrogate the forcing function before accepting it: ask why six months specifically, and discover the compliance finding targets v1's static-API-key auth layer — not v1's endpoints or data model — which reframes the entire problem.",
+    "[Must-have] Size the blast radius by segmenting the 300 integrators: 38 drive ~90% of v1 traffic, ~170 are dormant, and v1 partners front merchants worth $26M of $74M ARR while direct API fees are under $2M.",
+    "[Must-have] Check trust and legal constraints early: five top partners hold 18-month notice clauses covering any change that requires integrator-side code modification, and old docs promised v1 support 'for the foreseeable future' — a six-month hard endpoint cutoff breaches both contract and trust.",
+    "[Must-have] Audit the migration target before setting any date: v2 lacks bulk transaction export and ACH status callbacks, and only 22 of 300 integrators have ever called v2 in production — you cannot deprecate onto a destination that doesn't exist yet.",
+    "[Must-have] Make the key strategic move: decouple compliance from sunset. Ship the key-vaulting gateway (one quarter, two engineers) — integrators keep their existing keys so nothing breaks client-side, the contract notice clauses are not triggered, and auditors have pre-cleared a live control while rejecting paper plans — then run the endpoint sunset on an ~18-month timeline anchored to the contracts. Give full credit to candidates who proactively stress-test whether the gateway itself is a breaking change; the vaulting design is exactly why it isn't.",
+    "[Bonus] Design a tiered sunset: after outreach, shut off the ~170 dormant integrators quickly for an easy 55% headcount win; white-glove the top 38 with named contacts and migration support; offer the translation proxy to the mid-tail.",
+    "[Bonus] Sequence friction-reducers ahead of the deprecation announcement: close the two v2 parity gaps, ship a migration guide, a production-like sandbox, and per-integrator usage reports showing exactly which of their calls must change.",
+    "[Bonus] Turn Numera's botched 90-day cutoff into a competitive trust play: publish a generous, dated deprecation policy and use it to court the four large integrators Numera just burned.",
+    "[Bonus] Define success metrics and enforcement: weekly v1 traffic-decay curve, % of top-38 migrated, partner-churn watchlist, support-ticket volume; scheduled brownouts with advance notice only after ~80% of traffic has moved; frame the exec tradeoff honestly — $400K/year infra savings versus $26M ARR at risk. A strong 20-minute answer covers all five must-haves plus at least two bonuses, not all nine notes."
+  ],
+  "resource_tags": [
+    "api_design"
+  ],
+  "extra_checklist": [
+    "Asked what is actually driving the six-month deadline and articulated that the compliance finding is about v1's auth layer, not its endpoints (enabling the gateway decoupling)",
+    "Segmented the 300 integrators by traffic and revenue (dormant long tail vs. top partners vs. mid-tail) before committing to any timeline or cutoff date",
+    "Proposed at least two concrete migration-friction reducers, e.g. closing the v2 parity gaps, a v1-to-v2 translation proxy, sandbox plus migration guide, per-integrator usage reports, or brownouts with advance notice"
+  ],
+  "anchors": {
+    "strong": "Interrogates the deadline, discovers the finding targets only v1's auth, and decouples: a key-vaulting gateway closes the audit with zero integrator-side change — so no notice clause fires — while an ~18-month tiered sunset honors the contracts. Segments the 300 by traffic and revenue, verifies v2's parity gaps before committing dates, and adds at least two bonus moves, such as sequencing migration tooling before the announcement or turning Numera's botched cutoff into a partner-acquisition play.",
+    "at_bar": "Segments integrators and probes v2 readiness, catching the parity gaps and the dormant long tail, and proposes a phased plan with tooling, comms, and a timeline extending past six months. But accepts the deadline at face value — finding the auth-only compliance driver and non-breaking gateway decoupling only when nudged — and surfaces either the contract notice clauses or the Numera backlash, not both, with thin success metrics.",
+    "weak": "Treats it as a comms countdown: email all 300 integrators, give 90 days, shut it off. Never asks why six months, so misses that the deadline is about auth rather than endpoints. Doesn't segment integrators, ignores the $26M ARR exposure, contract notice clauses, and v2's missing endpoints — effectively repeating Numera's public failure — and fixates on the $400K infra savings as the deciding factor."
+  },
+  "teaser": "Leadership wants your legacy API dead in six months. 300 integrators still depend on it.",
+  "minutes": 20
+}

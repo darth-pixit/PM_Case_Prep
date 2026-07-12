@@ -1,0 +1,47 @@
+{
+  "id": "ai-pm-build-vs-api",
+  "archetype": "ai-pm",
+  "type": "strategy",
+  "company_persona": "a legal-tech startup selling AI contract review to mid-market in-house legal teams",
+  "interviewer_name": "Raj",
+  "title": "The model bill and the bank",
+  "minutes": 20,
+  "prompt": "You're the AI PM at ClauseHawk, a 40-person legal-tech startup selling AI-assisted contract review to mid-market in-house legal teams. Today the product runs entirely on a frontier-model API. Two things happened this month: our biggest prospect, a regional bank worth about $600K a year, said their security team won't approve contract data leaving their environment, and finance flagged that model API spend has hit 32% of revenue and is still climbing. Engineering wants to fine-tune an open-weights model and host it ourselves. Leadership wants your recommendation in two weeks: stay on the API, go open-weights, or something in between. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "cash_runway": "ClauseHawk has $9M in the bank, roughly 14 months of runway. ARR is $3.1M, growing about 8% per quarter. Gross margin is 58%; the board wants it above 70% before the next raise.",
+    "api_spend_breakdown": "API spend is about $85K/month. Token logs show ~70% of it goes to bulk clause extraction and classification during document upload; only ~30% goes to interactive redline suggestions and negotiation-risk analysis — the feature customers actually cite when they buy.",
+    "model_quality_evals": "On the internal eval set, the frontier API scores 94% attorney-acceptance on redline suggestions. The best open-weights model tested scores 71% on redlines, but 91% on clause extraction after a light fine-tune.",
+    "bank_security_requirement": "When the account exec pushed for specifics, the bank's written requirements are: zero data retention, no training on their data, and processing within their cloud region. The API vendor sells in-region dedicated endpoints with a signed zero-retention agreement, and the bank's security team said they would review that configuration. On-prem was a preference, not a requirement.",
+    "team_capability": "The ML team is 3 engineers. One has fine-tuned models before; none has run production GPU inference. Recruiting estimates 3 months to land an inference-infra hire.",
+    "training_data_rights": "ClauseHawk stores ~15,000 customer contracts, but only about half sit under MSAs that permit use for model improvement. There are 2,100 internally labeled clause-extraction examples cleanly licensed for training — and almost no licensed training data for redline or negotiation reasoning.",
+    "vendor_pricing_levers": "The API vendor has offered a 12-month committed-use discount (~35% off) plus 50%-off batch pricing for non-interactive workloads like the extraction pipeline. Finance hasn't modeled it; combined, they'd cut the bill roughly 45% with no engineering work.",
+    "self_hosting_economics": "Engineering's own estimate for self-hosting: about $50K/month in GPU serving plus two engineers for roughly five months to migrate. At current volume it only beats the discounted API price if nearly all traffic moves to the open model — and the 71% redline score makes that a quality regression on the flagship feature.",
+    "competitor_announcement": "Competitor LexArbor just announced a 'proprietary legal LLM.' Diligence from a shared customer and a former LexArbor engineer both indicate it is a fine-tuned wrapper over the same frontier API. LexArbor's win rate against ClauseHawk hasn't moved in two quarters."
+  },
+  "ideal_answer_notes": [
+    "Clarify the decision frame first: leadership needs a direction plus a derisking plan in two weeks, not a finished migration. Success = close the $600K bank deal, get gross margin toward the board's 70% target, and protect redline quality. Confirm runway (14 months) to calibrate risk appetite.",
+    "Segment the workload before comparing models: ask for the token/cost breakdown by task. Discover 70% of spend is bulk clause extraction at upload and 30% is interactive redlining — two workloads with different quality bars, latency needs, and privacy exposure. Reframe the binary as a per-workload routing decision.",
+    "Interrogate the bank's requirement instead of accepting 'data can't leave their environment': the written asks are zero retention, no training on their data, and in-region processing — satisfiable with the API vendor's in-region dedicated endpoint plus a ZDR agreement. Separate the enterprise deal from the architecture decision.",
+    "Pull the eval data before debating architectures: frontier API at 94% attorney-acceptance on redlines vs 71% for the best open model, but the open model hits 91% on extraction after a light fine-tune. Conclude open-weights is viable for the bulk workload only.",
+    "Stress-test the build option against team and data reality: 3 ML engineers, zero production GPU-inference experience, a 3-month infra hire, and licensing that permits training on only half the contract corpus — with just 2,100 clean extraction labels and none for redlines. Full build carries execution and legal risk.",
+    "Model the economics of all three paths including vendor levers finance hasn't touched: committed-use plus batch pricing cuts the bill ~45% (roughly $85K to $47K/month) with zero migration; self-hosting's $50K/month GPU plus two engineers for five months only wins if ~all traffic migrates, which the redline quality gap forbids.",
+    "Probe and then discard the LexArbor announcement: their 'proprietary legal LLM' is a fine-tuned wrapper on the same API and their win rate is flat — a marketing move, not a reason to build.",
+    "Recommend a sequenced hybrid: Phase 1 (this quarter) — sign the committed-use and batch discounts and stand up the ZDR in-region endpoint to unblock the bank; Phase 2 — pilot a fine-tuned open-weights extraction model on the 2,100 licensed examples behind an offline eval gate (>=91% parity and no downstream redline regression), routing bulk extraction to it only if volume growth makes the GPU math work. Keep the frontier API for redlines.",
+    "Close with metrics, risks, and kill criteria: gross margin >=70% before the raise, bank closed this quarter, extraction eval parity threshold, p95 latency SLA. Name vendor lock-in, price hikes, and model deprecation as risks; mitigate with a model-abstraction layer and qualifying a second frontier vendor. Revisit build-vs-buy at 2-3x current volume."
+  ],
+  "resource_tags": [
+    "ai_evals",
+    "api_design"
+  ],
+  "extra_checklist": [
+    "Candidate asks for the cost/token breakdown by task and explicitly uses the 70/30 extraction-vs-redline split to justify a per-workload decision rather than a single-model choice.",
+    "Candidate probes what the bank's security team actually requires in writing, surfacing zero-retention plus in-region dedicated endpoints as a path — instead of assuming self-hosting is the only way to win the deal.",
+    "Candidate quantifies the build option's full cost (GPU spend, two engineers for five months, 71% redline eval score, training-data licensing limits) before recommending, rather than treating fine-tuning as free."
+  ],
+  "anchors": {
+    "strong": "Reframes the binary as a per-workload routing decision within minutes. Elicits the 70/30 token split, the bank's written ZDR and in-region requirements, the 94-vs-71 redline evals, the data-licensing limits, and the unmodeled vendor discounts. Kills full self-hosting with breakeven math that counts engineer time. Probes and discards the LexArbor announcement. Recommends enterprise API terms now to close the bank and fix margin, plus an eval-gated fine-tune pilot for extraction, with explicit metrics and kill criteria.",
+    "at_bar": "Lands on a sensible hybrid but needs nudges. Asks about cost breakdown and eval quality only after Raj hints; initially accepts 'the bank needs on-prem' before probing the real requirement. Economics stay directional — misses batch pricing or the engineer-time cost — and the LexArbor probe is shallow. Still segments the workload, cites the redline eval gap, and sequences the recommendation correctly with at least one concrete success metric.",
+    "weak": "Commits to a side in the first two minutes — 'fine-tune, APIs are lock-in' or 'never build, just use the API' — without asking for the workload mix, evals, team capability, or the bank's written requirement. Treats the LexArbor announcement as proof they must build their own model. Never surfaces data-licensing constraints or vendor pricing levers. Final recommendation has no numbers, phases, eval gates, or kill criteria."
+  },
+  "teaser": "Your model bill is eating margins and your biggest prospect won't let data leave."
+}

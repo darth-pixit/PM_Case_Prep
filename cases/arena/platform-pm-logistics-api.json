@@ -1,0 +1,48 @@
+{
+  "id": "platform-pm-logistics-api",
+  "archetype": "platform-pm",
+  "type": "system-design",
+  "company_persona": "a mid-size parcel logistics carrier serving e-commerce merchants",
+  "interviewer_name": "Lena",
+  "title": "Kestrel's tracking API",
+  "prompt": "You're the platform PM at Kestrel Logistics, a parcel carrier moving about 1.2 million shipments a day for roughly 2,300 e-commerce merchants. Today merchants get tracking data through a creaky legacy endpoint — and, honestly, by scraping our consumer tracking page, which breaks every time we touch the UI. Leadership has funded a proper public shipment-tracking API with a real developer experience, and they want it generally available before next peak season. Your customer here is the integration engineer at a merchant, not the shopper. I'd like you to design this product: the API surface, the guarantees we sign up for, and how we get merchants onto it. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "current_integration": "The legacy endpoint is XML-over-HTTP with a single shared static token printed in an onboarding PDF — the same token for every merchant, so there is no per-merchant rate limiting or usage attribution. About 30% of tracking-page web traffic is actually merchant scrapers, not shoppers.",
+    "traffic_scale": "1.2M shipments/day, each generating ~8 scan events over a ~3.5-day lifecycle. The legacy endpoint serves ~90M requests/day, and roughly 85% of those polls return no new information — merchants poll every few minutes because there is no push mechanism.",
+    "incident_history": "Last peak season a weather delay triggered a polling storm — traffic hit 6x baseline. The tracking backend shares a database with the driver mobile app, so the storm caused a 4-hour outage that also degraded driver package scanning in the field.",
+    "event_latency": "The scan-to-datastore pipeline has median latency ~4 minutes but p95 ~25 minutes, because rural depots batch-upload scans. Any 'real-time' freshness promise is bounded by this pipeline, and fixing it is owned by a different org.",
+    "customer_mix": "~2,300 integrated merchants. The top 20 merchants generate ~70% of call volume and have dedicated engineering teams; the long tail are small shops with one part-time developer who copies code from docs verbatim.",
+    "graphql_ask": "Kestrel's largest merchant (18% of shipment volume) asked for a GraphQL endpoint in a QBR, and the CRO is now excited about 'GraphQL as a differentiator.' However, discovery interviews with 15 other merchants surfaced webhooks, sandbox tracking numbers, and better docs — none of them mentioned GraphQL.",
+    "webhook_appetite": "In those same 15 discovery calls, 11 merchants said they would adopt webhooks if delivery were reliable and there was a replay/backfill mechanism. Several were previously burned by another carrier's webhooks that silently dropped events during an outage.",
+    "team_constraints": "You have 4 backend engineers, a designer at 25% allocation, and no dedicated docs writer or developer-relations person. GA must land before peak season, roughly two quarters away.",
+    "slo_pressure": "No SLOs exist today. Sales wants to write 99.99% availability and 'instant tracking updates' into enterprise contracts. Nothing has been signed yet — the candidate can still shape what gets promised.",
+    "migration_history": "The legacy endpoint cannot be shut off quickly: the last forced migration (an address-validation API) took 14 months because the biggest merchants are change-averse and gate releases quarterly."
+  },
+  "ideal_answer_notes": [
+    "Starts by defining the developer-customer and segments them: top-20 enterprise merchants with real engineering teams vs. the long tail of solo part-time devs — and notes the two need different DX (docs and sandbox matter most for the tail).",
+    "Asks how merchants integrate today and what the traffic looks like — uncovers the shared static token, the 90M requests/day with ~85% empty polls, and the scraping. Frames the core design problem as replacing polling with push, not just prettifying REST.",
+    "Probes incident history and finds the peak-season polling storm plus the shared database with the driver app — concludes the new API's read path must be isolated (read replica / dedicated event store) so merchant traffic can never take down driver scanning again.",
+    "Proposes the product shape: a REST lookup resource (GET /shipments/{tracking_number} returning a normalized status + event history) plus signed webhooks for state-change events, with retries, idempotency keys, and an event replay/backfill endpoint — explicitly citing the merchants burned by silently dropped webhooks.",
+    "Handles the GraphQL ask with evidence rather than deference: acknowledges the top merchant and the CRO, but prioritizes webhooks/sandbox/docs per the 15-merchant discovery; offers sparse fieldsets or a later GraphQL layer as a compromise, and commits to telling the CRO why.",
+    "Makes per-merchant API keys, tiered rate limits, and usage attribution a v1 prerequisite — you cannot throttle a polling storm or run a deprecation when everyone shares one token.",
+    "Asks about upstream event latency before committing to guarantees, then sets defensible SLOs: e.g., 99.9% availability and 'event visible via API/webhook within 30 minutes of physical scan, p95' — and explicitly pushes back on sales' 99.99% / 'instant updates' language, proposing contract wording tied to the pipeline reality.",
+    "Designs for peak: 6x seasonal spike as the load target, ETag/304 support and caching on the poll path, per-key throttles with a documented load-shedding order, and a pre-peak load test as a GA gate.",
+    "Scopes DX to a 4-engineer team: sandbox with synthetic tracking numbers that advance through lifecycle states, a quickstart targeting time-to-first-200 under 15 minutes, an OpenAPI spec — SDKs deferred. Cuts scope out loud rather than promising everything.",
+    "Lays out rollout and migration: design-partner beta with 3-5 top-20 merchants plus a couple of long-tail shops, dual-run with the legacy endpoint, a 12-18 month deprecation window (citing the 14-month precedent), adoption incentives like higher rate limits, and success metrics: % of traffic on webhooks vs. polls, empty-poll ratio, time-to-first-call, integration support tickets."
+  ],
+  "resource_tags": [
+    "api_design"
+  ],
+  "extra_checklist": [
+    "Candidate elicits current usage or incident history before proposing an architecture — transcript shows they surfaced at least one of: the 85% empty-poll ratio, the shared static token, or the peak-season outage, and used it to justify webhooks and per-merchant rate limits.",
+    "Candidate states a numeric availability and freshness SLO and explicitly reconciles freshness with the 25-minute p95 scan-pipeline latency (or pushes back on sales' 99.99%/'instant' ask) rather than promising real-time.",
+    "Candidate addresses the GraphQL request with a reasoned yes/no tied to the merchant discovery data, and gives a legacy-endpoint migration plan with a concrete deprecation timeline and beta/design-partner step."
+  ],
+  "anchors": {
+    "strong": "Interviews Lena before designing: uncovers the empty-poll waste, shared token, driver-app outage, and 25-minute p95 pipeline. Designs REST lookup plus signed webhooks with replay, per-merchant keys and tiered limits, and isolates the API read path from the driver database. Sets 99.9% availability and a 30-minute p95 freshness SLO, rebuffing sales' 'instant' promise and the GraphQL ask with discovery evidence. Closes with sandbox-first DX, design-partner beta, dual-run migration with a dated deprecation window, and adoption metrics.",
+    "at_bar": "Reaches REST plus webhooks and per-merchant keys, but only asks about scale or the outage after Lena nudges, so rate limiting arrives late in the design. Sets an availability SLO yet misses that freshness is bounded by the 25-minute pipeline until hinted. Deflects GraphQL with a vague 'maybe later' rather than citing discovery data. Mentions a beta and migration but gives no deprecation timeline, and success metrics stay generic (adoption, NPS) instead of webhook share or empty-poll ratio.",
+    "weak": "Jumps straight into endpoint or schema design without asking who the integrating developers are or how the legacy endpoint is used, so never uncovers the polling storm, shared token, or shared-database outage. Takes the bait and makes the top merchant's GraphQL ask the centerpiece. Promises real-time updates and 99.99% availability without checking pipeline latency. No rate limiting or auth story, no sandbox, no migration or deprecation plan, and no measurable definition of success."
+  },
+  "teaser": "Merchants are scraping your tracking page. Design the API that ends it.",
+  "minutes": 22
+}

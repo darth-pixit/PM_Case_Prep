@@ -1,0 +1,49 @@
+{
+  "id": "growth-pm-p2p-payments-loop",
+  "archetype": "growth-pm",
+  "company_persona": "a P2P payments app expanding into its first international market",
+  "interviewer_name": "Zara",
+  "title": "Cold start in Manila",
+  "type": "product-design",
+  "prompt": "You're a growth PM at Pavo, a peer-to-peer payments app with nine million monthly actives in the UK. In three months we launch in the Philippines — our first new country. A P2P app is useless until the people you want to pay are on it, and our UK data shows a new user who completes a first transaction within seven days retains at four times the rate of one who doesn't. Leadership has asked you to design the activation and invite loop for the Philippines launch. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "business_goal": "Success is 1 million monthly transacting users in the Philippines within 12 months of launch. Leadership explicitly does not count downloads or registrations — a user must send or receive money in the month to count.",
+    "market_context": "The Philippines is mobile-first: roughly 70% smartphone penetration, under 5% credit card penetration, and about half of adults have no bank account. Cash still dominates outside metro areas.",
+    "competition": "A dominant local e-wallet has ~60% penetration in Metro Manila but is weak in the provinces and charges 1-2% to cash out to a bank. National interop rails go live for Pavo at launch, letting it transfer to any bank or wallet.",
+    "current_flow": "The launch build is a straight port of the UK app. Sending to any phone number already works — a non-user recipient gets a generic SMS saying money is waiting — but before they can even see the amount, let alone touch it, they must complete the full UK onboarding: phone number, full KYC, and a bank link.",
+    "beta_results": "A two-month soft launch in Cebu: 40,000 downloads from paid ads, 8% linked a funding source, 3% ever sent money — and 70% of people who were sent money never installed the app. Unclaimed transfers are returned to the sender after 7 days.",
+    "regulation": "The central bank permits tiered KYC: a basic wallet requires only a phone number and a government-ID selfie, with a balance cap around $90 equivalent. Full KYC lifts the cap and requires a verified government ID plus address details — no bank account needed; a bank link is optional and only required to move money to or from a bank.",
+    "cash_out_network": "Pavo has signed a cash-in/cash-out partnership covering roughly 20,000 over-the-counter agents nationwide — pawnshops, convenience stores, and corner-store kiosks with strong province coverage. Wallet balances can be withdrawn as physical cash for a flat fee of about $0.20, versus the incumbent's 1-2% bank cash-out charge; interop transfers stay free for recipients who do have a bank or another wallet.",
+    "use_cases": "Local research ranks the top transfer needs: domestic remittances from metro workers to family in the provinces (largest by volume), bill-splitting among young urban professionals, and paying small side-hustle sellers.",
+    "incentive_budget": "Finance approved $2M in year-one incentives — up to about $3 per activated sender-recipient pair. The fraud team flagged duplicate-account farming during the Cebu beta, so unconditional signup bonuses are off the table.",
+    "team_capacity": "One squad of six engineers until launch date — realistically two major product bets can ship in time. Marketing budget covers paid installs in one or two metro areas, not a nationwide blitz."
+  },
+  "ideal_answer_notes": [
+    "Clarifies the goal before designing: learns success = 1M monthly transacting users at 12 months (not downloads), and anchors on the 7-day first-transaction retention hook — so the case is about engineering transactions between real pairs of people, not acquiring installs.",
+    "Asks about the market and discovers <5% card penetration, ~50% unbanked, and a metro-only incumbent wallet — immediately flags that the ported UK bank-link-first onboarding is fatal in this market.",
+    "Asks whether anything has been tried and mines the Cebu beta: 8% funding linkage, 3% send rate, 70% of paid recipients never installing. Diagnoses that the invite mechanic already fires — a money-waiting SMS goes to any phone number — but the loop dies on the recipient side because the claim path behind that SMS is broken.",
+    "Segments users into senders (metro workers remitting to province family, urban bill-splitters) and recipients (often unbanked province relatives), and names the key insight: every send is a warm, money-motivated invite, so recipient activation is the loop's engine.",
+    "Asks about regulation and finds the tiered-KYC unlock: rebuilds the claim flow — the SMS shows the actual peso amount, the recipient claims with phone number plus ID selfie, no bank link, into a ~$90-capped wallet — so the money itself is the activation incentive.",
+    "Pressure-tests the recipient's endgame: asks how an unbanked province relative turns a claimed balance into actual cash, and discovers the ~20,000-location over-the-counter agent partnership — flat ~$0.20 cash-out versus the incumbent's 1-2% — making the loop credible for the largest segment and turning cash-out into a selling point rather than a leak.",
+    "Closes the loop end-to-end: money-waiting SMS, light claim, then nudge the new recipient to send onward, cash out at an agent, or transfer via interop rails — with a prompt to the no-bank full-KYC tier (verified ID, no bank account required) when they hit the balance cap. States loop metrics: recipient claim rate, invites per newly activated user (branching factor), and time-to-first-transaction.",
+    "Prioritizes against the two-bets constraint: ships (1) the rebuilt recipient claim flow — peso amount visible in the SMS before signup, phone-plus-ID-selfie claim, no bank link (send-to-any-phone-number already exists in the ported build; it's the claim side that's broken) — and (2) the post-claim nudge to resend, cash out at an agent, or transfer via rails; explicitly defers merchant payments and bill-split polish, justified by expected lift on the 70% recipient drop-off.",
+    "Designs the incentive as loop fuel, not a signup bounty: ~$3 split across the pair, paid only after the recipient claims and completes a genuine transaction with a distinct counterparty — with device/ID dedupe — directly countering the duplicate-account farming from the beta.",
+    "Proposes a geo-seeded launch: densify one metro-to-province remittance corridor (e.g., Manila to Cebu) instead of spreading paid installs thin nationally, and defines the north star (weekly transacting users) with guardrails: cost per activated pair vs. the $2M budget, fraud rate, and claim-flow completion, plus an experiment plan for incentive size."
+  ],
+  "resource_tags": [
+    "growth_loops",
+    "north_star"
+  ],
+  "extra_checklist": [
+    "Explicitly designs the recipient/claim side of the loop — a way for a non-user to see and claim money sent to them without a bank link or full KYC, plus how an unbanked recipient turns the claimed balance into cash — rather than proposing only sender-side referral rewards.",
+    "Names at least two loop-specific metrics (e.g., recipient claim rate, invites per activated user, branching factor, time-to-first-transaction) and connects at least one to the stated goal of monthly transacting users.",
+    "Attaches concrete fraud guardrails to any paired incentive (e.g., payout only after a genuine transaction with a distinct counterparty, device or ID deduplication), referencing or anticipating the duplicate-account farming flagged in the beta."
+  ],
+  "anchors": {
+    "strong": "Asks about rails, regulation, cash-out, and prior attempts early; catches the 70% recipient drop-off and the tiered-KYC unlock, then rebuilds the claim flow so waiting money is visible before signup, with agent cash-out for unbanked recipients. Treats every send as a warm invite, quantifies the loop (claim rate, branching factor, time-to-first-transaction), geo-seeds one metro-to-province corridor, and conditions the paired incentive on a real transaction to defeat duplicate-account farming.",
+    "at_bar": "Segments senders (metro remitters, bill-splitters) from recipients and proposes an SMS claim flow so recipients can get money without a bank link, but needs nudges to ask about regulation, cash-out, or the Cebu funnel before locating the recipient-side break. Names sensible metrics like activation rate and referrals without wiring them into a measurable loop, and adds fraud guardrails on the incentive only once the interviewer prompts.",
+    "weak": "Jumps to a referral bonus and a paid-ads plan without asking what the market looks like, leaving the UK bank-link onboarding untouched. Never asks whether a beta ran, so misses the 70% recipient drop-off entirely. Lists disconnected features — cashback, gamification, bill splitting — instead of a self-reinforcing loop, and measures success in downloads or signups rather than transacting users or claim rate."
+  },
+  "teaser": "Nobody can get paid until everyone joins — design the loop that breaks the stalemate.",
+  "minutes": 22
+}

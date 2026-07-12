@@ -1,0 +1,48 @@
+{
+  "id": "data-pm-checkout-error-cost",
+  "archetype": "data-pm",
+  "company_persona": "a large online home-goods retailer",
+  "interviewer_name": "Arjun",
+  "title": "The one-percent leak",
+  "type": "estimation",
+  "prompt": "You're the PM for checkout at Hearthline, a large online home-goods retailer. Our data platform team flagged that about 1% of checkout attempts end in a payment processing error — the shopper hits Pay and gets an error screen. Engineering believes a fix would take about two sprints, but those same engineers are committed to our loyalty program launch next quarter. The CFO wants a number: what is this error rate costing us in revenue per year, and should the fix jump the roadmap queue? I have the data you'd need, so ask away. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "error_definition": "The 1% counts checkout attempts where the shopper pressed Pay and got a hard payment-authorization error screen. Card declines and voluntary cart abandonment are tracked separately and are NOT included in the 1%.",
+    "error_trend": "The rate has been stable at roughly 1% for at least six months. This is a chronic leak, not a spike, so annualizing a monthly figure is valid.",
+    "traffic_volume": "Hearthline sees about 2 million checkout attempts per month (~24M/year), roughly flat across the year — tell them to ignore the mild Q4 bump for a first pass.",
+    "average_order_value": "Average order value is $75. Errored checkouts look like normal orders — no skew toward big or small baskets.",
+    "in_session_recovery": "About 60% of shoppers who hit the error retry and complete the purchase in the same session. The other 40% leave without buying, and almost none come back to finish that order later.",
+    "repeat_purchase_impact": "Roughly 80,000 distinct shoppers a year hit the error and leave without buying. Their 90-day repeat-purchase rate is 24%, versus 30% for a matched control group. If asked to annualize: shoppers who do repeat place about two orders over the following 12 months, at the normal $75 AOV.",
+    "fix_coverage": "Engineering traced about 70% of the errors to a payment-gateway timeout; the two-sprint fix addresses only that timeout. The remaining 30% are long-tail causes with no single fix.",
+    "loyalty_tradeoff": "The loyalty program is forecast to add about $3M incremental revenue in its first year and needs the same two engineers for six sprints.",
+    "support_ticket_cost": "About 1 in 20 errored sessions files a support ticket, at a fully loaded cost of about $6 per ticket (~$70K/year — deliberately small; strong candidates size it and set it aside).",
+    "annual_gmv_and_margin": "Actual annual GMV is about $1.6B in completed orders. (Attempts x AOV ≈ $1.8B overstates it, since attempts include errored checkouts and card declines that never complete.) Gross margin is 35% if they want to convert revenue to contribution — note the CFO asked in revenue terms."
+  },
+  "ideal_answer_notes": [
+    "Pin the metric before any math: confirm the 1% means hard payment-authorization errors per checkout attempt (not card declines or abandonment) and that the rate has been stable, so annualizing is valid.",
+    "Get the anchors and state the tree out loud: 2M checkout attempts/month = 24M/year, times 1% error = 240K errored attempts, times share-not-recovered, times $75 AOV.",
+    "Ask what happens after the error — the pivotal adjustment: 60% retry successfully in-session, so only ~96K of the 240K errored attempts are truly lost orders. Explicitly correct the naive 240K x $75 = $18M down to ~$7.2M.",
+    "Sanity-check the direct loss against the real denominator: ask for actual GMV — about $1.6B/year in completed orders — rather than the attempts x AOV proxy (~$1.8B, an overstatement since attempts include errors and declines). $7.2M is ~0.45% of revenue, which passes a smell test for a 1% error rate with 60% recovery.",
+    "Layer the second-order retention effect: ~80K shoppers/year hit the error and leave, carrying a 6pp lower 90-day repeat rate; with repeat purchasers placing ~2 orders over the following 12 months at $75 AOV, that's 80K x 6% x 2 x $75 ≈ $0.7M — call it another $0.5-1M/year. It matters directionally but doesn't flip the decision.",
+    "Size the support-ticket line (240K x 5% x $6 ≈ $70K/year) and explicitly set it aside as noise relative to the revenue loss.",
+    "Convert loss-at-stake into fix value: the two-sprint fix addresses only ~70% of errors, so ~$5-6M/year recoverable revenue (~$1.8-2M contribution at 35% margin).",
+    "Make the roadmap call with per-sprint economics: fix ≈ $5.5M for 2 sprints vs loyalty ≈ $3M for 6 sprints of the same engineers. Recommend fix first; slipping loyalty by two sprints costs roughly $3M x 1/12 ≈ $250K — clearly worth it.",
+    "Close with error bars and a validation plan: give a range ($4-8M including retention), name recovery rate and fix coverage as the biggest sensitivities, and propose a before/after (or brief holdout) on error rate and checkout conversion to confirm the recovered revenue."
+  ],
+  "resource_tags": [
+    "sql_metrics",
+    "metric_debugging"
+  ],
+  "extra_checklist": [
+    "Candidate asks what happens after a shopper hits the error (retry/in-session recovery) BEFORE finalizing a direct-loss number — i.e., does not book all 240K errored attempts as lost revenue.",
+    "Candidate states a concrete annual dollar figure with visible arithmetic landing in the $4M-$9M range, or names the naive $18M and explicitly corrects it downward using the 60% recovery anchor.",
+    "Candidate makes an explicit fix-vs-loyalty recommendation using dollars-per-engineering-sprint or an equivalent ROI comparison — not just 'we should do both'."
+  ],
+  "anchors": {
+    "strong": "Locks the definition first (hard auth errors, attempts as denominator, stable rate), builds attempts x 1% x non-recovery x AOV, asks about retries and cuts the naive $18M to ~$7.2M, layers the 6pp repeat-purchase drag and 70% fix coverage to reach ~$5-6M recoverable, sanity-checks against the ~$1.6B actual GMV rather than the attempts-value proxy, then recommends fix-first on dollars-per-sprint versus the $3M loyalty forecast — closing with a range, key sensitivities, and a post-fix measurement plan.",
+    "at_bar": "Reaches a defensible direct-loss figure but needs nudges: asks for volume and AOV unprompted, yet Arjun must hint at in-session recovery or the 70% fix coverage before they adjust. Arithmetic is correct once anchors land and they land near $7M. Gives a recommendation, but the loyalty comparison is shallow (no per-sprint ROI), the retention effect is skipped or hand-waved, and no sensitivity range or validation plan is offered.",
+    "weak": "Multiplies 24M attempts by 1% and $75 and presents $18M as final — never asks what counts as an error, whether shoppers retry, or what share of errors the fix actually addresses. Ignores or dodges the loyalty tradeoff ('just do both'), does no sanity check against total GMV, fixates on the ~$70K support-ticket cost as if material, and ends without a clear number, range, or prioritization call."
+  },
+  "teaser": "A 1% checkout error sounds tiny — until the CFO asks for the dollar figure.",
+  "minutes": 18
+}

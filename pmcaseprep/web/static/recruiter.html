@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recruiter Copilot — hiring for AI &amp; Data Science</title>
+  <link rel="stylesheet" href="/static/hub.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="hub">
+      <h1>🧭 Recruiter Copilot</h1>
+      <span class="sub">hire for AI &amp; data science without being an expert</span>
+      <span class="whoami" id="whoami"></span>
+    </header>
+    <p class="lede">You're hiring for a role you couldn't pass the interview for — that's
+    normal, and fixable. Describe the job; get what today's interviews actually test,
+    questions you can credibly ask, and plain-english explanations of every concept.</p>
+
+    <div class="card">
+      <h2>Tell me about the role</h2>
+      <p class="hint">Start with whatever you have — a one-liner, a full JD, or just
+      “my startup needs someone to build a chatbot”. I'll ask what I need.</p>
+      <div class="preset-row" id="presets"></div>
+      <div class="chat" id="chat"></div>
+      <div id="chatGate"><div id="authMount"></div></div>
+      <div class="chat-compose" id="compose" hidden>
+        <textarea id="chatInput" placeholder="e.g. Hiring a senior data scientist for our payments fraud team…"></textarea>
+        <button class="btn" id="chatSend">Send</button>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs">
+      <button data-tab="archetypes" class="on">What's asked today</button>
+      <button data-tab="concepts">Concepts in plain english</button>
+      <button data-tab="evaluation">How to judge answers</button>
+      <button data-tab="resources">Learn it yourself</button>
+    </div>
+    <div id="guide"><p class="hint">Loading the field guide…</p></div>
+
+    <p class="footer-nav">Also on this site: <a href="/arena">Case Arena — practice PM interviews</a>
+      · <a href="/referrals">Find your referral paths</a></p>
+  </div>
+  <script src="/static/shared.js?v=1"></script>
+  <script src="/static/recruiter.js?v=1"></script>
+</body>
+</html>

@@ -25,6 +25,12 @@ services:
         sync: false
       - key: PMCP_POSTHOG_KEY
         sync: false
+      # Shared login for /arena and /recruiter (both optional; either enables
+      # its door). Google client id is public; the Resend key is a secret.
+      - key: PMCP_GOOGLE_CLIENT_ID
+        sync: false
+      - key: PMCP_RESEND_KEY
+        sync: false
       # Optional: uncomment to use Deepgram Flux turn detection
       # - key: PMCP_STT
       #   value: flux

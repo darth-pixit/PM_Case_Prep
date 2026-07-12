@@ -1,0 +1,48 @@
+{
+  "id": "core-pm-dogwalking-market",
+  "archetype": "core-pm",
+  "type": "estimation",
+  "company_persona": "a home-services marketplace weighing its first pet-care category",
+  "interviewer_name": "Nadia",
+  "title": "The $30M dog walk",
+  "prompt": "You're a PM at Leashly, a marketplace app where about 400,000 households book home cleaning and handyman services. The exec team wants to launch dog-walking as a new category, starting with one large metro of roughly 8 million people, before committing to a national rollout. They've asked you for two things: an estimate of the market for recurring weekday dog-walking in that metro, and a recommendation on whether the category can clear our bar — $30 million in annual gross bookings on our platform. I'm happy to share data as you ask for it. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "metro_households": "The metro has ~8 million people and an average household size of 2.5 — about 3.2 million households.",
+    "dog_ownership": "About 30% of households own at least one dog. Treat it as one walkable dog per dog-owning household — multi-dog homes roughly offset dogs too old or reactive for a stranger to walk.",
+    "midday_gap": "Roughly 25% of dog-owning households have no adult at home midday on a typical weekday.",
+    "paid_walking_share": "Of households with that midday gap, about 1 in 3 pays someone to walk the dog today; the rest use daycare, neighbors, or leave the dog alone.",
+    "walk_price_frequency": "Going rate is about $22 per 30-minute walk; recurring customers average 3 walks per week across about 46 active weeks a year (~$3,000 per household per year).",
+    "scope_one_offs": "One-off and weekend walks exist, but the exec ask is scoped to recurring weekday walking — set them aside.",
+    "app_booked_share": "Only about 15% of paid dog walks in this metro are booked through apps today; the rest go to independent walkers found through word of mouth, buildings, and vets.",
+    "incumbent_benchmark": "The leading pet-care marketplace does an estimated $18M per year in dog-walking gross bookings in this metro.",
+    "bar_definition": "If asked about timing or economics: the $30M in annual gross bookings must be flowing through Leashly by the end of year 2, and Leashly's take rate would be about 20% — so the bar equates to roughly $6M a year in net revenue.",
+    "leashly_base": "Leashly has ~90,000 active customer households in this metro today; internal surveys suggest about 30% of them own dogs."
+  },
+  "ideal_answer_notes": [
+    "Probe the bar's hidden terms before estimating: ask what time horizon the $30M applies to (end of year 2) and what Leashly keeps of each booking (~20% take, so $30M in gross bookings is only ~$6M net revenue), and confirm one-offs and weekend walks stay out of scope.",
+    "Lay out the tree aloud before plugging in numbers: households → dog-owning households → no adult home midday → those who pay for walking → walks/week × weeks/year × price per walk.",
+    "Drive to ~80k paying households: 8M people ÷ 2.5 = 3.2M households, × 30% with dogs = ~960k, × 25% with a midday gap = ~240k, × 1/3 who currently pay = ~80k.",
+    "Convert to dollars with round numbers: 3 walks/week × 46 weeks × $22 ≈ $3,000 per household per year → total paid-walk market ≈ $240M, stated as a ~$200-280M range rather than false precision.",
+    "Ask how walks are actually booked today — this surfaces the 15% app-booked share, which cuts the serviceable pool to roughly $36M/year currently flowing through apps.",
+    "Sanity-check against the incumbent: their ~$18M is about half of a ~$36M app-booked pool — the two anchors are mutually consistent, which raises confidence in the tree.",
+    "A second independent check earns extra credit: supply side (~11M walks/year ÷ ~1,500 walks per walker-year ≈ 7-8k active walkers, plausible for this metro) or $3k/household/year versus daycare costs.",
+    "Frame the judgment honestly: hitting $30M GMV by year 2 means capturing ~80% of today's app-booked pool or growing app penetration well past 15% — more than the entrenched incumbent has managed.",
+    "Test Leashly's distribution edge with numbers: 90k metro households × 30% dog owners = ~27k warm cross-sell leads; even 20% adoption at $3k/year is ~$16M — meaningful, but not sufficient on its own.",
+    "Close with a clear call: no-go against the bar as written (or renegotiate the bar / run a cross-sell pilot first), explicitly naming app-booked share as the assumption that would most change the answer."
+  ],
+  "resource_tags": [
+    "sql_metrics"
+  ],
+  "extra_checklist": [
+    "Candidate distinguishes total paid-walking spend (~$200-280M) from the app-serviceable pool (~$36M) before making the go/no-go call, rather than comparing the $30M bar to the total market.",
+    "Candidate sanity-checks their estimate against at least one independent anchor: the incumbent's ~$18M bookings, the ~$3,000 per-household annual spend, or walker-supply feasibility.",
+    "Candidate states an explicit go/no-go recommendation tied to the $30M bar and names the single assumption (e.g., app-booked share) that would most change their answer."
+  ],
+  "anchors": {
+    "strong": "Probes the bar's hidden terms — end-of-year-2 horizon, ~20% take, so $30M GMV is ~$6M revenue — then runs a clean tree: 3.2M households → 960k with dogs → 240k with a midday gap → ~80k paying at ~$3k/year, landing ~$240M with a stated range. Asks how walks are booked, catches the 15% app-share and $18M incumbent anchors, sizes the serviceable pool at ~$36M, and recommends no-go or a renegotiated bar, naming app penetration as the swing variable.",
+    "at_bar": "Builds a sensible household tree and reaches a defensible $150-300M total market, though needs nudges on the midday-gap and paid-share steps. Arithmetic mostly holds, with one slip they catch themselves. Only separates total spend from the app-booked pool after Nadia volunteers the 15% figure, but then uses the $18M incumbent anchor correctly and gives a hedged recommendation without clearly naming which assumption would flip it.",
+    "weak": "Guesses a dog-ownership rate and multiplies straight to a headline number, never asking by when the $30M must be hit or what Leashly keeps of each booking, and never probes who actually pays for walks or how they book them. Concludes 'the market is hundreds of millions, so $30M is easy,' conflating total spend with Leashly's obtainable bookings. No sanity check against the incumbent, arithmetic slips stand uncorrected, and the recommendation is an unconditional go."
+  },
+  "teaser": "Every dog needs a walk — but is there a $30M business in one metro?",
+  "minutes": 15
+}

@@ -1,0 +1,48 @@
+{
+  "id": "platform-pm-developer-portal",
+  "archetype": "platform-pm",
+  "company_persona": "a B2B payments company with ~400 engineers and a newly funded internal platform group",
+  "interviewer_name": "Jonas",
+  "title": "The golden path nobody has to take",
+  "type": "product-design",
+  "prompt": "You've just joined Corvet, a B2B payments company with about 400 engineers across 55 teams, as the first PM on its new platform group. Today, standing up a new service means stitching together eleven internal tools — repo templates, CI pipelines, Terraform, secrets, monitoring — and the median time from service kickoff to first production deploy is 15 business days. Leadership has funded you and four platform engineers to build an internal developer portal with a golden path for service onboarding. Your customers are Corvet's own engineers. Design this product. Walk me through how you'd approach it.",
+  "hidden_facts": {
+    "business_goal": "The CTO's pain is new-service lead time and reliability: median time from service kickoff to first production deploy is 15 business days, and snowflake infrastructure drives roughly 30% of production incidents. The stated target: golden-path services go from service kickoff to first production deploy in under 2 business days, within two quarters.",
+    "adoption_mandate": "There is no mandate. The CTO explicitly wants pull, not push — no team can be forced onto the portal. Adoption has to be earned; if teams route around it, the platform group's funding is at risk.",
+    "team_and_timeline": "You have 4 platform engineers for two quarters, plus a borrowed designer for a few weeks. Headcount only grows if adoption numbers show up.",
+    "user_segments": "Three distinct internal segments: teams spinning up new services (~6 per month), new-hire engineers (~8 per month), and the 55 existing service-owning teams (~350 engineers) doing day-2 operations. Leadership's goal maps to the first segment.",
+    "existing_tools": "A staff engineer built 'forge', a CLI that scaffolds repos — about 30% of teams use it voluntarily and like it. Beyond that: a stale wiki and a pile of Terraform modules of very mixed quality.",
+    "past_attempt": "Last year another team stood up a Backstage-style service-catalog POC. Metadata went stale within weeks, it offered no workflows, and it was quietly abandoned after 3 months. Engineers remember it as 'a phonebook nobody updated'.",
+    "security_bottleneck": "Every production service requires a manual security review averaging 5 business days — the single longest step in the 15 days. The security team has said pre-approved templates with codified controls (audit logging, secrets handling) could skip that manual review entirely.",
+    "stack_mix": "70% of services are Java/Spring on Kubernetes, 20% Node, 10% legacy Python on VMs. There is no requirement to support every stack at launch.",
+    "baseline_metrics": "Baselines if asked: median service kickoff to first production deploy 15 business days; ~40 infra help tickets per week, historically absorbed by an SRE on-call rotation and the individual tool-owning teams — a load leadership expects the new platform group to inherit; new-hire time to tenth commit ~6 weeks. No developer-experience survey exists yet."
+  },
+  "ideal_answer_notes": [
+    "Opens by asking why leadership funded this now; uncovers the CTO's real target — golden-path services go from service kickoff to first production deploy in under 2 days versus 15 today — plus the incident load from snowflake infra, and anchors the whole design on that goal.",
+    "Frames the portal as a product with voluntary adoption: asks whether usage will be mandated, learns the CTO wants pull not push, and states explicitly that adoption is the design problem, not just a rollout detail.",
+    "Segments internal customers — new-service creators (~6/month), new hires (~8/month), and the 55 existing service-owning teams (~350 engineers) — and picks new-service creators as the wedge because they map directly to the lead-time goal, with new hires as secondary beneficiaries.",
+    "Audits the existing landscape before designing: forge's 30% organic adoption and goodwill, the stale wiki, mixed-quality Terraform, and the abandoned catalog POC — and extracts the lesson that catalog-first already failed here, so V1 must be workflow-first.",
+    "Maps the 15-day journey step by step and finds the 5-day manual security review is the largest single chunk; proposes pre-approved templates with codified controls so golden-path services skip the review — compliance becomes the adoption carrot, not a tax.",
+    "Scopes the MVP golden path to the 70% Java/Spring-on-Kubernetes majority: forge-powered scaffolding that emits repo, CI/CD, pre-approved infra, audit logging, and observability defaults end to end, with only a thin portal UI on top; defers Node and legacy Python paths.",
+    "Names what's cut and why: no service catalog, no scorecards, no docs hub in V1 — with 4 engineers, one end-to-end path that works beats five half-features; notes catalog data can later be generated automatically from golden-path services instead of manual metadata.",
+    "Lays out a pull-based adoption plan: recruit 2-3 design-partner teams with services planned next quarter, make the paved road the easiest road, keep documented escape hatches so it never feels like a cage, and let the security fast-lane sell itself internally.",
+    "Defines success crisply: north star is median time from service kickoff to first production deploy for golden-path services (target under 2 days), with guardrails — share of new services choosing the path, infra ticket volume against the ~40/week baseline inherited from the old SRE rotation, escape-hatch rate, and a first DevEx survey as a satisfaction baseline.",
+    "Closes with risks: template drift as the fleet grows (needs an upgrade story for already-scaffolded services), and the ivory-tower failure mode — commits to embedding with design partners and shipping fixes on their feedback weekly."
+  ],
+  "resource_tags": [
+    "north_star",
+    "growth_loops"
+  ],
+  "extra_checklist": [
+    "Candidate names at least two distinct internal user segments (e.g., new-service creators vs. existing service owners) and explicitly chooses one as the primary target with a reason tied to the lead-time goal.",
+    "Candidate asks what already exists or was tried before, and visibly incorporates the failed catalog POC lesson — proposing a workflow-first V1 rather than a catalog-first portal.",
+    "Candidate treats adoption as voluntary: proposes a concrete pull mechanism (design partners, security fast-lane, escape hatches) and includes an adoption measure alongside the lead-time metric."
+  ],
+  "anchors": {
+    "strong": "Asks why now and surfaces the CTO's 2-day lead-time target; segments internal users and picks new-service creators over new hires with an argument tied to that goal; digs into what exists, pulls the lesson from the dead catalog POC and builds on forge's goodwill; discovers the 5-day security review and turns codified controls into the adoption carrot; scopes an opinionated Java-on-K8s path, defers the rest, and pairs a lead-time north star with adoption and escape-hatch guardrails.",
+    "at_bar": "Identifies engineers as customers and asks some clarifying questions, but needs nudges to segment — initially designs for all 400 at once before narrowing to new-service creation. Learns about forge and the failed catalog POC when prompted and adjusts. Produces a sensible scaffold-to-deploy MVP and a lead-time metric, though the adoption plan stays thin ('we'll demo it') and tradeoffs like deferring Node and Python are stated only after Jonas pushes.",
+    "weak": "Jumps straight to a feature list — service catalog, scorecards, docs hub — without asking what leadership wants or what already exists, so never learns the catalog POC already died that way. Treats all 400 engineers as one user, assumes the org can be forced onto the portal, never uncovers the security-review bottleneck, and offers no success metric beyond vague 'developer happiness' or features shipped."
+  },
+  "teaser": "Eleven tools, fifteen business days to ship one service — build the golden path.",
+  "minutes": 20
+}

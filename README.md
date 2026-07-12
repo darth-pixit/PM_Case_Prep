@@ -14,6 +14,50 @@ clarify  ->  solve (candidate drives)  ->  graduated hints on demand
          ->  rubric-graded scorecard  ->  longitudinal skill graph
 ```
 
+## Four experiments, one deploy
+
+The site runs **four separate experiments on one Render service, one domain,
+one database, and one login system** — but each experiment has its own page,
+its own user experience, and its own analytics namespace, so results never
+bleed into each other:
+
+| Route | Experiment | Login | Analytics namespace |
+|---|---|---|---|
+| `/` | **Tutor** — the original single-case interview (unchanged) | optional, at scorecard | `experiment=tutor` |
+| `/arena` | **Case Arena** — 5 PM tracks × 5 cases each, pick-your-case | **required at start** | `experiment=arena`, `arena_*` events |
+| `/recruiter` | **Recruiter Copilot** — hiring for AI/DS without being an expert | required for chat; field guide open | `experiment=recruiter`, `recruiter_*` events |
+| `/referrals` | **Referral Paths** — find who'd refer you, from your own LinkedIn export | none (all client-side) | `experiment=referrals`, `referrals_*` events |
+
+Every PostHog event carries an `experiment` super property, so per-experiment
+dashboards are one filter away while a single (free-tier) PostHog project and
+one publishable key serve everything.
+
+**One login, two passwordless doors** (`pmcaseprep/web/auth.py`): "Continue
+with Google" (a Google-signed ID token verified server-side — set
+`PMCP_GOOGLE_CLIENT_ID`) and "email me a 6-digit code" via Resend (set
+`PMCP_RESEND_KEY`; free tier is 3,000 emails/month). No password ever exists,
+so there is nothing to forget and no reset flow to build. Both doors land on
+the same `users` table the tutor already used, and anonymous work done before
+signing in merges into the account.
+
+**The arena's case bank** lives in `cases/arena/` (the tutor's bank at
+`cases/` is untouched): 25 original cases across the five highest-hiring PM
+tracks of 2025-26 — Core/Generalist, AI PM, Growth, Platform/Technical, and
+Data PM (taxonomy grounded in Lenny's job-market reports + prep-platform
+coverage). Each track grades through its own rubric tilt
+(`rubric.ARCHETYPE_WEIGHTS`).
+
+**The recruiter copilot** (`pmcaseprep/recruiter_kb.py`) is grounded in a
+researched map of what AI / GenAI / Data-Science interviews actually test
+today — question archetypes, plain-english concept explainers, evaluation
+techniques for non-experts, and 40 URL-verified learning resources — and the
+chat folds that knowledge base into every reply.
+
+**Referral Paths** parses the official LinkedIn data export **entirely in the
+browser** (LinkedIn killed its connections API in 2015; the DMA portability
+API is EU-only — the export is the one ToS-clean path that works everywhere).
+Connections never touch the server.
+
 ## Why not fine-tune?
 
 You don't need to fine-tune a model, and the frontier Claude models aren't
