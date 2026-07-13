@@ -11,9 +11,14 @@ uvicorn[standard]>=0.27
 websockets>=12.0
 
 # Shared login (all experiments): verifies "Sign in with Google" ID tokens
-# server-side. The emailed one-time codes need nothing extra (Resend is plain
-# HTTPS via httpx, which the anthropic SDK already brings in).
-google-auth>=2.30
+# server-side. The [requests] extra is REQUIRED, not optional: token
+# verification imports google.auth.transport.requests, which needs the
+# `requests` package — and bare `google-auth` does NOT pull it in (it's an
+# extra). Without it every Google sign-in fails at import time with a generic
+# "Google sign-in failed", so pin the extra explicitly. The emailed one-time
+# codes need nothing extra (Resend is plain HTTPS via httpx, which the
+# anthropic SDK already brings in).
+google-auth[requests]>=2.30
 
 # Test runner (offline smoke tests). Optional but makes `pytest` work.
 pytest>=8.0
