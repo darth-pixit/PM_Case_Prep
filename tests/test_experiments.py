@@ -72,6 +72,16 @@ def test_google_verify_off_without_client_id():
     assert verify_google_token("") is None
 
 
+def test_google_verify_fails_closed_and_never_raises(monkeypatch):
+    """With a client id set but the verifier unavailable (no
+    google-auth[requests] on the box) OR a bogus token, verification must fail
+    CLOSED — return None, never raise — so the endpoint answers 401, not 500."""
+    from pmcaseprep.web import auth as auth_mod
+
+    monkeypatch.setattr(auth_mod, "GOOGLE_CLIENT_ID", "fake.apps.googleusercontent.com")
+    assert auth_mod.verify_google_token("not-a-real-token") is None
+
+
 def test_email_validation():
     from pmcaseprep.web.auth import valid_email
 
@@ -213,6 +223,31 @@ def test_email_code_login_flow(tmp_path, monkeypatch):
         "/api/auth/email/verify", json={"email": "x@example.com", "code": "000000"}
     )
     assert r.status_code == 401
+
+
+def test_google_failure_message_matches_available_doors(tmp_path, monkeypatch):
+    """The Google-failure message must only point to the email door when that
+    door actually exists — a Google-only deploy renders no email field, so
+    'try the email code instead' would be a dead end there."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    monkeypatch.setattr(webapp.auth, "GOOGLE_CLIENT_ID", "fake.apps.googleusercontent.com")
+    monkeypatch.setattr(webapp.auth, "RESEND_API_KEY", "")
+    client.get("/arena")  # uid cookie
+
+    # Email door ON (dev mode) -> the failure points to it.
+    r = client.post("/api/auth/google", json={"credential": "not-a-real-token"})
+    assert r.status_code == 401
+    assert "email" in r.json()["error"].lower()
+
+    # Email door OFF (Google-only deploy: RENDER set, no Resend key) -> the
+    # message must NOT advertise a door the widget never rendered.
+    monkeypatch.setenv("RENDER", "1")
+    r = client.post("/api/auth/google", json={"credential": "not-a-real-token"})
+    assert r.status_code == 401
+    assert "email" not in r.json()["error"].lower()
+    assert "google sign-in failed" in r.json()["error"].lower()
 
 
 def test_arena_room_is_login_gated(tmp_path, monkeypatch):

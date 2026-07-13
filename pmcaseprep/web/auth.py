@@ -74,7 +74,18 @@ def verify_google_token(credential: str) -> str | None:
     try:
         from google.auth.transport import requests as google_requests
         from google.oauth2 import id_token as google_id_token
-
+    except ImportError as exc:
+        # The verifier itself is missing — almost always the `requests`-backed
+        # transport (install google-auth[requests]). This is a DEPLOY
+        # misconfiguration, not a bad token: it makes EVERY Google login fail
+        # identically. Log it loudly so it's diagnosable instead of silent.
+        print(
+            f"google auth verifier unavailable: {exc!r} "
+            "— install google-auth[requests]",
+            flush=True,
+        )
+        return None
+    try:
         info = google_id_token.verify_oauth2_token(
             credential, google_requests.Request(), GOOGLE_CLIENT_ID
         )
@@ -83,6 +94,8 @@ def verify_google_token(credential: str) -> str | None:
         email = str(info.get("email") or "").strip().lower()
         return email if valid_email(email) else None
     except Exception:  # noqa: BLE001 - any invalid/expired/foreign token -> no login
+        # Expected, high-volume path (bad/expired/foreign tokens). Stay quiet —
+        # logging every rejected token would drown the misconfig signal above.
         return None
 
 
