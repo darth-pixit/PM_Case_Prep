@@ -413,8 +413,13 @@ async def auth_google(request: Request) -> JSONResponse:
         auth.verify_google_token, str(data.get("credential") or "")
     )
     if not email:
+        # Only point to the email door when it actually exists on this deploy.
+        # A Google-only deploy renders no email field, so "try the email code
+        # instead" would send the user to a door that isn't there — mirror what
+        # the login widget actually shows (same _auth_flags the frontend reads).
+        hint = " — try the email code instead" if _auth_flags()["email_login"] else ""
         return JSONResponse(
-            {"ok": False, "error": "Google sign-in failed — try the email code instead"},
+            {"ok": False, "error": f"Google sign-in failed{hint}"},
             status_code=401,
         )
     return _finish_login(request, email)
