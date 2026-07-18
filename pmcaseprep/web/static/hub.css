@@ -162,6 +162,26 @@ details.fold > .fold-body { padding: 0 0.9rem 0.8rem; }
   border-radius: 0 8px 8px 0; margin: 0.6rem 0; font-size: 0.9rem; }
 .footer-nav { margin-top: 2.5rem; color: var(--muted); font-size: 0.84rem; }
 .footer-nav a { color: var(--accent); text-decoration: none; }
+
+/* --- Referrals v2: sources board, closeness chips, pods -------------------- */
+.src-board { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
+.src-board .pill.on { border-color: var(--good); color: var(--good); }
+.person .who { min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.25rem; }
+.chips .pill { font-size: 0.7rem; padding: 0.06rem 0.5rem; }
+.pill.hot { border-color: var(--warn); color: var(--warn); }
+.pod-code { font-size: 1.15rem; letter-spacing: 0.22em; font-weight: 700;
+  color: var(--accent); padding: 0 0.3rem; }
+.pod-table { width: 100%; border-collapse: collapse; font-size: 0.86rem; margin: 0.5rem 0; }
+.pod-table th { color: var(--muted); font-weight: 500; font-size: 0.76rem; text-transform: uppercase; }
+.pod-table th, .pod-table td { text-align: left; padding: 0.4rem 0.5rem; border-top: 1px solid var(--border); }
+.pod-table tr:first-child th { border-top: 0; }
+.pod-row-you td:first-child { color: var(--accent); }
+.mini-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.mini-form input { max-width: 300px; }
+.who-row { display: flex; align-items: baseline; gap: 0.7rem; padding: 0.4rem 0;
+  border-top: 1px solid var(--border); flex-wrap: wrap; }
+.who-row:first-child { border-top: 0; }
 @media (max-width: 560px) {
   .auth-email { flex-direction: column; }
   .msg { max-width: 100%; }
