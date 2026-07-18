@@ -27,7 +27,7 @@ bleed into each other:
 | `/arena` | **Case Arena** — 5 PM tracks × 5 cases each, pick-your-case | **required at start** | `experiment=arena`, `arena_*` events |
 | `/recruiter` | **Recruiter Copilot** — hiring for AI/DS without being an expert | required for chat; field guide open | `experiment=recruiter`, `recruiter_*` events |
 | `/referrals` | **Referral Paths** — closeness-ranked referral map from your own data exports, plus multiplayer job-hunt pods | solo: none (all client-side) · pods: required | `experiment=referrals`, `referrals_*` events |
-| `/prep` | **Prep Engine** — CV + JD → achievement units, coverage heatmap, true STAR stories | **required** (every step is a model call) | `experiment=prep`, `prep_*` events |
+| `/prep` | **Prep Engine** — a compounding story bank: CV + JD → coverage heatmap, pressure-tested STAR stories, mock loop, debrief write-back | **required** (bank follows the account) | `experiment=prep`, `prep_*` events |
 
 Every PostHog event carries an `experiment` super property, so per-experiment
 dashboards are one filter away while a single (free-tier) PostHog project and
@@ -68,21 +68,35 @@ rank accordingly ("they owe you one", "referral talk already happened",
 "inner circle", recruiters/senior people flagged as ⚡ doors). Names never
 touch the server in solo mode.
 
-**The Prep Engine** (`pmcaseprep/prep_engine.py`, `/api/prep/*`) is the
-behavioral-storytelling wedge: paste a CV / brain-dump and a JD, and it (1)
-atomizes real work into **achievement units** (action, result, competencies
-from a closed 12-item PM taxonomy, provenance quote, `metric: null` when the
-source had no number), (2) decodes the role into a **TargetProfile** including
-the *unwritten pain* behind the hire, (3) scores a red/amber/green **coverage
-heatmap**, and (4) drafts **STAR stories** in 30-second / 2-minute / deep-dive
-versions with anticipated follow-ups — exportable as one markdown prep pack.
-Truthfulness is enforced in code, not just prompts: a deterministic audit
-nulls extracted metrics whose numbers aren't in the source, downgrades "green"
-cells that cite no real unit, and flags story numbers found in no unit under
-`unverifiedClaims` for explicit user confirmation. Red cells get a
-close-the-gap action (become qualified), never spin. All four LLM prompts
-live in `/prompts/*.md` — editable without touching code. v0 is stateless by
-design: the browser holds the session, the server stores nothing.
+**The Prep Engine** (`pmcaseprep/prep_engine.py`, `prep_bank.py`,
+`/api/prep/*`) is the behavioral-storytelling wedge: paste a CV / brain-dump
+and a JD, and it (1) atomizes real work into **achievement units**
+(competencies from a closed 12-item PM taxonomy, provenance quote,
+`metric: null` when the source had no number), (2) decodes the role into a
+**TargetProfile** including the *unwritten pain* behind the hire, (3) scores
+a red/amber/green **coverage heatmap**, and (4) drafts **STAR stories** in
+30-second / 2-minute / deep-dive versions — exportable as one markdown prep
+pack. Truthfulness is enforced in code, not just prompts: a deterministic
+audit nulls extracted metrics whose numbers aren't in the source, downgrades
+"green" cells that cite no real unit, and flags story numbers found in no
+unit under `unverifiedClaims` for explicit user confirmation.
+
+The moat is the **story bank** (`prep_bank.py`, SQLite next to the skill
+graph on the persistent disk): the genome MERGES on every re-extraction
+(dedupe by title + provenance — no duplicates), units are editable in place,
+and each JD becomes a saved **application** on a campaign dashboard that
+re-tunes instantly — same genome, new heatmap. On top of the loop sit the
+pressure layers: **Devil's Advocate** (adversarial attack rounds that judge
+your answers held/cracked until YOU mark the story solid), **Gap-to-Sprint**
+(every red cell can become a concrete 2-week become-qualified plan — close
+the gap, never spin it), an **Interviewer Twin** built ONLY from public
+signals the user pastes themselves (nothing fetched, nothing stored), an
+adaptive **mock interview** that probes the heatmap's weakest competencies
+and ends in a scorecard, a **delivery self-check** (browser dictation +
+computed pace/fillers, model-judged structure), and a **debrief write-back**
+that mines a real interview's notes into lessons plus DRAFT units the user
+must explicitly confirm into the bank. All eleven LLM prompts live in
+`/prompts/*.md` — editable without touching code.
 
 **Pods** (`pmcaseprep/web/pods.py`, `/api/pods/*`) are the opt-in multiplayer
 layer: friends job-hunting together pool (1) who can refer directly where

@@ -56,13 +56,24 @@ from ..delivery import FILLERS_CORE, DeliveryTracker, Word
 from ..grader import grade, weighted_result
 from ..interviewer import Interviewer
 from ..models import Case
+from ..prep_bank import BankFull, PrepBank
 from ..prep_engine import (
+    CoverageCell,
+    Story,
+    TargetProfile,
     craft_story,
+    debrief_insights,
+    delivery_check,
+    devils_advocate,
     extract_target,
     extract_units,
+    gap_sprint,
+    interviewer_twin,
+    mock_reply,
+    mock_scorecard,
     sanitize_units,
     score_coverage,
-    TargetProfile,
+    transcript_stats,
 )
 from ..recruiter_kb import recruiter_guide, recruiter_system_prompt
 from ..resources import resources_for
@@ -127,13 +138,20 @@ RECRUITER_HOURLY_PER_IP = int(os.environ.get("PMCP_RECRUITER_HOURLY_PER_IP", "40
 RECRUITER_MAX_HISTORY = 30  # messages of context kept per request
 RECRUITER_MAX_CHARS = 6000  # per-message input cap
 AUTH_HOURLY_PER_IP = int(os.environ.get("PMCP_AUTH_HOURLY_PER_IP", "20"))
-# Prep Engine (its own experiment): every endpoint is one paid structured-output
-# call, so it shares the recruiter's posture — login required + per-IP budget.
-# Extraction reads a whole CV, so inputs get a generous-but-hard char cap.
+# Prep Engine (its own experiment): every model endpoint is one paid
+# structured-output call, so it shares the recruiter's posture — login required
+# + per-IP budget. The mock-interview loop spends a call per turn, hence a
+# higher default than the recruiter's. Bank CRUD is cheap sqlite and gets its
+# own generous limiter. Extraction reads a whole CV, so inputs get a
+# generous-but-hard char cap.
 PREP_MODEL = os.environ.get("PMCP_PREP_MODEL", _MODEL_OVERRIDE or "claude-sonnet-5")
-PREP_HOURLY_PER_IP = int(os.environ.get("PMCP_PREP_HOURLY_PER_IP", "30"))
-PREP_MAX_CHARS = 24000  # CV / JD input cap
+PREP_HOURLY_PER_IP = int(os.environ.get("PMCP_PREP_HOURLY_PER_IP", "60"))
+PREP_BANK_HOURLY_PER_IP = int(os.environ.get("PMCP_PREP_BANK_HOURLY_PER_IP", "240"))
+PREP_MAX_CHARS = 24000  # CV / JD / signals / debrief input cap
 PREP_MAX_UNITS = 60  # units accepted back from the client per request
+# The bank lives next to the skill graph, so Render's persistent /data disk
+# picks it up with zero extra config (PMCP_DB=/data/... -> /data/prep_bank.db).
+PREP_DB = os.environ.get("PMCP_PREP_DB", str(Path(DB_PATH).parent / "prep_bank.db"))
 
 
 class SlidingLimit:
@@ -188,6 +206,7 @@ CODE_REQUESTS_PER_EMAIL = SlidingLimit(3, 3600)
 VERIFIES_PER_EMAIL = SlidingLimit(10, 3600)
 RECRUITER_CALLS = SlidingLimit(RECRUITER_HOURLY_PER_IP, 3600)
 PREP_CALLS = SlidingLimit(PREP_HOURLY_PER_IP, 3600)
+PREP_BANK_CALLS = SlidingLimit(PREP_BANK_HOURLY_PER_IP, 3600)
 # Pods (referrals multiplayer): cheap sqlite reads get a generous cap; graph
 # uploads rewrite up to 30k rows each, so they get their own tighter budget.
 PODS_CALLS = SlidingLimit(int(os.environ.get("PMCP_PODS_HOURLY_PER_IP", "240")), 3600)
@@ -687,20 +706,36 @@ async def api_recruiter_guide() -> JSONResponse:
 
 
 # --- Prep Engine (behavioral storytelling + CV tuning, the /prep experiment) ----
-# Stateless by design (spec v0: no accounts-side persistence, no genome store):
-# the browser holds the session's units/target and sends them back with each
-# request, so the server keeps nothing and every call stands alone. All logic
-# lives in prep_engine.py; these handlers only gate, bound, and translate.
+# v1 architecture: model calls remain stateless (the browser sends what each
+# call needs), but results now COMPOUND into the story bank (prep_bank.py,
+# keyed by verified email) — the genome merges on every extraction, each JD
+# becomes a saved application, stories persist with their pressure-test
+# status, and debriefs write back. All model logic lives in prep_engine.py;
+# these handlers gate, bound, translate, and persist.
 
-def _prep_gate(request: Request) -> JSONResponse | None:
-    if _email_for_request(request) is None:
-        return JSONResponse({"ok": False, "error": "sign in first"}, status_code=401)
+def _prep_gate(request: Request) -> tuple[str, None] | tuple[None, JSONResponse]:
+    """For model endpoints: verified login + the paid-call budget."""
+    email = _email_for_request(request)
+    if email is None:
+        return None, JSONResponse({"ok": False, "error": "sign in first"}, status_code=401)
     if not PREP_CALLS.allow(_client_ip(request)):
-        return JSONResponse(
+        return None, JSONResponse(
             {"ok": False, "error": "prep budget for this hour is used up — take a break"},
             status_code=429,
         )
-    return None
+    return email, None
+
+
+def _prep_bank_gate(request: Request) -> tuple[str, None] | tuple[None, JSONResponse]:
+    """For bank CRUD: verified login + the cheap-sqlite budget."""
+    email = _email_for_request(request)
+    if email is None:
+        return None, JSONResponse({"ok": False, "error": "sign in first"}, status_code=401)
+    if not PREP_BANK_CALLS.allow(_client_ip(request)):
+        return None, JSONResponse(
+            {"ok": False, "error": "too many requests — take a breath"}, status_code=429
+        )
+    return email, None
 
 
 async def _prep_body(request: Request) -> dict | None:
@@ -735,47 +770,79 @@ async def _prep_model_call(fn, *args) -> JSONResponse | object:
         )
 
 
+def _bank() -> PrepBank:
+    return PrepBank(PREP_DB)
+
+
+def _prep_target(data: dict) -> TargetProfile | None:
+    try:
+        return TargetProfile.model_validate(data.get("target"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _prep_text(data: dict, key: str = "text") -> str:
+    return str(data.get(key) or "").strip()[:PREP_MAX_CHARS]
+
+
 @app.post("/api/prep/extract-units")
 async def prep_extract_units(request: Request) -> JSONResponse:
-    """CV / brain-dump -> AchievementUnit[] (the Career Genome, session-local)."""
-    if (err := _prep_gate(request)) is not None:
+    """CV / brain-dump -> AchievementUnit[], merged into the persistent genome.
+    Returns the full bank so re-extraction visibly compounds, not duplicates."""
+    email, err = _prep_gate(request)
+    if err is not None:
         return err
     data = await _prep_body(request)
-    text = str((data or {}).get("text") or "").strip()[:PREP_MAX_CHARS]
+    text = _prep_text(data or {})
     if not text:
         return JSONResponse({"ok": False, "error": "paste your CV first"}, status_code=400)
     result = await _prep_model_call(extract_units, text, PREP_MODEL)
     if isinstance(result, JSONResponse):
         return result
-    return JSONResponse({"ok": True, "units": [u.model_dump() for u in result]})
+    bank = _bank()
+    try:
+        genome = bank.save_units(email, [u.model_dump() for u in result])
+    except BankFull as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    finally:
+        bank.close()
+    return JSONResponse({"ok": True, "units": genome, "extracted": len(result)})
 
 
 @app.post("/api/prep/extract-target")
 async def prep_extract_target(request: Request) -> JSONResponse:
-    """JD -> TargetProfile (required competencies, weights, unwritten pain)."""
-    if (err := _prep_gate(request)) is not None:
+    """JD -> TargetProfile, saved as an application (campaign) row."""
+    email, err = _prep_gate(request)
+    if err is not None:
         return err
     data = await _prep_body(request)
-    text = str((data or {}).get("text") or "").strip()[:PREP_MAX_CHARS]
+    text = _prep_text(data or {})
     if not text:
         return JSONResponse({"ok": False, "error": "paste the JD first"}, status_code=400)
     result = await _prep_model_call(extract_target, text, PREP_MODEL)
     if isinstance(result, JSONResponse):
         return result
-    return JSONResponse({"ok": True, "target": result.model_dump()})
+    bank = _bank()
+    try:
+        tid = bank.save_target(email, result.model_dump(), [])
+    except BankFull as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    finally:
+        bank.close()
+    return JSONResponse({"ok": True, "target": result.model_dump(), "targetId": tid})
 
 
 @app.post("/api/prep/heatmap")
 async def prep_heatmap(request: Request) -> JSONResponse:
-    """units x target -> CoverageCell[] — the hero screen's data."""
-    if (err := _prep_gate(request)) is not None:
+    """units x target -> CoverageCell[] — the hero screen's data. When the
+    request names a saved application, the heatmap is cached onto it (that's
+    what makes re-tuning per application instant next visit)."""
+    email, err = _prep_gate(request)
+    if err is not None:
         return err
     data = await _prep_body(request)
     units = _prep_units(data or {})
-    try:
-        target = TargetProfile.model_validate((data or {}).get("target"))
-    except Exception:  # noqa: BLE001
-        target = None
+    target = _prep_target(data or {})
     if units is None or target is None:
         return JSONResponse(
             {"ok": False, "error": "extract units and target first"}, status_code=400
@@ -783,14 +850,23 @@ async def prep_heatmap(request: Request) -> JSONResponse:
     result = await _prep_model_call(score_coverage, units, target, PREP_MODEL)
     if isinstance(result, JSONResponse):
         return result
-    return JSONResponse({"ok": True, "cells": [c.model_dump() for c in result]})
+    cells = [c.model_dump() for c in result]
+    tid = str((data or {}).get("targetId") or "").strip()
+    if tid:
+        bank = _bank()
+        try:
+            bank.save_heatmap(email, tid, cells)
+        finally:
+            bank.close()
+    return JSONResponse({"ok": True, "cells": cells})
 
 
 @app.post("/api/prep/story")
 async def prep_story(request: Request) -> JSONResponse:
     """chosen competency + its supporting units -> one Story (3 lengths,
-    follow-ups, and unverifiedClaims for anything the audit couldn't ground)."""
-    if (err := _prep_gate(request)) is not None:
+    follow-ups, unverifiedClaims), persisted to the bank as not-yet-solid."""
+    email, err = _prep_gate(request)
+    if err is not None:
         return err
     data = await _prep_body(request)
     units = _prep_units(data or {})
@@ -817,7 +893,368 @@ async def prep_story(request: Request) -> JSONResponse:
     )
     if isinstance(result, JSONResponse):
         return result
-    return JSONResponse({"ok": True, "story": result.model_dump()})
+    story = result.model_dump()
+    bank = _bank()
+    try:
+        story["id"] = bank.save_story(
+            email, story, competency, str((data or {}).get("targetId") or "").strip()
+        )
+    except BankFull as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    finally:
+        bank.close()
+    return JSONResponse({"ok": True, "story": story})
+
+
+# --- v1: the bank (persistent genome + campaign dashboard, cheap sqlite) --------
+
+
+@app.get("/api/prep/bank")
+async def prep_bank_all(request: Request) -> JSONResponse:
+    """Everything the page needs on load: the genome, the application list
+    (campaign dashboard), and saved stories with their solid status."""
+    email, err = _prep_bank_gate(request)
+    if err is not None:
+        return err
+    bank = _bank()
+    try:
+        return JSONResponse(
+            {
+                "ok": True,
+                "units": bank.units(email),
+                "targets": bank.targets(email),
+                "stories": bank.stories(email),
+            }
+        )
+    finally:
+        bank.close()
+
+
+@app.get("/api/prep/bank/target")
+async def prep_bank_target(request: Request, id: str = "") -> JSONResponse:
+    """One saved application: target + cached heatmap + its stories + debriefs.
+    This is the instant re-tune: no model call to pick up where you left off."""
+    email, err = _prep_bank_gate(request)
+    if err is not None:
+        return err
+    bank = _bank()
+    try:
+        found = bank.target(email, id)
+        if found is None:
+            return JSONResponse({"ok": False, "error": "no such application"}, status_code=404)
+        found["debriefs"] = bank.debriefs(email, id)
+        return JSONResponse({"ok": True, **found})
+    finally:
+        bank.close()
+
+
+@app.post("/api/prep/bank/units")
+async def prep_bank_units(request: Request) -> JSONResponse:
+    """Upsert edited units (the extractor is a first draft — the user is the
+    editor of record). Client units re-validate through the same sanitizer."""
+    email, err = _prep_bank_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    units = _prep_units(data or {})
+    if units is None:
+        return JSONResponse({"ok": False, "error": "no valid units"}, status_code=400)
+    bank = _bank()
+    try:
+        genome = bank.save_units(email, [u.model_dump() for u in units])
+    except BankFull as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    finally:
+        bank.close()
+    return JSONResponse({"ok": True, "units": genome})
+
+
+@app.post("/api/prep/bank/unit-delete")
+async def prep_bank_unit_delete(request: Request) -> JSONResponse:
+    email, err = _prep_bank_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    unit_id = str((data or {}).get("id") or "").strip()
+    if not unit_id:
+        return JSONResponse({"ok": False, "error": "no id"}, status_code=400)
+    bank = _bank()
+    try:
+        bank.delete_unit(email, unit_id)
+    finally:
+        bank.close()
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/prep/bank/target-delete")
+async def prep_bank_target_delete(request: Request) -> JSONResponse:
+    email, err = _prep_bank_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    tid = str((data or {}).get("id") or "").strip()
+    if not tid:
+        return JSONResponse({"ok": False, "error": "no id"}, status_code=400)
+    bank = _bank()
+    try:
+        bank.delete_target(email, tid)
+    finally:
+        bank.close()
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/prep/bank/story-solid")
+async def prep_bank_story_solid(request: Request) -> JSONResponse:
+    """The Devil's Advocate loop's terminal state: the USER declares a story
+    bulletproof (or takes it back). The model never marks its own homework."""
+    email, err = _prep_bank_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    sid = str((data or {}).get("id") or "").strip()
+    if not sid:
+        return JSONResponse({"ok": False, "error": "no id"}, status_code=400)
+    bank = _bank()
+    try:
+        found = bank.set_story_solid(email, sid, bool((data or {}).get("solid")))
+    finally:
+        bank.close()
+    if not found:
+        return JSONResponse({"ok": False, "error": "no such story"}, status_code=404)
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/prep/bank/story-delete")
+async def prep_bank_story_delete(request: Request) -> JSONResponse:
+    email, err = _prep_bank_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    sid = str((data or {}).get("id") or "").strip()
+    if not sid:
+        return JSONResponse({"ok": False, "error": "no id"}, status_code=400)
+    bank = _bank()
+    try:
+        bank.delete_story(email, sid)
+    finally:
+        bank.close()
+    return JSONResponse({"ok": True})
+
+
+# --- v1/v2 model endpoints: attack, sprint, twin, mock, debrief, delivery -------
+
+
+@app.post("/api/prep/attack")
+async def prep_attack(request: Request) -> JSONResponse:
+    """Devil's Advocate: judge the user's answers to the last round, then
+    attack again. Loops until the user marks the story solid."""
+    email, err = _prep_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    units = _prep_units(data or {})
+    try:
+        story = Story.model_validate((data or {}).get("story"))
+    except Exception:  # noqa: BLE001
+        story = None
+    if units is None or story is None:
+        return JSONResponse({"ok": False, "error": "story and units required"}, status_code=400)
+    exchanges = []
+    raw_ex = (data or {}).get("exchanges")
+    if isinstance(raw_ex, list):
+        for e in raw_ex[:10]:
+            if isinstance(e, dict) and str(e.get("answer") or "").strip():
+                exchanges.append(
+                    {
+                        "question": str(e.get("question") or "")[:1000],
+                        "answer": str(e.get("answer") or "")[:3000],
+                    }
+                )
+    result = await _prep_model_call(devils_advocate, story, units, exchanges, PREP_MODEL)
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse({"ok": True, "round": result.model_dump()})
+
+
+@app.post("/api/prep/sprint")
+async def prep_sprint(request: Request) -> JSONResponse:
+    """Gap-to-Sprint: a red cell becomes a 2-week become-qualified plan."""
+    email, err = _prep_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    target = _prep_target(data or {})
+    competency = str((data or {}).get("competency") or "").strip()
+    gap = str((data or {}).get("gapAction") or "").strip()[:1000]
+    if target is None or not competency:
+        return JSONResponse({"ok": False, "error": "competency and target required"}, status_code=400)
+    result = await _prep_model_call(gap_sprint, competency, gap, target, PREP_MODEL)
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse({"ok": True, "sprint": result.model_dump()})
+
+
+@app.post("/api/prep/interviewer")
+async def prep_interviewer(request: Request) -> JSONResponse:
+    """Interviewer Twin. Privacy contract: the user pastes PUBLIC signals they
+    can see themselves; nothing is fetched, and the twin is session-only —
+    the server stores none of it."""
+    email, err = _prep_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    target = _prep_target(data or {})
+    name = str((data or {}).get("name") or "").strip()[:120]
+    role = str((data or {}).get("role") or "").strip()[:120]
+    signals = _prep_text(data or {}, "signals")
+    if target is None or not name or not signals:
+        return JSONResponse(
+            {"ok": False, "error": "name, pasted public signals, and target required"},
+            status_code=400,
+        )
+    result = await _prep_model_call(
+        interviewer_twin, name, role or "interviewer", signals, target, PREP_MODEL
+    )
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse({"ok": True, "twin": result.model_dump()})
+
+
+def _mock_messages(raw: object) -> list[dict] | None:
+    """Normalize the browser transcript for the Messages API (first turn user,
+    no consecutive same-role turns) — same discipline as the recruiter chat."""
+    if not isinstance(raw, list):
+        return None
+    messages = []
+    for m in raw[-40:]:
+        if not isinstance(m, dict):
+            continue
+        role = m.get("role")
+        text = str(m.get("text") or "").strip()[:4000]
+        if role in ("user", "assistant") and text:
+            messages.append({"role": role, "content": text})
+    if not messages or messages[0]["role"] != "user":
+        messages.insert(0, {"role": "user", "content": "(The candidate sits down, ready to begin.)"})
+    merged: list[dict] = []
+    for m in messages:
+        if merged and merged[-1]["role"] == m["role"]:
+            merged[-1]["content"] += "\n" + m["content"]
+        else:
+            merged.append(m)
+    return merged
+
+
+@app.post("/api/prep/mock")
+async def prep_mock(request: Request) -> JSONResponse:
+    """One interviewer turn of the behavioral mock. The system prompt aims the
+    probing at the heatmap's weakest competencies; the browser owns the
+    transcript and enforces the question cap."""
+    email, err = _prep_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    target = _prep_target(data or {})
+    try:
+        cells = [CoverageCell.model_validate(c) for c in ((data or {}).get("cells") or [])]
+    except Exception:  # noqa: BLE001
+        cells = []
+    messages = _mock_messages((data or {}).get("messages"))
+    if target is None or not cells or messages is None:
+        return JSONResponse(
+            {"ok": False, "error": "build the heatmap before a mock"}, status_code=400
+        )
+    result = await _prep_model_call(mock_reply, messages, target, cells, PREP_MODEL)
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse({"ok": True, "reply": result})
+
+
+@app.post("/api/prep/mock-score")
+async def prep_mock_score(request: Request) -> JSONResponse:
+    """End of the mock: one careful grading pass over the whole transcript."""
+    email, err = _prep_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    target = _prep_target(data or {})
+    raw = (data or {}).get("messages")
+    if target is None or not isinstance(raw, list) or not raw:
+        return JSONResponse({"ok": False, "error": "no transcript to grade"}, status_code=400)
+    lines = []
+    for m in raw[-80:]:
+        if not isinstance(m, dict):
+            continue
+        text = str(m.get("text") or "").strip()[:4000]
+        if not text:
+            continue
+        who = "Candidate" if m.get("role") == "user" else "Interviewer"
+        lines.append(f"{who}: {text}")
+    transcript = "\n".join(lines)[: PREP_MAX_CHARS * 2]
+    if not transcript:
+        return JSONResponse({"ok": False, "error": "no transcript to grade"}, status_code=400)
+    result = await _prep_model_call(mock_scorecard, transcript, target, PREP_MODEL)
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse({"ok": True, "scorecard": result.model_dump()})
+
+
+@app.post("/api/prep/debrief")
+async def prep_debrief(request: Request) -> JSONResponse:
+    """Debrief -> write-back: mine a real interview's notes for lessons and
+    DRAFT units. Drafts are returned for explicit confirmation — the server
+    never silently adds them to the genome."""
+    email, err = _prep_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    target = _prep_target(data or {})
+    notes = _prep_text(data or {}, "notes")
+    if target is None or not notes:
+        return JSONResponse(
+            {"ok": False, "error": "write the debrief and pick the application"},
+            status_code=400,
+        )
+    result = await _prep_model_call(debrief_insights, notes, target, PREP_MODEL)
+    if isinstance(result, JSONResponse):
+        return result
+    insights = result.model_dump()
+    bank = _bank()
+    try:
+        did = bank.save_debrief(
+            email, notes, insights, str((data or {}).get("targetId") or "").strip()
+        )
+    except BankFull as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    finally:
+        bank.close()
+    return JSONResponse({"ok": True, "insights": insights, "debriefId": did})
+
+
+@app.post("/api/prep/delivery")
+async def prep_delivery(request: Request) -> JSONResponse:
+    """Delivery self-check for one rehearsed answer: deterministic pace/filler
+    stats (never model-guessed) + one model pass on structure and whether the
+    question actually got answered."""
+    email, err = _prep_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    question = str((data or {}).get("question") or "").strip()[:500]
+    transcript = _prep_text(data or {}, "transcript")
+    try:
+        seconds = max(0.0, min(float((data or {}).get("seconds") or 0), 3600.0))
+    except (TypeError, ValueError):
+        seconds = 0.0
+    if not question or not transcript:
+        return JSONResponse(
+            {"ok": False, "error": "a question and your spoken answer are required"},
+            status_code=400,
+        )
+    stats = transcript_stats(transcript, seconds)
+    result = await _prep_model_call(delivery_check, question, transcript, PREP_MODEL)
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse({"ok": True, "stats": stats, "check": result.model_dump()})
 
 
 # --- Referral pods (the opt-in multiplayer layer of /referrals) -----------------

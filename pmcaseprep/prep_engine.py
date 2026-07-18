@@ -28,6 +28,8 @@ from typing import Any, Literal, Optional, get_args
 
 from pydantic import BaseModel, Field, ValidationError
 
+from .delivery import FILLERS_CORE, FILLERS_SOFT
+
 # --- The competency taxonomy (closed list, spec section 4) --------------------
 
 Competency = Literal[
@@ -124,6 +126,109 @@ class ExtractedUnits(BaseModel):
 
 class Heatmap(BaseModel):
     cells: list[CoverageCell]
+
+
+# --- v1/v2 data model: pressure-test, sprint, twin, mock, debrief, delivery ---
+
+
+class AttackVerdict(BaseModel):
+    """Judgment of the user's answer to one earlier attack."""
+
+    question: str
+    verdict: Literal["held", "cracked"]
+    why: str
+
+
+class Attack(BaseModel):
+    question: str
+    probes: str  # the weakness this attack targets
+    strongAnswer: str  # what good looks like — grounded in the units
+
+
+class AttackRound(BaseModel):
+    """One round of Devil's Advocate: verdicts on prior answers + new attacks."""
+
+    verdicts: list[AttackVerdict]
+    attacks: list[Attack]
+
+
+class SprintMilestone(BaseModel):
+    days: str  # e.g. "Days 1-2"
+    task: str
+    output: str
+
+
+class GapSprint(BaseModel):
+    """A red cell turned into a concrete 2-week become-qualified plan."""
+
+    competency: Competency
+    goal: str
+    milestones: list[SprintMilestone]
+    deliverable: str
+    proofMetric: str  # the number the candidate can truthfully claim after
+    unitOutline: str  # the achievement unit this becomes once done
+
+
+class InterviewerProfile(BaseModel):
+    """Spec v2 type — public info only, supplied BY the user."""
+
+    name: str
+    role: str
+    publicSignals: list[str]  # talks, posts, background -> what they'll probe
+    likelyFocus: list[Competency]
+
+
+class PredictedQuestion(BaseModel):
+    question: str
+    competency: Competency
+
+
+class InterviewerTwin(BaseModel):
+    profile: InterviewerProfile
+    predictedQuestions: list[PredictedQuestion]
+    prepTips: list[str]  # tuning, never fabrication
+    rationale: str  # how strong the signal base actually is
+
+
+class MockScore(BaseModel):
+    competency: Competency
+    score: Literal[1, 2, 3, 4]
+    justification: str
+
+
+class MockScorecard(BaseModel):
+    """Grades only what the mock actually probed — unprobed is unknown, not 1."""
+
+    scores: list[MockScore]
+    topImprovement: str
+    pressureTestNext: list[Competency]
+
+
+class DebriefLesson(BaseModel):
+    lesson: str
+    adjustment: str
+
+
+class FocusItem(BaseModel):
+    competency: Competency
+    why: str
+
+
+class DebriefInsights(BaseModel):
+    """Mined from a real interview's debrief; suggestedUnits are DRAFTS the
+    user must confirm before they enter the bank."""
+
+    lessons: list[DebriefLesson]
+    suggestedUnits: list[AchievementUnit]
+    focusNext: list[FocusItem]
+
+
+class DeliveryCheck(BaseModel):
+    structure: str  # one-sentence verdict on the spine
+    answered: bool  # did it answer THE question asked?
+    answeredNote: str
+    cuts: list[str]  # phrases worth deleting, quoted
+    rewrite: str  # strongest 2-sentence version, transcript facts only
 
 
 # --- Prompts: loaded from /prompts/*.md, never inlined ------------------------
@@ -375,3 +480,218 @@ def craft_story(
         output_format=Story,
     )
     return audit_story(resp.parsed_output, units)
+
+
+# --- v1: Devil's Advocate (pressure-test until solid) -------------------------
+
+
+def sanitize_attack_round(round_: AttackRound, n_exchanges: int) -> AttackRound:
+    """Bound the round: verdicts only for answers that exist, 1-5 attacks."""
+    round_.verdicts = round_.verdicts[:n_exchanges]
+    round_.attacks = round_.attacks[:5]
+    if not round_.attacks:
+        raise ValueError("the devil's advocate returned no attacks")
+    return round_
+
+
+def devils_advocate(
+    client: Any,
+    story: Story,
+    units: list[AchievementUnit],
+    exchanges: list[dict],
+    model: str,
+) -> AttackRound:
+    """One adversarial round. `exchanges` = [{question, answer}] from earlier
+    rounds; the model judges those answers, then attacks again. The loop ends
+    when the USER marks the story solid — bulletproof is their call, not ours."""
+    prompt = fill_prompt(
+        load_prompt("devils-advocate.md"),
+        STORY_JSON=json.dumps(story.model_dump()),
+        UNITS_JSON=json.dumps([u.model_dump() for u in units]),
+        EXCHANGES_JSON=json.dumps(exchanges),
+    )
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=3000,
+        thinking={"type": "adaptive"},  # judging answers fairly needs care
+        messages=[{"role": "user", "content": prompt}],
+        output_format=AttackRound,
+    )
+    return sanitize_attack_round(resp.parsed_output, len(exchanges))
+
+
+# --- v2: Gap-to-Sprint (red cell -> 2-week credibility plan) ------------------
+
+
+def gap_sprint(
+    client: Any, competency: str, gap_action: str, target: TargetProfile, model: str
+) -> GapSprint:
+    prompt = fill_prompt(
+        load_prompt("gap-sprint.md"),
+        COMPETENCY=competency,
+        GAP_ACTION=gap_action or "no evidence yet",
+        TARGET_JSON=json.dumps(target.model_dump()),
+    )
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=3000,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=GapSprint,
+    )
+    sprint = resp.parsed_output
+    if not sprint.milestones:
+        raise ValueError("sprint came back without milestones")
+    return sprint
+
+
+# --- v2: Interviewer Twin (public signals only, supplied by the user) ---------
+
+
+def interviewer_twin(
+    client: Any,
+    name: str,
+    role: str,
+    signals: str,
+    target: TargetProfile,
+    model: str,
+) -> InterviewerTwin:
+    prompt = fill_prompt(
+        load_prompt("interviewer-twin.md"),
+        TAXONOMY=_taxonomy_str(),
+        NAME_AND_ROLE=f"{name} — {role}",
+        SIGNALS=signals,
+        TARGET_JSON=json.dumps(target.model_dump()),
+    )
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=3000,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=InterviewerTwin,
+    )
+    twin = resp.parsed_output
+    twin.predictedQuestions = twin.predictedQuestions[:8]
+    return twin
+
+
+# --- v2: mock interview loop (adaptive probing of the weakest competencies) ---
+
+MOCK_MAX_QUESTIONS = 8
+
+
+def mock_system(target: TargetProfile, cells: list[CoverageCell]) -> str:
+    return fill_prompt(
+        load_prompt("mock-behavioral.md"),
+        MAX_QUESTIONS=str(MOCK_MAX_QUESTIONS),
+        TARGET_JSON=json.dumps(target.model_dump()),
+        CELLS_JSON=json.dumps([c.model_dump() for c in cells]),
+    )
+
+
+def mock_reply(
+    client: Any,
+    messages: list[dict],
+    target: TargetProfile,
+    cells: list[CoverageCell],
+    model: str,
+) -> str:
+    """One interviewer turn. The transcript lives in the browser; the system
+    prompt (stable across the whole mock) is cached like the recruiter's."""
+    resp = client.messages.create(
+        model=model,
+        max_tokens=600,  # real interviewers ask short questions
+        system=[
+            {
+                "type": "text",
+                "text": mock_system(target, cells),
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=messages,
+    )
+    return "".join(b.text for b in resp.content if b.type == "text").strip()
+
+
+def mock_scorecard(
+    client: Any, transcript: str, target: TargetProfile, model: str
+) -> MockScorecard:
+    prompt = fill_prompt(
+        load_prompt("mock-scorecard.md"),
+        TARGET_JSON=json.dumps(target.model_dump()),
+        TRANSCRIPT=transcript,
+    )
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=3000,
+        thinking={"type": "adaptive"},  # grading deserves the careful path
+        messages=[{"role": "user", "content": prompt}],
+        output_format=MockScorecard,
+    )
+    return resp.parsed_output
+
+
+# --- v2: debrief -> write-back ------------------------------------------------
+
+
+def debrief_insights(
+    client: Any, notes: str, target: TargetProfile, model: str
+) -> DebriefInsights:
+    """Mine a real interview's debrief. suggestedUnits pass through the same
+    truthfulness audit as extraction — grounded in the debrief text itself, so
+    a metric the user didn't write gets nulled before they even see it."""
+    prompt = fill_prompt(
+        load_prompt("debrief.md"),
+        TAXONOMY=_taxonomy_str(),
+        TARGET_JSON=json.dumps(target.model_dump()),
+        NOTES=notes,
+    )
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=4000,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=DebriefInsights,
+    )
+    insights = resp.parsed_output
+    insights.suggestedUnits = sanitize_units(
+        [u.model_dump() for u in insights.suggestedUnits], source=notes
+    )
+    insights.focusNext = insights.focusNext[:3]
+    return insights
+
+
+# --- v1: delivery self-check (rehearse one answer aloud) ----------------------
+
+
+def transcript_stats(transcript: str, seconds: float) -> dict:
+    """Deterministic delivery numbers — computed, never model-guessed.
+    Browser speech recognition gives no word timings, so pace is overall
+    words-per-minute and fillers are exact token counts."""
+    tokens = [
+        "".join(ch for ch in t.lower() if ch.isalpha())
+        for t in transcript.split()
+    ]
+    tokens = [t for t in tokens if t]
+    minutes = seconds / 60 if seconds > 0 else 0
+    return {
+        "words": len(tokens),
+        "seconds": round(seconds, 1),
+        "wpm": round(len(tokens) / minutes, 1) if minutes else 0.0,
+        "coreFillers": sum(1 for t in tokens if t in FILLERS_CORE),
+        "softFillers": sum(1 for t in tokens if t in FILLERS_SOFT),
+    }
+
+
+def delivery_check(
+    client: Any, question: str, transcript: str, model: str
+) -> DeliveryCheck:
+    prompt = fill_prompt(
+        load_prompt("delivery-check.md"),
+        QUESTION=question,
+        TRANSCRIPT=transcript,
+    )
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=2000,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=DeliveryCheck,
+    )
+    return resp.parsed_output
