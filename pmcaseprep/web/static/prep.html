@@ -13,21 +13,28 @@
       <span class="sub">build true stories that fit the role — never fake it</span>
       <span class="whoami" id="whoami"></span>
     </header>
-    <p class="lede">Paste your CV (or just brain-dump what you've done) and the job
-    description. The engine atomizes your real work into achievement units, decodes
-    what the role is truly testing, and shows you the coverage heatmap — where
-    you're strong, where you're adjacent, and where the honest move is to close
-    the gap, not spin it.</p>
+    <p class="lede">Paste your CV (or a brain-dump) and a job description. The engine
+    atomizes your real work into a persistent <b>story bank</b>, decodes what each role
+    truly tests, shows the coverage heatmap, drafts STAR stories, and then attacks them
+    until they're bulletproof. Where you have a gap, it gives you a real plan to close
+    it — not spin.</p>
+
+    <div class="card" id="appsCard" hidden>
+      <h2>Your applications</h2>
+      <p class="hint">One genome, many roles. Click one to re-tune instantly.</p>
+      <div id="appsOut"></div>
+    </div>
 
     <div class="card" id="inputCard">
-      <h2>1 · Your raw material</h2>
+      <h2>New application</h2>
       <div id="authMount"></div>
       <div id="builder" hidden>
         <div class="prep-inputs">
           <div>
             <h3>CV / brain-dump</h3>
-            <p class="hint">Bullets, prose, half-sentences — anything true. Numbers you
-            actually have; the engine will never add ones you don't.</p>
+            <p class="hint">Bullets, prose, half-sentences — anything true. Re-pasting
+            merges into your bank; it never duplicates. Numbers you actually have; the
+            engine will never add ones you don't.</p>
             <textarea id="cvText" rows="10" placeholder="e.g. Led checkout revamp at Acme (team of 6). Cut drop-off 18%. Also: the failed loyalty launch I killed after 2 sprints…"></textarea>
           </div>
           <div>
@@ -45,26 +52,28 @@
     </div>
 
     <div class="card" id="targetCard" hidden>
-      <h2>2 · What this role is really testing</h2>
+      <h2>What this role is really testing</h2>
       <div id="targetOut"></div>
     </div>
 
     <div class="card" id="unitsCard" hidden>
-      <h2 id="unitsHead">Your achievement units</h2>
-      <p class="hint">The extractor is a first draft, not gospel — every unit keeps the
-      exact source line it came from. A missing metric stays missing: that's the point.</p>
+      <h2 id="unitsHead">Your story bank</h2>
+      <p class="hint">The extractor is a first draft, not gospel — edit anything. Every
+      unit keeps the exact source line it came from. A missing metric stays missing:
+      that's the point.</p>
       <div id="unitsOut" class="unit-grid"></div>
     </div>
 
     <div class="card" id="heatmapCard" hidden>
-      <h2>3 · Coverage heatmap</h2>
+      <h2>Coverage heatmap</h2>
       <p class="hint">Green: direct evidence. Amber: adjacent — a story can bridge it.
-      Red: no evidence yet — the fix is a real action, not framing.</p>
+      Red: no evidence yet — the fix is a real 2-week plan, not framing.</p>
       <div class="mini-form" style="margin:0.5rem 0 0.7rem">
         <label class="hint" for="spine" style="white-space:nowrap">Story spine</label>
         <input id="spine" type="text" style="flex:1;max-width:none" placeholder="the one-line thread every story reinforces" />
       </div>
       <div id="heatmapOut"></div>
+      <div id="sprintOut"></div>
       <div class="prep-actions">
         <button class="btn ghost" id="exportBtn">Export prep pack (.md)</button>
         <span class="hint" id="exportMsg"></span>
@@ -74,10 +83,57 @@
     <div class="card" id="storyCard" hidden>
       <h2 id="storyHead">Story</h2>
       <div id="storyOut"></div>
+      <div id="attackOut"></div>
+      <div id="rehearseOut"></div>
     </div>
 
+    <div class="card" id="twinCard" hidden>
+      <h2>Interviewer twin</h2>
+      <p class="hint">Paste ONLY public signals you can see yourself — profile text, talk
+      titles, posts. Nothing is fetched, nothing is stored: the twin lives in this tab.</p>
+      <div class="mini-form">
+        <input id="twinName" type="text" placeholder="Interviewer name" style="max-width:200px" />
+        <input id="twinRole" type="text" placeholder="Their role (e.g. GPM, Payments)" style="max-width:240px" />
+      </div>
+      <textarea id="twinSignals" rows="5" style="margin-top:0.5rem" placeholder="Paste their public bio, recent post topics, talk titles…"></textarea>
+      <div class="prep-actions">
+        <button class="btn" id="twinBtn">Predict their interview</button>
+        <span class="hint" id="twinMsg"></span>
+      </div>
+      <div id="twinOut"></div>
+    </div>
+
+    <div class="card" id="mockCard" hidden>
+      <h2>Mock interview</h2>
+      <p class="hint">Adaptive probing aimed at your weakest competencies — because that's
+      where the real interview will hurt. Up to 8 questions, then a scorecard.</p>
+      <div class="chat" id="mockChat"></div>
+      <div class="chat-compose" id="mockCompose" hidden>
+        <textarea id="mockInput" placeholder="Answer out loud first, then type the gist…"></textarea>
+        <button class="btn" id="mockSend">Send</button>
+      </div>
+      <div class="prep-actions">
+        <button class="btn" id="mockStart">Start mock</button>
+        <button class="btn ghost" id="mockEnd" hidden>End &amp; grade</button>
+        <span class="hint" id="mockMsg"></span>
+      </div>
+      <div id="mockScoreOut"></div>
+    </div>
+
+    <div class="card" id="debriefCard" hidden>
+      <h2>Post-interview debrief</h2>
+      <p class="hint">Just had the real thing? Write what was asked, what landed, what
+      blindsided you. Lessons sharpen the next loop; achievements you mention become
+      DRAFT units you can confirm into your bank.</p>
+      <textarea id="debriefText" rows="6" placeholder="They asked about a time I disagreed with an exec — my metrics story landed, but I froze on the failure question. I also mentioned the pricing migration I ran, which isn't in my bank…"></textarea>
+      <div class="prep-actions">
+        <button class="btn" id="debriefBtn">Mine the debrief</button>
+        <span class="hint" id="debriefMsg"></span>
+      </div>
+      <div id="debriefOut"></div>
+    </div>
   </div>
   <script src="/static/shared.js?v=1"></script>
-  <script src="/static/prep.js?v=1"></script>
+  <script src="/static/prep.js?v=2"></script>
 </body>
 </html>

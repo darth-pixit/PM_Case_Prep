@@ -211,6 +211,28 @@ table.hm td.w { color: var(--accent); letter-spacing: 0.12em; white-space: nowra
 .claims { border-left: 3px solid var(--warn); background: rgba(251, 191, 36, 0.07); border-radius: 0 8px 8px 0; padding: 0.6rem 0.9rem; margin: 0.6rem 0; font-size: 0.88rem; }
 .claims ul { margin: 0.35rem 0 0; padding-left: 1.2rem; }
 
+/* v1/v2: bank editing, applications dashboard, devil's advocate, verdicts */
+.unit-act { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+.unit-form { display: flex; flex-direction: column; gap: 0.4rem; }
+.unit-form input, .unit-form textarea { font-size: 0.85rem; }
+.unit-form label.pill { cursor: pointer; user-select: none; }
+.unit-form label.pill.on, .pill.on { border-color: var(--good); color: var(--good); }
+.app-row { display: flex; align-items: center; gap: 0.7rem; padding: 0.55rem 0.2rem;
+  border-top: 1px solid var(--border); flex-wrap: wrap; }
+.app-row:first-child { border-top: 0; }
+.app-row .who { flex: 1; min-width: 200px; }
+.app-row .who small { display: block; }
+.app-row .act { display: flex; gap: 0.35rem; }
+.hm-mini { font-size: 0.85rem; letter-spacing: 0.06em; }
+.hm-mini .g { color: var(--good); font-style: normal; }
+.hm-mini .a { color: var(--warn); font-style: normal; }
+.hm-mini .r { color: var(--bad); font-style: normal; }
+.pill.solid { border-color: var(--good); color: var(--good); }
+.pill.held { border-color: var(--good); color: var(--good); }
+.pill.cracked { border-color: var(--bad); color: var(--bad); }
+.attack { border-left: 2px solid var(--border); padding: 0.4rem 0 0.4rem 0.8rem; margin: 0.5rem 0; }
+.attack textarea { margin-top: 0.35rem; }
+
 @media (max-width: 560px) {
   .auth-email { flex-direction: column; }
   .msg { max-width: 100%; }
