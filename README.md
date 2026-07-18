@@ -14,9 +14,9 @@ clarify  ->  solve (candidate drives)  ->  graduated hints on demand
          ->  rubric-graded scorecard  ->  longitudinal skill graph
 ```
 
-## Four experiments, one deploy
+## Five experiments, one deploy
 
-The site runs **four separate experiments on one Render service, one domain,
+The site runs **five separate experiments on one Render service, one domain,
 one database, and one login system** — but each experiment has its own page,
 its own user experience, and its own analytics namespace, so results never
 bleed into each other:
@@ -27,6 +27,7 @@ bleed into each other:
 | `/arena` | **Case Arena** — 5 PM tracks × 5 cases each, pick-your-case | **required at start** | `experiment=arena`, `arena_*` events |
 | `/recruiter` | **Recruiter Copilot** — hiring for AI/DS without being an expert | required for chat; field guide open | `experiment=recruiter`, `recruiter_*` events |
 | `/referrals` | **Referral Paths** — closeness-ranked referral map from your own data exports, plus multiplayer job-hunt pods | solo: none (all client-side) · pods: required | `experiment=referrals`, `referrals_*` events |
+| `/prep` | **Prep Engine** — CV + JD → achievement units, coverage heatmap, true STAR stories | **required** (every step is a model call) | `experiment=prep`, `prep_*` events |
 
 Every PostHog event carries an `experiment` super property, so per-experiment
 dashboards are one filter away while a single (free-tier) PostHog project and
@@ -66,6 +67,22 @@ whom, who invited whom, and who also shows up in your phone/IG/FB. Buckets
 rank accordingly ("they owe you one", "referral talk already happened",
 "inner circle", recruiters/senior people flagged as ⚡ doors). Names never
 touch the server in solo mode.
+
+**The Prep Engine** (`pmcaseprep/prep_engine.py`, `/api/prep/*`) is the
+behavioral-storytelling wedge: paste a CV / brain-dump and a JD, and it (1)
+atomizes real work into **achievement units** (action, result, competencies
+from a closed 12-item PM taxonomy, provenance quote, `metric: null` when the
+source had no number), (2) decodes the role into a **TargetProfile** including
+the *unwritten pain* behind the hire, (3) scores a red/amber/green **coverage
+heatmap**, and (4) drafts **STAR stories** in 30-second / 2-minute / deep-dive
+versions with anticipated follow-ups — exportable as one markdown prep pack.
+Truthfulness is enforced in code, not just prompts: a deterministic audit
+nulls extracted metrics whose numbers aren't in the source, downgrades "green"
+cells that cite no real unit, and flags story numbers found in no unit under
+`unverifiedClaims` for explicit user confirmation. Red cells get a
+close-the-gap action (become qualified), never spin. All four LLM prompts
+live in `/prompts/*.md` — editable without touching code. v0 is stateless by
+design: the browser holds the session, the server stores nothing.
 
 **Pods** (`pmcaseprep/web/pods.py`, `/api/pods/*`) are the opt-in multiplayer
 layer: friends job-hunting together pool (1) who can refer directly where

@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prep Engine — true stories, tuned to the role</title>
+  <link rel="stylesheet" href="/static/hub.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="hub">
+      <h1>🧬 Prep Engine</h1>
+      <span class="sub">build true stories that fit the role — never fake it</span>
+      <span class="whoami" id="whoami"></span>
+    </header>
+    <p class="lede">Paste your CV (or just brain-dump what you've done) and the job
+    description. The engine atomizes your real work into achievement units, decodes
+    what the role is truly testing, and shows you the coverage heatmap — where
+    you're strong, where you're adjacent, and where the honest move is to close
+    the gap, not spin it.</p>
+
+    <div class="card" id="inputCard">
+      <h2>1 · Your raw material</h2>
+      <div id="authMount"></div>
+      <div id="builder" hidden>
+        <div class="prep-inputs">
+          <div>
+            <h3>CV / brain-dump</h3>
+            <p class="hint">Bullets, prose, half-sentences — anything true. Numbers you
+            actually have; the engine will never add ones you don't.</p>
+            <textarea id="cvText" rows="10" placeholder="e.g. Led checkout revamp at Acme (team of 6). Cut drop-off 18%. Also: the failed loyalty launch I killed after 2 sprints…"></textarea>
+          </div>
+          <div>
+            <h3>Job description</h3>
+            <p class="hint">Paste the JD. The engine reads between the lines for the
+            unwritten pain behind the hire.</p>
+            <textarea id="jdText" rows="10" placeholder="Paste the full job description here…"></textarea>
+          </div>
+        </div>
+        <div class="prep-actions">
+          <button class="btn" id="buildBtn">Build my heatmap</button>
+          <span class="hint" id="buildMsg"></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="targetCard" hidden>
+      <h2>2 · What this role is really testing</h2>
+      <div id="targetOut"></div>
+    </div>
+
+    <div class="card" id="unitsCard" hidden>
+      <h2 id="unitsHead">Your achievement units</h2>
+      <p class="hint">The extractor is a first draft, not gospel — every unit keeps the
+      exact source line it came from. A missing metric stays missing: that's the point.</p>
+      <div id="unitsOut" class="unit-grid"></div>
+    </div>
+
+    <div class="card" id="heatmapCard" hidden>
+      <h2>3 · Coverage heatmap</h2>
+      <p class="hint">Green: direct evidence. Amber: adjacent — a story can bridge it.
+      Red: no evidence yet — the fix is a real action, not framing.</p>
+      <div class="mini-form" style="margin:0.5rem 0 0.7rem">
+        <label class="hint" for="spine" style="white-space:nowrap">Story spine</label>
+        <input id="spine" type="text" style="flex:1;max-width:none" placeholder="the one-line thread every story reinforces" />
+      </div>
+      <div id="heatmapOut"></div>
+      <div class="prep-actions">
+        <button class="btn ghost" id="exportBtn">Export prep pack (.md)</button>
+        <span class="hint" id="exportMsg"></span>
+      </div>
+    </div>
+
+    <div class="card" id="storyCard" hidden>
+      <h2 id="storyHead">Story</h2>
+      <div id="storyOut"></div>
+    </div>
+
+  </div>
+  <script src="/static/shared.js?v=1"></script>
+  <script src="/static/prep.js?v=1"></script>
+</body>
+</html>
