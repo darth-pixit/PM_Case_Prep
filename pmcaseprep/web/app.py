@@ -56,6 +56,14 @@ from ..delivery import FILLERS_CORE, DeliveryTracker, Word
 from ..grader import grade, weighted_result
 from ..interviewer import Interviewer
 from ..models import Case
+from ..prep_engine import (
+    craft_story,
+    extract_target,
+    extract_units,
+    sanitize_units,
+    score_coverage,
+    TargetProfile,
+)
 from ..recruiter_kb import recruiter_guide, recruiter_system_prompt
 from ..resources import resources_for
 from ..skill_graph import SkillGraph
@@ -119,6 +127,13 @@ RECRUITER_HOURLY_PER_IP = int(os.environ.get("PMCP_RECRUITER_HOURLY_PER_IP", "40
 RECRUITER_MAX_HISTORY = 30  # messages of context kept per request
 RECRUITER_MAX_CHARS = 6000  # per-message input cap
 AUTH_HOURLY_PER_IP = int(os.environ.get("PMCP_AUTH_HOURLY_PER_IP", "20"))
+# Prep Engine (its own experiment): every endpoint is one paid structured-output
+# call, so it shares the recruiter's posture — login required + per-IP budget.
+# Extraction reads a whole CV, so inputs get a generous-but-hard char cap.
+PREP_MODEL = os.environ.get("PMCP_PREP_MODEL", _MODEL_OVERRIDE or "claude-sonnet-5")
+PREP_HOURLY_PER_IP = int(os.environ.get("PMCP_PREP_HOURLY_PER_IP", "30"))
+PREP_MAX_CHARS = 24000  # CV / JD input cap
+PREP_MAX_UNITS = 60  # units accepted back from the client per request
 
 
 class SlidingLimit:
@@ -172,6 +187,7 @@ AUTH_ATTEMPTS = SlidingLimit(AUTH_HOURLY_PER_IP, 3600)
 CODE_REQUESTS_PER_EMAIL = SlidingLimit(3, 3600)
 VERIFIES_PER_EMAIL = SlidingLimit(10, 3600)
 RECRUITER_CALLS = SlidingLimit(RECRUITER_HOURLY_PER_IP, 3600)
+PREP_CALLS = SlidingLimit(PREP_HOURLY_PER_IP, 3600)
 # Pods (referrals multiplayer): cheap sqlite reads get a generous cap; graph
 # uploads rewrite up to 30k rows each, so they get their own tighter budget.
 PODS_CALLS = SlidingLimit(int(os.environ.get("PMCP_PODS_HOURLY_PER_IP", "240")), 3600)
@@ -540,6 +556,11 @@ async def referrals_page(request: Request) -> FileResponse:
     return _page("referrals.html", request)
 
 
+@app.get("/prep")
+async def prep_page(request: Request) -> FileResponse:
+    return _page("prep.html", request)
+
+
 _CASE_ID_RE = re.compile(r"^[a-z0-9-]{1,80}$")
 
 
@@ -663,6 +684,140 @@ async def api_recruiter_guide() -> JSONResponse:
     """The static field guide (question archetypes, concepts in plain english,
     learning links) — browsable without login; only the chat costs money."""
     return JSONResponse(recruiter_guide())
+
+
+# --- Prep Engine (behavioral storytelling + CV tuning, the /prep experiment) ----
+# Stateless by design (spec v0: no accounts-side persistence, no genome store):
+# the browser holds the session's units/target and sends them back with each
+# request, so the server keeps nothing and every call stands alone. All logic
+# lives in prep_engine.py; these handlers only gate, bound, and translate.
+
+def _prep_gate(request: Request) -> JSONResponse | None:
+    if _email_for_request(request) is None:
+        return JSONResponse({"ok": False, "error": "sign in first"}, status_code=401)
+    if not PREP_CALLS.allow(_client_ip(request)):
+        return JSONResponse(
+            {"ok": False, "error": "prep budget for this hour is used up — take a break"},
+            status_code=429,
+        )
+    return None
+
+
+async def _prep_body(request: Request) -> dict | None:
+    try:
+        data = await request.json()
+        assert isinstance(data, dict)
+        return data
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _prep_units(data: dict) -> list | None:
+    """Re-validate the units the CLIENT sends back (they round-trip through the
+    browser, so treat them as untrusted input, not as our own earlier output)."""
+    raw = data.get("units")
+    if not isinstance(raw, list) or not raw:
+        return None
+    try:
+        return sanitize_units(raw[:PREP_MAX_UNITS])
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def _prep_model_call(fn, *args) -> JSONResponse | object:
+    try:
+        return await asyncio.to_thread(fn, anthropic.Anthropic(), *args)
+    except Exception as exc:  # noqa: BLE001
+        print(f"prep engine model error: {exc!r}", flush=True)
+        return JSONResponse(
+            {"ok": False, "error": "the engine hit a snag — try that again"},
+            status_code=502,
+        )
+
+
+@app.post("/api/prep/extract-units")
+async def prep_extract_units(request: Request) -> JSONResponse:
+    """CV / brain-dump -> AchievementUnit[] (the Career Genome, session-local)."""
+    if (err := _prep_gate(request)) is not None:
+        return err
+    data = await _prep_body(request)
+    text = str((data or {}).get("text") or "").strip()[:PREP_MAX_CHARS]
+    if not text:
+        return JSONResponse({"ok": False, "error": "paste your CV first"}, status_code=400)
+    result = await _prep_model_call(extract_units, text, PREP_MODEL)
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse({"ok": True, "units": [u.model_dump() for u in result]})
+
+
+@app.post("/api/prep/extract-target")
+async def prep_extract_target(request: Request) -> JSONResponse:
+    """JD -> TargetProfile (required competencies, weights, unwritten pain)."""
+    if (err := _prep_gate(request)) is not None:
+        return err
+    data = await _prep_body(request)
+    text = str((data or {}).get("text") or "").strip()[:PREP_MAX_CHARS]
+    if not text:
+        return JSONResponse({"ok": False, "error": "paste the JD first"}, status_code=400)
+    result = await _prep_model_call(extract_target, text, PREP_MODEL)
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse({"ok": True, "target": result.model_dump()})
+
+
+@app.post("/api/prep/heatmap")
+async def prep_heatmap(request: Request) -> JSONResponse:
+    """units x target -> CoverageCell[] — the hero screen's data."""
+    if (err := _prep_gate(request)) is not None:
+        return err
+    data = await _prep_body(request)
+    units = _prep_units(data or {})
+    try:
+        target = TargetProfile.model_validate((data or {}).get("target"))
+    except Exception:  # noqa: BLE001
+        target = None
+    if units is None or target is None:
+        return JSONResponse(
+            {"ok": False, "error": "extract units and target first"}, status_code=400
+        )
+    result = await _prep_model_call(score_coverage, units, target, PREP_MODEL)
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse({"ok": True, "cells": [c.model_dump() for c in result]})
+
+
+@app.post("/api/prep/story")
+async def prep_story(request: Request) -> JSONResponse:
+    """chosen competency + its supporting units -> one Story (3 lengths,
+    follow-ups, and unverifiedClaims for anything the audit couldn't ground)."""
+    if (err := _prep_gate(request)) is not None:
+        return err
+    data = await _prep_body(request)
+    units = _prep_units(data or {})
+    competency = str((data or {}).get("competency") or "").strip()
+    spine = str((data or {}).get("spine") or "").strip()[:300]
+    if units is None or not competency:
+        return JSONResponse(
+            {"ok": False, "error": "pick a competency with supporting units"},
+            status_code=400,
+        )
+    wanted = (data or {}).get("unitIds")
+    if isinstance(wanted, list) and wanted:
+        chosen = [u for u in units if u.id in set(map(str, wanted))]
+    else:
+        chosen = [u for u in units if competency in u.competencies]
+    chosen = chosen[:12]
+    if not chosen:
+        return JSONResponse(
+            {"ok": False, "error": "no supporting units for that competency"},
+            status_code=400,
+        )
+    result = await _prep_model_call(
+        craft_story, spine or "consistent, credible impact", competency, chosen, PREP_MODEL
+    )
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse({"ok": True, "story": result.model_dump()})
 
 
 # --- Referral pods (the opt-in multiplayer layer of /referrals) -----------------
