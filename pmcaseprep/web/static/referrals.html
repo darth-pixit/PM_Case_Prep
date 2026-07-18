@@ -12,36 +12,100 @@
       <h1>🤝 Referral Paths</h1>
       <span class="sub">find the people who'd actually refer you</span>
     </header>
-    <p class="lede">A referral multiplies your interview odds. You already know the
-    people — close friends, college batchmates, old teammates — this tool just
-    surfaces them from your own LinkedIn data, grouped by how you know them.</p>
+    <p class="lede">A referral multiplies your interview odds — and you already know the
+    people. This tool cross-references your own data exports (LinkedIn, phone contacts,
+    Instagram, Facebook) into one <b>relationship-strength map</b>: who's actually close,
+    who's already talked jobs with you, and who works where you're applying. Then, with
+    <b>pods</b>, you and your friends pool who-can-refer-where — without anyone's
+    contact list leaving their device.</p>
 
-    <div class="notice">🔒 <b>Your connections never leave this page.</b> The file is
-    read entirely in your browser — nothing is uploaded, nothing is stored on any
-    server. Close the tab and it's gone.</div>
+    <div class="notice">🔒 <b>Solo mode is 100% local.</b> Every file is parsed in your
+    browser — names, companies, emails are never uploaded. The only exception is the
+    opt-in pods feature below, which shares exactly two things: <i>company names</i> and
+    <i>irreversible hashes</i> — never names. Each step says exactly what leaves the page.</div>
 
     <div class="card" id="importCard">
-      <h2>1 · Get your LinkedIn connections file</h2>
-      <ol class="steps">
-        <li>On LinkedIn: <b>Settings &amp; Privacy → Data privacy → Get a copy of your data</b></li>
-        <li>Pick <b>“Want something in particular?” → Connections</b> and request the archive</li>
-        <li>LinkedIn emails you a download link (usually within ~10 minutes)</li>
-        <li>Unzip it and drop <b>Connections.csv</b> below</li>
-      </ol>
-      <p class="hint">Why a file and not a “Connect LinkedIn” button? LinkedIn shut down
-      its connections API years ago — no app can read your network directly anymore.
-      The official export is the one ToS-clean way, and it keeps your data in your hands.</p>
+      <h2>1 · Get your exports, drop them all here</h2>
+      <p class="hint">Every platform is legally required to give you your data. APIs are dead;
+      the export files are the one ToS-clean door — and they keep your data in your hands.
+      Start with LinkedIn (it's the spine); each extra source sharpens the closeness ranking.</p>
+
+      <details class="fold" open>
+        <summary>💼 LinkedIn — the full archive (start here)</summary>
+        <div class="fold-body">
+          <ol class="steps">
+            <li>LinkedIn → <b>Me → Settings &amp; Privacy → Data privacy → Get a copy of your data</b></li>
+            <li>Choose <b>“Download larger data archive”</b> — it includes connections, <b>messages,
+              education, positions, recommendations and invitations</b> (all of which power the
+              ranking below)</li>
+            <li>LinkedIn emails a first archive in ~10 minutes (it has most files) and the complete
+              one within 24 h — either works</li>
+            <li>Drop the whole <b>.zip</b> below — no need to unzip</li>
+          </ol>
+          <p class="hint">In a hurry? “Want something in particular?” → tick <b>Connections +
+          Messages + Invitations + Profile + Recommendations</b> — arrives in minutes. A bare
+          <b>Connections.csv</b> alone works too (that's the v1 flow).</p>
+        </div>
+      </details>
+
+      <details class="fold">
+        <summary>📱 Phone contacts — your closest people (WhatsApp proxy)</summary>
+        <div class="fold-body">
+          <ol class="steps">
+            <li><b>iPhone:</b> Contacts app → <b>Lists</b> (top-left) → touch &amp; hold
+              <b>All Contacts</b> → <b>Export</b> → save the .vcf — or iCloud.com → Contacts →
+              select all → Export vCard</li>
+            <li><b>Android:</b> Contacts app → <b>Fix &amp; manage → Export to file</b> (.vcf)</li>
+            <li><b>Google Contacts:</b> contacts.google.com → <b>Export</b> → vCard or Google CSV</li>
+            <li>Drop the <b>.vcf</b> (or Google .csv) below</li>
+          </ol>
+          <p class="hint">Your phonebook ≈ your WhatsApp graph — the close-friends layer LinkedIn
+          misses entirely. Someone in both your phone AND your LinkedIn is a real relationship.</p>
+        </div>
+      </details>
+
+      <details class="fold">
+        <summary>📸 Instagram — close friends list + DMs</summary>
+        <div class="fold-body">
+          <ol class="steps">
+            <li>Instagram → profile → menu → <b>Settings → Accounts Center →
+              Your information and permissions → Download your information</b></li>
+            <li><b>Download or transfer information</b> → pick your Instagram account →
+              <b>Some of your information</b> → tick <b>Followers and following</b> + <b>Messages</b></li>
+            <li><b>Download to device</b> · date range <b>All time</b> · format
+              <b>JSON (important — not HTML)</b> · media quality Low</li>
+            <li>The link lands by email (minutes to a few hours) → drop the <b>.zip</b> below</li>
+          </ol>
+          <p class="hint">Your hand-picked <b>Close Friends</b> list and the people you actually DM
+          are gold-grade closeness signals — both are in this export.</p>
+        </div>
+      </details>
+
+      <details class="fold">
+        <summary>👥 Facebook — friends list + Messenger</summary>
+        <div class="fold-body">
+          <ol class="steps">
+            <li>Same flow: <b>Accounts Center → Download your information</b> → pick your
+              <b>Facebook</b> profile</li>
+            <li>Tick <b>Friends and followers</b> + <b>Messages</b> → format <b>JSON</b> → All time</li>
+            <li>Drop the <b>.zip</b> below</li>
+          </ol>
+          <p class="hint">The friends-list API died in 2015 — but your own export has the full list,
+          with real names that match against your LinkedIn.</p>
+        </div>
+      </details>
+
       <div class="drop" id="drop">
-        <b>Drop Connections.csv here</b> — or click to choose the file
-        <input type="file" id="file" accept=".csv,text/csv" hidden />
+        <div id="dropMsg"><b>Drop everything here</b> — LinkedIn .zip, Connections.csv, contacts .vcf,
+        Instagram/Facebook .zip — or click to choose. Add files in any order, any time.</div>
+        <input type="file" id="file" accept=".csv,.zip,.vcf,.vcard,.json,text/csv,application/zip,application/json" multiple hidden />
       </div>
+      <div class="src-board" id="srcBoard"></div>
     </div>
 
     <div class="card" id="aboutYou" hidden>
-      <h2>2 · A few quick facts (better grouping)</h2>
-      <p class="hint">The export lists each person's company and when you connected —
-      but not where they studied. These answers unlock smarter buckets, starting with
-      the one that matters most: who you know at the company you're targeting.</p>
+      <h2>2 · About you <span class="pill">auto-filled from your export where possible</span></h2>
+      <p class="hint" id="autoNote"></p>
       <div class="preset-row" style="align-items:center">
         <input type="text" id="targetCompany" placeholder="Company you're applying to (optional)" style="max-width:280px" />
         <input type="text" id="myCompanies" placeholder="Companies you've worked at (comma-separated)" style="max-width:340px" />
@@ -52,6 +116,45 @@
 
     <div id="groups" hidden></div>
 
+    <div class="card" id="podsCard">
+      <h2>4 · Job-hunt pods — multiply with friends</h2>
+      <p class="hint">Job hunting works better as a squad. A pod pools two things across
+      friends: <b>who can refer directly where</b> (everyone's work history becomes a referral
+      exchange) and <b>who knows people at which companies</b> — your 2nd-degree network,
+      unlocked through people who'd actually vouch for you.</p>
+      <div class="notice">🔒 <b>What leaves your browser if you share into a pod</b> (and only
+      then): company names from your work history, and one row per connection —
+      <b>SHA-256 hash of their profile URL + their company name</b>. No names, no emails, no
+      titles — the server rejects anything else by construction. Pod-mates see <i>counts</i>
+      (“Rahul knows 3 people at Stripe”), and only Rahul's own browser can resolve which 3,
+      because only he holds his export. Leave a pod and your rows are deleted.</div>
+      <div id="podAuth"></div>
+      <div id="podPanel" hidden>
+        <div class="mini-form" style="margin:0.6rem 0">
+          <input type="text" id="podCreateName" placeholder="New pod name, e.g. IITD '18 job squad" maxlength="40" />
+          <button class="btn" id="podCreateBtn">Create pod</button>
+          <input type="text" id="podJoinCode" placeholder="Or enter an invite code" maxlength="8" style="max-width:200px" />
+          <button class="btn ghost" id="podJoinBtn">Join</button>
+        </div>
+        <div class="preset-row" id="podTabs"></div>
+        <small id="podMsg" class="auth-msg"></small>
+        <div id="podView" hidden>
+          <p id="podHead"></p>
+          <div id="podExchange"></div>
+          <div id="podMembers"></div>
+          <div style="margin:0.8rem 0 0.3rem">
+            <button class="btn" id="podShareBtn" disabled>Share my network map with this pod</button>
+            <div class="hint" id="podShareHint"></div>
+          </div>
+          <div class="mini-form" style="margin-top:0.8rem">
+            <input type="text" id="podWhoInput" placeholder="Who knows someone at… e.g. Stripe" style="max-width:280px" />
+            <button class="btn ghost" id="podWhoBtn">Ask the pod map</button>
+          </div>
+          <div id="podWhoOut"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <h2>What else could we connect?</h2>
       <p class="hint">Honest status of every other door into “people who'd refer you”.
@@ -61,6 +164,6 @@
 
   </div>
   <script src="/static/shared.js?v=1"></script>
-  <script src="/static/referrals.js?v=1"></script>
+  <script src="/static/referrals.js?v=2"></script>
 </body>
 </html>

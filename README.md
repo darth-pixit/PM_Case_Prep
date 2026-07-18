@@ -26,7 +26,7 @@ bleed into each other:
 | `/` | **Tutor** — the original single-case interview (unchanged) | optional, at scorecard | `experiment=tutor` |
 | `/arena` | **Case Arena** — 5 PM tracks × 5 cases each, pick-your-case | **required at start** | `experiment=arena`, `arena_*` events |
 | `/recruiter` | **Recruiter Copilot** — hiring for AI/DS without being an expert | required for chat; field guide open | `experiment=recruiter`, `recruiter_*` events |
-| `/referrals` | **Referral Paths** — find who'd refer you, from your own LinkedIn export | none (all client-side) | `experiment=referrals`, `referrals_*` events |
+| `/referrals` | **Referral Paths** — closeness-ranked referral map from your own data exports, plus multiplayer job-hunt pods | solo: none (all client-side) · pods: required | `experiment=referrals`, `referrals_*` events |
 
 Every PostHog event carries an `experiment` super property, so per-experiment
 dashboards are one filter away while a single (free-tier) PostHog project and
@@ -53,10 +53,29 @@ today — question archetypes, plain-english concept explainers, evaluation
 techniques for non-experts, and 40 URL-verified learning resources — and the
 chat folds that knowledge base into every reply.
 
-**Referral Paths** parses the official LinkedIn data export **entirely in the
-browser** (LinkedIn killed its connections API in 2015; the DMA portability
-API is EU-only — the export is the one ToS-clean path that works everywhere).
-Connections never touch the server.
+**Referral Paths** parses official data exports **entirely in the browser**
+(LinkedIn killed its connections API in 2015; the DMA portability API is
+EU-only — the legally-mandated exports are the one ToS-clean path that works
+everywhere). It ingests the full LinkedIn archive ZIP (connections, messages,
+education, positions, invitations, recommendations, endorsements), phone
+contacts (.vcf / Google CSV), and Instagram/Facebook export ZIPs (friends,
+close-friends list, DM partners — including Meta's mojibake fix), then
+cross-references everything into a **relationship-strength score**: DM
+frequency/recency/bidirectionality, referral-talk detection, who recommended
+whom, who invited whom, and who also shows up in your phone/IG/FB. Buckets
+rank accordingly ("they owe you one", "referral talk already happened",
+"inner circle", recruiters/senior people flagged as ⚡ doors). Names never
+touch the server in solo mode.
+
+**Pods** (`pmcaseprep/web/pods.py`, `/api/pods/*`) are the opt-in multiplayer
+layer: friends job-hunting together pool (1) who can refer directly where
+(everyone's work history becomes a referral exchange) and (2) who knows
+people at which companies. A member shares only SHA-256 hashes of connection
+profile URLs + company names — the endpoints **reject anything that isn't
+hash-shaped**, so the server can count ("Rahul knows 3 people at Stripe")
+but can never name; only Rahul's own browser holds the hash→person mapping.
+Equal hashes across members double as mutual-connection counts. Login-gated,
+rate-limited, and leaving a pod deletes your rows.
 
 ## Why not fine-tune?
 
