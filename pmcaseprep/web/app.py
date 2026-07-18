@@ -61,6 +61,7 @@ from ..resources import resources_for
 from ..skill_graph import SkillGraph
 from . import auth
 from .deepgram_live import DG_URL, FLUX_ACTIVE, FLUX_URL, NOVA_URL, DeepgramLive
+from .pods import Pods
 
 # Two model tiers: the interviewer runs on a FAST model (conversational turns,
 # snappy replies); the grader runs on the deepest model (one careful call at
@@ -171,6 +172,10 @@ AUTH_ATTEMPTS = SlidingLimit(AUTH_HOURLY_PER_IP, 3600)
 CODE_REQUESTS_PER_EMAIL = SlidingLimit(3, 3600)
 VERIFIES_PER_EMAIL = SlidingLimit(10, 3600)
 RECRUITER_CALLS = SlidingLimit(RECRUITER_HOURLY_PER_IP, 3600)
+# Pods (referrals multiplayer): cheap sqlite reads get a generous cap; graph
+# uploads rewrite up to 30k rows each, so they get their own tighter budget.
+PODS_CALLS = SlidingLimit(int(os.environ.get("PMCP_PODS_HOURLY_PER_IP", "240")), 3600)
+PODS_SHARES = SlidingLimit(int(os.environ.get("PMCP_PODS_SHARES_PER_IP", "12")), 3600)
 ACTIVE = Gauge()
 
 
@@ -658,6 +663,156 @@ async def api_recruiter_guide() -> JSONResponse:
     """The static field guide (question archetypes, concepts in plain english,
     learning links) — browsable without login; only the chat costs money."""
     return JSONResponse(recruiter_guide())
+
+
+# --- Referral pods (the opt-in multiplayer layer of /referrals) -----------------
+# Solo referral-mapping is 100% client-side. A pod member explicitly shares two
+# things: their own work-history companies, and SHA-256(profile URL) + company
+# per connection. Names/emails/titles never reach these endpoints — pods.py
+# rejects anything that isn't hash-shaped, so the privacy promise is enforced
+# by code. All endpoints require the verified login and are rate-limited.
+
+def _pods_gate(request: Request) -> tuple[str, None] | tuple[None, JSONResponse]:
+    email = _email_for_request(request)
+    if email is None:
+        return None, JSONResponse({"ok": False, "error": "sign in first"}, status_code=401)
+    if not PODS_CALLS.allow(_client_ip(request)):
+        return None, JSONResponse(
+            {"ok": False, "error": "too many requests — take a breath"}, status_code=429
+        )
+    return email, None
+
+
+async def _pods_body(request: Request) -> dict | None:
+    try:
+        data = await request.json()
+        assert isinstance(data, dict)  # "hi" / [1] are valid JSON, not requests
+        return data
+    except Exception:  # noqa: BLE001
+        return None
+
+
+@app.post("/api/pods")
+async def pods_create(request: Request) -> JSONResponse:
+    email, err = _pods_gate(request)
+    if err:
+        return err
+    data = await _pods_body(request)
+    if data is None:
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=400)
+    p = Pods(DB_PATH)
+    try:
+        pod, perr = p.create(str(data.get("name") or ""), email)
+    finally:
+        p.close()
+    if perr:
+        return JSONResponse({"ok": False, "error": perr}, status_code=400)
+    return JSONResponse({"ok": True, "pod": pod})
+
+
+@app.post("/api/pods/join")
+async def pods_join(request: Request) -> JSONResponse:
+    email, err = _pods_gate(request)
+    if err:
+        return err
+    data = await _pods_body(request)
+    if data is None:
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=400)
+    p = Pods(DB_PATH)
+    try:
+        pod, perr = p.join(str(data.get("code") or ""), email)
+    finally:
+        p.close()
+    if perr:
+        return JSONResponse({"ok": False, "error": perr}, status_code=404)
+    return JSONResponse({"ok": True, "pod": pod})
+
+
+@app.post("/api/pods/leave")
+async def pods_leave(request: Request) -> JSONResponse:
+    email, err = _pods_gate(request)
+    if err:
+        return err
+    data = await _pods_body(request)
+    if data is None:
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=400)
+    p = Pods(DB_PATH)
+    try:
+        ok = p.leave(str(data.get("code") or ""), email)
+    finally:
+        p.close()
+    return JSONResponse({"ok": ok})
+
+
+@app.get("/api/pods/mine")
+async def pods_mine(request: Request) -> JSONResponse:
+    email, err = _pods_gate(request)
+    if err:
+        return err
+    p = Pods(DB_PATH)
+    try:
+        pods = p.mine(email)
+    finally:
+        p.close()
+    return JSONResponse({"ok": True, "pods": pods})
+
+
+@app.get("/api/pods/summary")
+async def pods_summary(request: Request, code: str = "") -> JSONResponse:
+    email, err = _pods_gate(request)
+    if err:
+        return err
+    p = Pods(DB_PATH)
+    try:
+        summary, perr = p.summary(code, email)
+    finally:
+        p.close()
+    if perr:
+        return JSONResponse({"ok": False, "error": perr}, status_code=404)
+    return JSONResponse({"ok": True, **summary})
+
+
+@app.post("/api/pods/graph")
+async def pods_graph(request: Request) -> JSONResponse:
+    email, err = _pods_gate(request)
+    if err:
+        return err
+    if not PODS_SHARES.allow(_client_ip(request)):
+        return JSONResponse(
+            {"ok": False, "error": "too many uploads this hour — try later"},
+            status_code=429,
+        )
+    data = await _pods_body(request)
+    if data is None:
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=400)
+    p = Pods(DB_PATH)
+    try:
+        result, perr = p.set_graph(
+            str(data.get("code") or ""),
+            email,
+            data.get("companies") or [],
+            data.get("connections") or [],
+        )
+    finally:
+        p.close()
+    if perr:
+        return JSONResponse({"ok": False, "error": perr}, status_code=400)
+    return JSONResponse({"ok": True, **result})
+
+
+@app.get("/api/pods/who")
+async def pods_who(request: Request, code: str = "", company: str = "") -> JSONResponse:
+    email, err = _pods_gate(request)
+    if err:
+        return err
+    p = Pods(DB_PATH)
+    try:
+        results, perr = p.who(code, email, company)
+    finally:
+        p.close()
+    if perr:
+        return JSONResponse({"ok": False, "error": perr}, status_code=400)
+    return JSONResponse({"ok": True, "results": results})
 
 
 _FAVICON = (
