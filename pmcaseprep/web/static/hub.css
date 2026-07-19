@@ -182,6 +182,14 @@ details.fold > .fold-body { padding: 0 0.9rem 0.8rem; }
 .who-row { display: flex; align-items: baseline; gap: 0.7rem; padding: 0.4rem 0;
   border-top: 1px solid var(--border); flex-wrap: wrap; }
 .who-row:first-child { border-top: 0; }
+
+/* --- Referrals v3: company-first map --------------------------------------- */
+.co-fold > summary { flex-wrap: wrap; }
+.co-name { font-size: 1.18rem; font-weight: 700; color: var(--ink); }
+.co-fold > summary .count { white-space: nowrap; }
+@media (max-width: 560px) {
+  .co-fold > summary .count { flex-basis: 100%; margin-left: 1.05rem; }
+}
 @media (max-width: 560px) {
   .auth-email { flex-direction: column; }
   .msg { max-width: 100%; }
