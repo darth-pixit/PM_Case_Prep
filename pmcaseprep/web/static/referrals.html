@@ -104,13 +104,16 @@
     </div>
 
     <div class="card" id="aboutYou" hidden>
-      <h2>2 · About you <span class="pill">auto-filled from your export where possible</span></h2>
+      <h2>2 · What are you applying for? <span class="pill">auto-filled from your export where possible</span></h2>
+      <p class="hint">The role drives everything below: which firms rank first, who counts as a
+      ⚡ door, who's 🎯 already doing that job, and what your ask messages say.</p>
       <p class="hint" id="autoNote"></p>
       <div class="preset-row" style="align-items:center">
-        <input type="text" id="targetCompany" placeholder="Company you're applying to (optional)" style="max-width:280px" />
+        <input type="text" id="applyRole" placeholder="Role you're applying for, e.g. Product Manager" style="max-width:300px" />
+        <input type="text" id="targetCompany" placeholder="Dream firms, comma-separated (optional)" style="max-width:300px" />
         <input type="text" id="myCompanies" placeholder="Companies you've worked at (comma-separated)" style="max-width:340px" />
         <input type="text" id="collegeYears" placeholder="College years, e.g. 2014-2018" style="max-width:200px" />
-        <button class="btn" id="groupBtn">Show my paths</button>
+        <button class="btn" id="groupBtn">Show my referral map</button>
       </div>
     </div>
 
@@ -166,6 +169,6 @@
       · <a href="/recruiter">Recruiter copilot</a></p>
   </div>
   <script src="/static/shared.js?v=1"></script>
-  <script src="/static/referrals.js?v=2"></script>
+  <script src="/static/referrals.js?v=3"></script>
 </body>
 </html>

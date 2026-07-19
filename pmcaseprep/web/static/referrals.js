@@ -381,6 +381,31 @@ function ingestEndorsements(objs) {
 
 // --- External sources (phone / Google / Instagram / Facebook) ------------------------
 
+// Phone books are full of saved service numbers — "customer care", "police",
+// "my airtel", "railway inquiry" — that can never refer anyone. Only
+// human-looking names may enter the not-on-LinkedIn list.
+const SERVICE_RE = new RegExp("\\b(" + [
+  "customer care", "care", "support", "helpline", "help ?desk", "toll ?free",
+  "enquiry", "inquiry", "info", "services?", "official", "office", "reception",
+  "police", "fire", "ambulance", "emergency", "blood bank",
+  "railways?", "irctc", "metro", "cab", "taxi", "auto stand",
+  "airtel", "jio", "vodafone", "bsnl", "mtnl", "hello ?tunes", "recharge",
+  "broadband", "wifi", "dth", "fiber", "sim",
+  "bank", "loan", "insurance", "credit card", "demat",
+  "swiggy", "zomato", "uber", "ola", "rapido", "domino'?s", "pizza", "tiffin", "mess",
+  "plumber", "electrician", "carpenter", "painter", "mechanic", "driver",
+  "maid", "cook", "laundry", "tailor", "milkman", "gas", "cylinder", "newspaper",
+  "clinic", "hospital", "pharmacy", "chemist", "dentist",
+  "salon", "saloon", "barber", "parlour", "spa", "gym", "coaching", "tuition",
+  "security", "guard", "watchman", "society", "landlord", "hostel", "warden",
+  "delivery", "courier", "store", "mart", "shop", "agency", "travels?", "property", "estate",
+].join("|") + ")\\b", "i");
+
+function looksHuman(name) {
+  const n = String(name || "").trim();
+  return n.length >= 3 && !/\d/.test(n) && /[a-z]/i.test(n) && !SERVICE_RE.test(n);
+}
+
 function matchExternal(entry, src, externOk) {
   // entry: {name, emails?, org?, close?}
   let p = null;
@@ -392,6 +417,7 @@ function matchExternal(entry, src, externOk) {
     return true;
   }
   if (!externOk || S.external.length >= 5000) return false;
+  if (!looksHuman(entry.name)) return false; // service numbers, not people
   const k = nameKeys(entry.name)[0];
   if (!k || k.length < 3) return false;
   const meKey = normName(S.me.name);
@@ -610,6 +636,10 @@ function renderSources() {
 }
 
 function prefillAboutYou() {
+  if (S.positions.length && !$("applyRole").value.trim()) {
+    const cur = S.positions.find((p) => p.current) || S.positions[0];
+    if (cur.title) $("applyRole").value = cur.title;
+  }
   if (S.positions.length && !$("myCompanies").value.trim()) {
     $("myCompanies").value = [...new Set(S.positions.map((p) => p.company))].join(", ");
   }
@@ -619,6 +649,7 @@ function prefillAboutYou() {
     if (y0 && isFinite(y1)) $("collegeYears").value = `${y0}-${y1}`;
   }
   const auto = [];
+  if (S.positions.length && $("applyRole").value.trim()) auto.push("target role (edit it if you're switching tracks!)");
   if (S.positions.length) auto.push("work history");
   if (S.edu.length) auto.push(`college (${esc(S.edu[0].school)})`);
   $("autoNote").innerHTML = auto.length
@@ -659,12 +690,80 @@ function computeScores() {
   }
 }
 
+// --- Role targeting -------------------------------------------------------------------
+// "What are you applying for" drives everything: which firms rank first, who
+// counts as a door, who's already doing the job, and what the ask copy says.
+
+let ROLE = "PM"; // refreshed from the applyRole input on every render
+
+const ROLE_FAMILIES = [
+  [/\b(pm|apm|product)\b/i, /\bproduct\b|\bapm\b|\bpm\b/i],
+  [/\b(swe|sde|software|engineer|developer|dev|frontend|backend|full ?stack|mobile|android|ios)\b/i,
+    /engineer|developer|\bsde\b|\bswe\b|software|programmer|\bdev\b/i],
+  [/\b(data|ml|ai|machine ?learning|scientist|analytics?|analyst)\b/i,
+    /\bdata\b|analyst|analytics|scien|machine ?learning|\bml\b|\bai\b/i],
+  [/\b(design|ux|ui)\b/i, /design|\bux\b|\bui\b|user (experience|research)/i],
+  [/\b(marketing|growth|brand|seo|content)\b/i, /marketing|growth|brand|\bseo\b|content/i],
+  [/\b(sales|bd|business ?development|account|partnership)\b/i,
+    /sales|business development|\bbd\b|account (exec|manager)|partnership/i],
+  [/\b(consultant|consulting|strategy)\b/i, /consult|strateg/i],
+  [/\b(finance|investment|banking|equity|trading)\b/i, /financ|invest|banking|equity|trad(er|ing)/i],
+  [/\b(operations|ops|program|tpm|project manager)\b/i,
+    /operations|\bops\b|program manager|\btpm\b|project manager/i],
+];
+
+function roleQuery() {
+  return $("applyRole").value.trim()
+    .replace(/\s+(roles?|jobs?|positions?|openings?|intern(ship)?s?)$/i, "").trim();
+}
+
+// Regex matching positions in the same function as the target role — first via
+// the family table (so "APM" finds "Senior Product Manager"), else the role's
+// own words.
+function roleMatcher(role) {
+  const r = (role || "").toLowerCase();
+  if (!r) return null;
+  for (const [test, match] of ROLE_FAMILIES) if (test.test(r)) return match;
+  const words = r.split(/[^a-z]+/).filter((w) => w.length >= 3 && !["for", "the", "and"].includes(w));
+  return words.length ? new RegExp(words.join("|"), "i") : null;
+}
+
+// --- Company map -----------------------------------------------------------------------
+// The primary lens: firm by firm, who's inside and how good your odds are.
+
+function buildCompanies(targets) {
+  const currentCos = new Set(S.positions.filter((p) => p.current).map((p) => p.co));
+  const byCo = new Map();
+  for (const p of S.people) {
+    const key = normCo(p.company);
+    if (!key) continue;
+    let c = byCo.get(key);
+    if (!c) { c = { key, name: p.company.trim(), people: [], doors: 0, fits: 0, best: 0 }; byCo.set(key, c); }
+    c.people.push(p);
+    if (p.door) c.doors++;
+    if (p.roleFit) c.fits++;
+    if (p.score > c.best) c.best = p.score;
+  }
+  const list = [...byCo.values()];
+  for (const c of list) {
+    c.target = targets.some((t) => c.key.includes(t) || t.includes(c.key));
+    c.mine = currentCos.has(c.key);
+    // Inside a firm: doors (recruiters/seniors) first, then people already in
+    // your target role, then relationship strength.
+    c.people.sort((a, b) => (b.door - a.door) || (b.roleFit - a.roleFit) || (b.score - a.score));
+    c.rank = (c.target ? 1e6 : 0) + (c.mine ? -1e5 : 0)
+      + c.best + Math.log2(1 + c.people.length)
+      + (c.doors ? 2 : 0) + (c.fits ? 2.5 : 0);
+  }
+  list.sort((a, b) => b.rank - a.rank);
+  return list;
+}
+
 // --- Grouping -------------------------------------------------------------------------
 
 const YEAR_RE = /(\d{4})\s*[-–to ]+\s*(\d{4})/;
 
 function buildGroups() {
-  const target = $("targetCompany").value.trim().toLowerCase();
   const myCos = $("myCompanies").value.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
   const ym = $("collegeYears").value.match(YEAR_RE);
   const [y0, y1] = ym ? [+ym[1], +ym[2]] : [0, 0];
@@ -685,14 +784,6 @@ function buildGroups() {
   };
 
   const groups = [];
-  if (target) {
-    const g = take((p) => p.company.toLowerCase().includes(target));
-    g.sort((a, b) => (b.door - a.door) || (b.score - a.score)); // doors first
-    groups.push({
-      title: `At ${cap(target)} — your way in`, icon: "🎯", kind: "referral", people: g,
-      why: "They work at your target company right now. Recruiters, talent folks and senior people (⚡) are the fastest doors — most companies pay them a bonus for referring you.",
-    });
-  }
   groups.push({
     title: "They owe you one", icon: "🔁", kind: "reconnect",
     people: take((p) => p.recGiven),
@@ -708,13 +799,6 @@ function buildGroups() {
     people: take((p) => p.score >= 6 || p.srcs.size >= 2),
     why: "Highest relationship-strength in your whole network: real conversations, recommendations, and people who show up in your phone/Instagram/Facebook too — not just LinkedIn.",
   });
-  if (curCo) {
-    groups.push({
-      title: `Your team & company (${cap(curCo)})`, icon: "🏢", kind: "referral",
-      people: take((p) => p.company && p.company.toLowerCase().includes(curCo)),
-      why: "They work where you work — the warmest possible referral, often with a bonus for them.",
-    });
-  }
   const pastCos = [...new Set([...S.positions.filter((p) => !p.current).map((p) => p.co), ...myCos.slice(1)])]
     .filter((c) => c && c !== curCo);
   if (pastCos.length) {
@@ -733,17 +817,21 @@ function buildGroups() {
     });
   }
   if (S.external.length) {
-    const ext = S.external.slice().sort((a, b) => (b.close - a.close) || (b.srcs.size - a.srcs.size));
+    // People with an org, an email, a close-friend flag, multiple sources, or a
+    // full name float up; bare one-word phonebook entries sink.
+    const extRank = (e) => (e.close ? 4 : 0) + e.srcs.size + (e.org ? 2 : 0)
+      + ((e.emails || []).length ? 1 : 0) + (/\s/.test(e.name.trim()) ? 0.5 : 0);
+    const ext = S.external.slice().sort((a, b) => extRank(b) - extRank(a));
     groups.push({
       title: "Close, but not on your LinkedIn", icon: "📱", kind: "friend",
       external: ext,
-      why: "From your phone / Instagram / Facebook with no LinkedIn match. They can't refer you directly here — but they know people who can. Ask them who they know.",
+      why: "Real people from your phone / Instagram / Facebook with no LinkedIn match (saved service numbers are filtered out). They can't refer you directly here — but they know people who can. Ask them who they know.",
     });
   }
   groups.push({
     title: "Everyone else", icon: "🌐", kind: "referral",
     people: take(() => true),
-    why: "Search by company or role — the person one search away is often the one who refers you.",
+    why: "Search by name, company, or role — the person one search away is often the one who refers you.",
     searchable: true,
   });
   return groups;
@@ -755,19 +843,22 @@ function askFor(p, kind) {
   const first = p.first || String(p.name || "").split(" ")[0] || "there";
   const where = p.company ? ` at ${p.company}` : "";
   if (kind === "referral") {
-    return `Hi ${first}! Hope you've been well 😊 I'm exploring PM roles${where ? ` and saw you're ${p.position || "working"}${where}` : ""} — if there's an opening that fits, would you be open to referring me? I'll send a short blurb + resume so it's zero work for you. Totally fine if it's not a good time!`;
+    const seen = p.roleFit
+      ? ` and saw you're doing exactly that${where} — you'd know the team best`
+      : where ? ` and saw you're ${p.position || "working"}${where}` : "";
+    return `Hi ${first}! Hope you've been well 😊 I'm exploring ${ROLE} roles${seen} — if there's an opening that fits, would you be open to referring me? I'll send a short blurb + resume so it's zero work for you. Totally fine if it's not a good time!`;
   }
   if (kind === "warm") {
-    return `Hey ${first}! Picking up our old thread 😄 I'm actively looking at PM roles right now — if anything's open${where} (or anywhere you'd vouch), I'd love a referral or a pointer. Blurb + resume ready so it's zero work for you!`;
+    return `Hey ${first}! Picking up our old thread 😄 I'm actively looking at ${ROLE} roles right now — if anything's open${where} (or anywhere you'd vouch), I'd love a referral or a pointer. Blurb + resume ready so it's zero work for you!`;
   }
   if (kind === "reconnect") {
-    return `Hey ${first}, it's been a while — hope things are great${where}! I'm exploring PM roles at the moment. If your company's hiring (or you know someone who is), would you be up for referring me or making an intro? Happy to send a short blurb + resume.`;
+    return `Hey ${first}, it's been a while — hope things are great${where}! I'm exploring ${ROLE} roles at the moment. If your company's hiring (or you know someone who is), would you be up for referring me or making an intro? Happy to send a short blurb + resume.`;
   }
   if (kind === "batchmate") {
-    return `Hey ${first}! Long time since college 😄 I'm on the PM job hunt right now — if ${p.company || "your company"} has openings or you know a team that's hiring, a referral or intro would mean a lot. I'll send a blurb + resume, zero work for you!`;
+    return `Hey ${first}! Long time since college 😄 I'm hunting for ${ROLE} roles right now — if ${p.company || "your company"} has openings or you know a team that's hiring, a referral or intro would mean a lot. I'll send a blurb + resume, zero work for you!`;
   }
   // friend (not on LinkedIn)
-  return `Hey ${first}! Quick one — I'm job-hunting for PM roles. You always know people 😄 anyone in your circle at companies hiring PMs who'd be up for a referral intro? Happy to send you a two-line blurb to forward.`;
+  return `Hey ${first}! Quick one — I'm job-hunting for ${ROLE} roles. You always know people 😄 anyone in your circle at companies hiring for ${ROLE} who'd be up for a referral intro? Happy to send you a two-line blurb to forward.`;
 }
 
 // --- Rendering -----------------------------------------------------------------------
@@ -776,12 +867,13 @@ function srcBadges(p) {
   return [...p.srcs].filter((s) => SRC_BADGE[s]).map((s) => SRC_BADGE[s]).join("");
 }
 
-function personRow(p, gi, kind) {
+function personRow(p, gi, kind, hideCo) {
   const name = p.name || `${p.first} ${p.last}`.trim();
   const link = p.url ? `<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(name)}</a>` : esc(name);
-  const sub = [p.position, p.company].filter(Boolean).join(" · ");
+  const sub = [p.position, hideCo ? "" : p.company].filter(Boolean).join(" · ");
   const when = p.on && !isNaN(p.on) ? `connected ${p.on.getFullYear()}` : "";
   const chips = (p.door ? [`<span class="pill hot">⚡ likely door</span>`] : [])
+    .concat(p.roleFit ? [`<span class="pill hot">🎯 does ${esc(ROLE)}</span>`] : [])
     .concat((p.chips || []).slice(0, 4).map((c) => `<span class="pill">${esc(c)}</span>`)).join("");
   return `<div class="person">
     <span class="who"><b>${link}</b> ${srcBadges(p)}<br><small>${esc(sub || "—")}${when ? ` · ${when}` : ""}</small>
@@ -805,25 +897,62 @@ function externalRow(e, gi) {
   </div>`;
 }
 
+const COMPANY_CAP = 30;
+
+function companyFold(c, open) {
+  const meta = [
+    `${c.people.length} ${c.people.length === 1 ? "person" : "people"}`,
+    c.doors ? `⚡ ${c.doors} door${c.doors > 1 ? "s" : ""}` : "",
+    c.fits ? `🎯 ${c.fits} in ${esc(ROLE)}` : "",
+  ].filter(Boolean).join(" · ");
+  const tags = (c.target ? ` <span class="pill hot">🎯 target</span>` : "")
+    + (c.mine ? ` <span class="pill">you work here</span>` : "");
+  return `<details class="fold co-fold" ${open ? "open" : ""}>
+    <summary><span class="co-name">${esc(cap(c.name))}</span>${tags}
+      <span class="count">${meta}</span></summary>
+    <div class="fold-body">
+      ${c.people.slice(0, 40).map((p) => personRow(p, "co", "referral", true)).join("")}
+      ${c.people.length > 40 ? `<p class="hint">+ ${c.people.length - 40} more — strongest 40 shown.</p>` : ""}
+    </div>
+  </details>`;
+}
+
 function renderGroups() {
   computeScores();
+  ROLE = roleQuery() || "PM";
+  const rm = roleMatcher(ROLE);
+  for (const p of S.people) p.roleFit = !!(rm && rm.test(p.position || ""));
+  const targets = $("targetCompany").value.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const companies = buildCompanies(targets);
   const groups = buildGroups();
-  track("groups_built", {
-    groups: groups.map((g) => ({ title: g.title, count: (g.people || g.external || []).length })),
+  track("groups_built", { // counts only — never names, companies, or the role text
+    companies: companies.length,
+    targets: targets.length,
+    role_set: !!rm,
+    groups: groups.map((g) => ({ kind: g.kind, count: (g.people || g.external || []).length })),
     scored: S.sources.has("msg"),
     sources: [...S.sources.keys()],
   });
   $("groups").hidden = false;
-  $("groups").innerHTML = `<div class="card"><h2>3 · Your referral paths</h2>
-    <p class="hint">Ranked by relationship strength — DM history, recommendations, invites,
-    endorsements, and whether they also show up in your phone/Instagram/Facebook.</p>` +
+  $("groups").innerHTML = `<div class="card"><h2>3 · Firms you could get referred into</h2>
+    <p class="hint">Every firm where you already know someone, ranked by your referral odds for
+    <b>${esc(ROLE)}</b>: relationship strength, ⚡ doors (recruiters &amp; senior people — they're
+    paid to refer), and 🎯 people already doing that role. Open a firm to see exactly who to ping.</p>
+    ${rm ? "" : `<p class="hint">⚠ Set the role you're applying for in step 2 — the ranking, badges, and ask messages all sharpen around it.</p>`}
+    <input type="text" id="coSearch" placeholder="Search all ${companies.length} firms…" style="margin:0.4rem 0; max-width:320px" />
+    <div id="coList"></div>
+  </div>
+  <div class="card"><h2>Warm paths, by relationship</h2>
+    <p class="hint">Same network, different lens: the people most likely to say yes,
+    wherever they work — ranked by DM history, recommendations, invites, endorsements,
+    and whether they also show up in your phone/Instagram/Facebook.</p>` +
     groups.map((g, gi) => {
       const list = g.external
         ? g.external.slice(0, 150).map((e) => externalRow(e, gi)).join("")
         : g.people.slice(0, g.searchable ? 25 : 200).map((p) => personRow(p, gi, g.kind)).join("");
       const n = (g.people || g.external || []).length;
       return `
-      <details class="fold" ${n && gi === 0 ? "open" : ""}>
+      <details class="fold">
         <summary>${g.icon} ${esc(g.title)} <span class="count">${n}</span></summary>
         <div class="fold-body">
           <p class="hint">${g.why}</p>
@@ -835,14 +964,31 @@ function renderGroups() {
       </details>`;
     }).join("") + `</div>`;
 
-  $("groups").querySelectorAll(".copy-ask").forEach((b) => {
-    b.onclick = async () => {
-      try { await navigator.clipboard.writeText(b.dataset.ask); b.textContent = "✓ Copied"; }
-      catch { b.textContent = "Copy failed"; }
-      track("ask_copied", { group: +b.dataset.g }); // group index only — no content
-      setTimeout(() => { b.textContent = "Copy ask"; }, 1600);
-    };
-  });
+  function wireCopyButtons(scope) {
+    scope.querySelectorAll(".copy-ask").forEach((b) => {
+      b.onclick = async () => {
+        try { await navigator.clipboard.writeText(b.dataset.ask); b.textContent = "✓ Copied"; }
+        catch { b.textContent = "Copy failed"; }
+        track("ask_copied", { group: String(b.dataset.g) }); // group tag only — no content
+        setTimeout(() => { b.textContent = "Copy ask"; }, 1600);
+      };
+    });
+  }
+
+  const renderCoList = () => {
+    const q = $("coSearch").value.trim().toLowerCase();
+    const hits = q ? companies.filter((c) => c.key.includes(q)) : companies.slice(0, COMPANY_CAP);
+    $("coList").innerHTML = (hits.slice(0, 60).map((c, i) => companyFold(c, !q && i === 0)).join("")
+      || `<p class="hint">Nobody you know works at a firm matching “${esc(q)}” — try the
+          Everyone-else search below, or ask your pod who knows someone there.</p>`)
+      + (!q && companies.length > COMPANY_CAP
+        ? `<p class="hint">Top ${COMPANY_CAP} of ${companies.length} firms shown — search to find any other.</p>` : "");
+    wireCopyButtons($("coList"));
+  };
+  $("coSearch").oninput = renderCoList;
+  renderCoList();
+
+  wireCopyButtons($("groups"));
   $("groups").querySelectorAll(".grp-search").forEach((inp) => {
     inp.oninput = () => {
       const q = inp.value.toLowerCase();
@@ -854,16 +1000,6 @@ function renderGroups() {
       wireCopyButtons(inp.closest(".fold-body"));
     };
   });
-  function wireCopyButtons(scope) {
-    scope.querySelectorAll(".copy-ask").forEach((b) => {
-      b.onclick = async () => {
-        try { await navigator.clipboard.writeText(b.dataset.ask); b.textContent = "✓ Copied"; }
-        catch { b.textContent = "Copy failed"; }
-        track("ask_copied", { group: +b.dataset.g });
-        setTimeout(() => { b.textContent = "Copy ask"; }, 1600);
-      };
-    });
-  }
 }
 
 // --- Import wiring ---------------------------------------------------------------
