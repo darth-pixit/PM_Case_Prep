@@ -1,12 +1,21 @@
-// Prep Engine (/prep): CV + JD -> story bank + target profile -> coverage
-// heatmap -> STAR stories -> pressure-test until solid -> exportable prep pack.
+// Prep Engine (/prep and /prep-ds): CV + JD -> story bank + target profile ->
+// coverage heatmap -> STAR stories -> pressure-test until solid -> grill room
+// -> learning plan -> exportable prep pack.
 //
 // v1: the bank persists server-side (keyed by login), so the genome compounds
 // across sessions and applications re-tune instantly. This file owns the UI
 // state for ONE open application at a time; the bank is the source of truth.
+//
+// v3: one script, two tracks. The page sets window.PREP_TRACK ("pm" default,
+// "ds" on /prep-ds); the track picks the analytics namespace, the competency
+// labels, which applications the dashboard lists, and rides along on the
+// extraction calls so the server prompts for the right role family. The
+// GENOME is shared across tracks on purpose — units carry tags from both
+// taxonomies, each page shows its own and preserves the other's on edit.
 
 (() => {
-  const x = PMCP.experiment("prep");
+  const TRACK = window.PREP_TRACK === "ds" ? "ds" : "pm";
+  const x = PMCP.experiment(TRACK === "ds" ? "prep-ds" : "prep");
   const $ = (id) => document.getElementById(id);
   const esc = PMCP.esc;
 
@@ -20,24 +29,47 @@
     twin: null,
     mock: { msgs: [], scorecard: null, running: false },
     debrief: null,
+    grillMap: [],         // [{unitId, questions:[{question,trap}]}] — cached per application
+    grill: null,          // deep-dive state: {project, exchanges, verdicts, probes, weakSpots}
+    learning: null,       // the cached learning plan for the open application
   };
 
-  const LABELS = {
-    "product-sense": "Product sense",
-    "zero-to-one-shipping": "0→1 shipping",
-    "execution-delivery": "Execution & delivery",
-    "data-driven-decisions": "Data-driven decisions",
-    "influence-without-authority": "Influence w/o authority",
-    "stakeholder-exec-communication": "Stakeholder & exec comms",
-    "strategy-prioritization": "Strategy & prioritization",
-    "technical-fluency": "Technical fluency",
-    "conflict-disagreement": "Conflict & disagreement",
-    "leadership-mentorship": "Leadership & mentorship",
-    "user-empathy-research": "User empathy & research",
-    "metrics-experimentation": "Metrics & experimentation",
+  const TRACK_LABELS = {
+    pm: {
+      "product-sense": "Product sense",
+      "zero-to-one-shipping": "0→1 shipping",
+      "execution-delivery": "Execution & delivery",
+      "data-driven-decisions": "Data-driven decisions",
+      "influence-without-authority": "Influence w/o authority",
+      "stakeholder-exec-communication": "Stakeholder & exec comms",
+      "strategy-prioritization": "Strategy & prioritization",
+      "technical-fluency": "Technical fluency",
+      "conflict-disagreement": "Conflict & disagreement",
+      "leadership-mentorship": "Leadership & mentorship",
+      "user-empathy-research": "User empathy & research",
+      "metrics-experimentation": "Metrics & experimentation",
+    },
+    ds: {
+      "sql-data-wrangling": "SQL & data wrangling",
+      "statistics-probability": "Statistics & probability",
+      "ml-fundamentals": "ML fundamentals",
+      "experiment-design": "Experiment design & A/B",
+      "product-metrics-sense": "Product & metrics sense",
+      "ml-system-design": "ML system design",
+      "genai-llm-fluency": "GenAI & LLM fluency",
+      "coding-engineering-rigor": "Coding & engineering rigor",
+      "data-storytelling": "Data storytelling",
+      "stakeholder-influence": "Stakeholder influence",
+      "project-ownership": "Project ownership",
+      "business-impact": "Business impact",
+    },
   };
-  const COMPS = Object.keys(LABELS);
+  // label() resolves BOTH tracks (shared units carry mixed tags); COMPS is
+  // THIS page's taxonomy — the editor's checkboxes and the chips it shows.
+  const LABELS = Object.assign({}, TRACK_LABELS.pm, TRACK_LABELS.ds);
+  const COMPS = Object.keys(TRACK_LABELS[TRACK]);
   const label = (c) => LABELS[c] || c;
+  const trackComps = (u) => u.competencies.filter((c) => COMPS.includes(c));
 
   async function api(path, body, method) {
     const r = await fetch("/api/prep/" + path, body === undefined
@@ -75,7 +107,10 @@
   }
 
   function renderApps(targets) {
-    if (!targets || !targets.length) { $("appsCard").hidden = true; return; }
+    // Each page lists only its own track's applications — the genome is
+    // shared, the campaigns are not.
+    targets = (targets || []).filter((t) => (t.track || "pm") === TRACK);
+    if (!targets.length) { $("appsCard").hidden = true; return; }
     $("appsCard").hidden = false;
     $("appsOut").innerHTML = targets.map((t) => `
       <div class="app-row" data-id="${esc(t.id)}">
@@ -108,8 +143,9 @@
   function resetTarget() {
     S.target = null; S.targetId = ""; S.cells = []; S.stories = {}; S.da = {};
     S.sprints = {}; S.mock = { msgs: [], scorecard: null, running: false };
-    ["targetCard", "heatmapCard", "storyCard", "twinCard", "mockCard"].forEach(
-      (id) => { $(id).hidden = true; });
+    S.grillMap = []; S.grill = null; S.learning = null;
+    ["targetCard", "heatmapCard", "storyCard", "twinCard", "mockCard",
+     "grillCard", "learnCard"].forEach((id) => { $(id).hidden = true; });
   }
 
   async function openApp(id) {
@@ -118,6 +154,8 @@
       S.target = d.target; S.targetId = d.id; S.cells = d.cells || [];
       S.stories = {}; S.da = {}; S.sprints = {}; S.twin = null;
       S.mock = { msgs: [], scorecard: null, running: false };
+      S.grillMap = d.grill || []; S.grill = null;
+      S.learning = d.learning && d.learning.items ? d.learning : null;
       (d.stories || []).forEach((row) => {
         S.stories[row.competency] = { id: row.id, story: row.story, solid: row.solid };
       });
@@ -126,6 +164,8 @@
         $("spine").value = "I have repeatedly solved this exact pain: " + S.target.unwrittenPain;
       }
       if (S.cells.length) { renderHeatmap(); afterHeatmap(); }
+      if (S.grillMap.length) renderGrillMap();
+      if (S.learning) renderLearning();
       x.track("app_opened", { cells: S.cells.length });
       $("targetCard").scrollIntoView({ behavior: "smooth" });
     } catch (e) { alert(e.message); }
@@ -141,12 +181,14 @@
     x.track("build_started", { cv_chars: cv.length, jd_chars: jd.length });
     try {
       msg("buildMsg", cv ? "Extracting units + decoding the role…" : "Decoding the role…");
-      const calls = [api("extract-target", { text: jd })];
-      if (cv) calls.push(api("extract-units", { text: cv }));
+      const calls = [api("extract-target", { text: jd, track: TRACK })];
+      if (cv) calls.push(api("extract-units", { text: cv, track: TRACK }));
       const [t, u] = await Promise.all(calls);
       if (u) S.units = u.units; // the merged genome, not just this extraction
       S.target = t.target; S.targetId = t.targetId;
       S.stories = {}; S.da = {}; S.sprints = {};
+      S.grillMap = []; S.grill = null; S.learning = null;
+      $("grillMapOut").innerHTML = ""; $("grillOut").innerHTML = ""; $("learnOut").innerHTML = "";
       if (S.units.length) renderUnits();
       renderTarget();
       if (S.target.unwrittenPain) {
@@ -180,6 +222,9 @@
     $("twinCard").hidden = false;
     $("mockCard").hidden = false;
     $("debriefCard").hidden = false;
+    $("grillCard").hidden = false;
+    $("learnCard").hidden = false;
+    renderGrillPicker();
   }
 
   // --- Target + units --------------------------------------------------------
@@ -202,7 +247,7 @@
         <small>${esc(u.context)}</small>
         <p>${esc(u.action)} → ${esc(u.result)}</p>
         <p class="metric">${u.metric ? "📈 " + esc(u.metric) : '<span class="nometric">no metric in source — none invented</span>'}</p>
-        <div class="chips">${u.competencies.map((c) => `<span class="pill">${esc(label(c))}</span>`).join("")}</div>
+        <div class="chips">${trackComps(u).map((c) => `<span class="pill">${esc(label(c))}</span>`).join("")}</div>
         <details><summary>provenance</summary><blockquote>${esc(u.rawEvidence)}</blockquote></details>
         <div class="unit-act">
           <button class="btn small ghost" data-edit="${i}">✎ edit</button>
@@ -224,6 +269,7 @@
         } catch (e) { alert(e.message); }
       };
     });
+    renderGrillPicker(); // the deep-dive selector mirrors the bank
   }
 
   function editUnit(i) {
@@ -243,7 +289,8 @@
         <div class="chips">${COMPS.map((c) => `
           <label class="pill ${u.competencies.includes(c) ? "on" : ""}">
             <input type="checkbox" data-comp="${c}" ${u.competencies.includes(c) ? "checked" : ""} hidden>${esc(label(c))}
-          </label>`).join("")}</div>
+          </label>`).join("")}
+          ${u.competencies.some((c) => !COMPS.includes(c)) ? '<small class="hint">tags from the other track are kept as-is</small>' : ""}</div>
         <label class="hint"><input type="checkbox" data-f="isFailure" ${u.isFailure ? "checked" : ""}> failure / conflict story</label>
         <div class="unit-act">
           <button class="btn small" data-save="1">Save</button>
@@ -266,7 +313,10 @@
         metric: v("metric") || null,
         scale: v("scale") || null,
         skills: v("skills") ? v("skills").split(",").map((s) => s.trim()).filter(Boolean) : [],
-        competencies: [...card.querySelectorAll("[data-comp]:checked")].map((c) => c.dataset.comp),
+        // This page's checkboxes decide THIS track's tags; the other track's
+        // tags ride along untouched — the genome serves both pages.
+        competencies: [...card.querySelectorAll("[data-comp]:checked")].map((c) => c.dataset.comp)
+          .concat(u.competencies.filter((c) => !COMPS.includes(c))),
         isFailure: card.querySelector('[data-f="isFailure"]').checked,
       };
       try {
@@ -533,6 +583,191 @@
     $("sprintOut").scrollIntoView({ behavior: "smooth" });
   }
 
+  // --- The grill room: grill sheet (whole CV) + deep-dive (one project) ------
+  const ANGLES = {
+    "drill-down": "🔩 drill-down",
+    "trade-off": "⚖️ trade-off",
+    "failure": "💥 failure",
+    "constraint-twist": "🌀 constraint twist",
+    "ownership": "🖐 ownership",
+    "impact": "📊 impact",
+    "rigor": "🔬 rigor",
+  };
+  const angleLabel = (a) => ANGLES[a] || a;
+
+  $("grillMapBtn").onclick = async () => {
+    if (!S.units.length || !S.target) { msg("grillMapMsg", "Build the heatmap first.", true); return; }
+    $("grillMapBtn").disabled = true;
+    msg("grillMapMsg", "Interrogating every unit…");
+    try {
+      const d = await api("grill-map", { units: S.units, target: S.target, targetId: S.targetId });
+      S.grillMap = d.rows;
+      renderGrillMap();
+      msg("grillMapMsg", "");
+      x.track("grillmap_built", { rows: d.rows.length, units: S.units.length });
+    } catch (e) { msg("grillMapMsg", e.message, true); }
+    $("grillMapBtn").disabled = false;
+  };
+
+  function renderGrillMap() {
+    $("grillCard").hidden = false;
+    const byUnit = Object.fromEntries(S.grillMap.map((r) => [r.unitId, r.questions]));
+    $("grillMapBtn").textContent = "Re-grill my CV";
+    $("grillMapOut").innerHTML = `
+      <p class="hint">Every unit, pre-interrogated. If you can't answer one of these
+      cold, that's tonight's homework — the grill sheet exports with your prep pack.</p>
+      ${S.units.map((u) => {
+        const qs = byUnit[u.id];
+        return `<div class="attack">
+          <b>${esc(u.title)}</b>${u.metric ? ` <span class="pill">${esc(u.metric)}</span>` : ""}
+          ${qs ? `<ul>${qs.map((q) => `<li>${esc(q.question)}
+              <br><small class="hint">hunts: ${esc(q.trap)}</small></li>`).join("")}</ul>`
+            : '<p class="hint">not grilled yet — re-run the grill to cover this unit</p>'}
+        </div>`;
+      }).join("")}`;
+  }
+
+  function renderGrillPicker() {
+    const sel = $("grillUnit");
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = `<option value="">— pick a unit to grill —</option>` +
+      S.units.map((u, i) => `<option value="${i}">${esc(u.title)}</option>`).join("");
+    if (prev && +prev < S.units.length) sel.value = prev;
+    sel.onchange = () => {
+      const u = S.units[+sel.value];
+      if (!u) return;
+      $("grillText").value =
+        `${u.title} (${u.context})\n${u.action} -> ${u.result}` +
+        (u.metric ? `\nMetric: ${u.metric}` : "") +
+        (u.scale ? `\nScale: ${u.scale}` : "") +
+        `\nFrom my CV: "${u.rawEvidence}"`;
+    };
+  }
+
+  $("grillBtn").onclick = async () => {
+    const project = $("grillText").value.trim();
+    if (!project) { msg("grillMsg", "Pick a unit or paste a project first.", true); return; }
+    if (!S.target) { msg("grillMsg", "Build the heatmap first.", true); return; }
+    const btn = $("grillBtn");
+    btn.disabled = true;
+    // Editing the project text mid-grill starts a NEW grill: the old probes
+    // (and any half-typed answers) belong to a project that no longer exists.
+    const fresh = !S.grill || S.grill.project !== project;
+    if (fresh) {
+      S.grill = { project, exchanges: [], verdicts: [], probes: [], weakSpots: [] };
+      $("grillOut").innerHTML = "";
+    } else {
+      // Fold typed answers into the exchange history before the next round.
+      $("grillOut").querySelectorAll("[data-gans]").forEach((t) => {
+        const answer = t.value.trim();
+        if (answer) S.grill.exchanges.push({ question: S.grill.probes[+t.dataset.gans].question, answer });
+      });
+    }
+    msg("grillMsg", fresh ? "Lighting the grill…" : "Judging your answers…");
+    try {
+      const d = await api("grill", {
+        project: S.grill.project, units: S.units, target: S.target,
+        exchanges: S.grill.exchanges,
+      });
+      S.grill.verdicts = d.round.verdicts;
+      S.grill.probes = d.round.probes;
+      S.grill.weakSpots = d.round.weakSpots;
+      renderGrill();
+      msg("grillMsg", "");
+      x.track("grill_round", { exchanges: S.grill.exchanges.length, weakSpots: S.grill.weakSpots.length });
+    } catch (e) { msg("grillMsg", e.message, true); }
+    btn.disabled = false;
+  };
+
+  $("grillReset").onclick = () => {
+    S.grill = null;
+    $("grillOut").innerHTML = "";
+    $("grillText").value = "";
+    $("grillUnit").value = "";
+    $("grillBtn").textContent = "Start the grill";
+    $("grillReset").hidden = true;
+  };
+
+  function renderGrill() {
+    const g = S.grill;
+    $("grillBtn").textContent = "Judge my answers & grill again";
+    $("grillReset").hidden = false;
+    $("grillOut").innerHTML = `
+      ${g.verdicts.length ? g.verdicts.map((v) => `
+        <div class="attack"><span class="pill ${v.verdict === "held" ? "held" : "cracked"}">${v.verdict}</span>
+          <b>${esc(v.question)}</b><p class="hint">${esc(v.why)}</p></div>`).join("") : ""}
+      ${g.probes.map((p, i) => `
+        <div class="attack">
+          <span class="pill">${esc(angleLabel(p.angle))}</span> <b>${esc(p.question)}</b>
+          <p class="hint">strong answer has: ${esc(p.listenFor)}</p>
+          <textarea data-gans="${i}" rows="2" placeholder="Your answer — out loud first, then the gist"></textarea>
+        </div>`).join("")}
+      ${g.weakSpots.length ? `
+        <div class="claims"><b>🎯 Weak spots so far — fix these before an interviewer finds them</b>
+          <ul>${g.weakSpots.map((w) => `<li>${esc(w)}</li>`).join("")}</ul>
+        </div>` : ""}`;
+  }
+
+  // --- Suggested learnings ---------------------------------------------------
+  $("learnBtn").onclick = async () => {
+    if (!S.cells.length) { msg("learnMsg", "Build the heatmap first.", true); return; }
+    $("learnBtn").disabled = true;
+    msg("learnMsg", "Reading the JD against your gaps…");
+    try {
+      const d = await api("learn", {
+        units: S.units, target: S.target, cells: S.cells, targetId: S.targetId,
+      });
+      S.learning = d.plan;
+      renderLearning();
+      msg("learnMsg", "");
+      x.track("learn_built", { items: d.plan.items.length });
+    } catch (e) { msg("learnMsg", e.message, true); }
+    $("learnBtn").disabled = false;
+  };
+
+  function renderLearning() {
+    const plan = S.learning;
+    const strength = Object.fromEntries(S.cells.map((c) => [c.competency, c.strength]));
+    $("learnCard").hidden = false;
+    $("learnBtn").textContent = "Rebuild the plan";
+    $("learnOut").innerHTML = `
+      ${plan.sequence ? `<div class="notice"><b>Where to start:</b> ${esc(plan.sequence)}</div>` : ""}
+      ${plan.items.map((it) => `
+        <div class="attack">
+          <b>${esc(label(it.competency))}</b>
+          <span class="hm-cell ${strength[it.competency] || "amber"}">${strength[it.competency] || "—"}</span>
+          <span class="w">${"●".repeat(it.priority)}${"○".repeat(5 - it.priority)}</span>
+          <p class="hint">${esc(it.why)}</p>
+          ${it.topics.length ? `<div class="chips">${it.topics.map((t) => `<span class="pill">${esc(t)}</span>`).join("")}</div>` : ""}
+          ${it.resources.length ? `<ul>${it.resources.map((r) => `
+            <li><a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">${esc(r.title)}</a>
+              <small class="hint">${esc(r.kind)}${r.time ? " · " + esc(r.time) : ""}</small></li>`).join("")}</ul>` : ""}
+          <p><b>Practice:</b> ${esc(it.practice)}</p>
+        </div>`).join("")}`;
+  }
+
+  // --- The loop map (DS page: which rounds this role family actually faces) --
+  async function loadRounds() {
+    if (!$("roundsCard")) return;
+    try {
+      const r = await fetch("/api/prep/rounds?track=" + TRACK);
+      const d = await r.json();
+      if (!d.ok || !d.rounds.length) { $("roundsCard").hidden = true; return; }
+      $("roundsOut").innerHTML = d.rounds.map((rd) => `
+        <details class="round">
+          <summary><b>${esc(rd.name)}</b></summary>
+          <p>${esc(rd.description)}</p>
+          <p><b>Sounds like:</b></p>
+          <ul>${rd.example_questions.map((q) => `<li>${esc(q)}</li>`).join("")}</ul>
+          <p class="hint"><b>Strong:</b> ${esc(rd.good)}</p>
+          <p class="hint"><b>Weak:</b> ${esc(rd.bad)}</p>
+          <p class="hint"><b>By level:</b> ${esc(rd.seniority)}</p>
+        </details>`).join("");
+    } catch { $("roundsCard").hidden = true; }
+  }
+  loadRounds();
+
   // --- Interviewer twin ------------------------------------------------------
   $("twinBtn").onclick = async () => {
     const name = $("twinName").value.trim();
@@ -741,6 +976,34 @@
         sp.milestones.forEach((m) => L.push(`- **${m.days}:** ${m.task} → ${m.output}`));
         L.push(`\n**Deliverable:** ${sp.deliverable} · **Proof metric:** ${sp.proofMetric}\n`);
       });
+    }
+    if (S.learning && S.learning.items.length) {
+      L.push("\n## Suggested learnings\n");
+      if (S.learning.sequence) L.push(`**Where to start:** ${S.learning.sequence}\n`);
+      S.learning.items.forEach((it) => {
+        L.push(`### ${label(it.competency)} (priority ${it.priority}/5)`);
+        L.push(`${it.why}\n`);
+        if (it.topics.length) L.push(`**Study:** ${it.topics.join(" · ")}\n`);
+        it.resources.forEach((r) =>
+          L.push(`- [${r.title}](${r.url}) — ${r.kind}${r.time ? `, ${r.time}` : ""}`));
+        L.push(`\n**Practice:** ${it.practice}\n`);
+      });
+    }
+    if (S.grillMap.length) {
+      L.push("\n## Grill sheet — your CV, pre-interrogated\n");
+      const byUnit = Object.fromEntries(S.grillMap.map((r) => [r.unitId, r.questions]));
+      S.units.forEach((u) => {
+        const qs = byUnit[u.id];
+        if (!qs) return;
+        L.push(`### ${u.title}`);
+        qs.forEach((q) => L.push(`- ${q.question}\n  - *hunts: ${q.trap}*`));
+        L.push("");
+      });
+    }
+    if (S.grill && S.grill.weakSpots.length) {
+      L.push("\n## Deep-dive grill — weak spots still open\n");
+      S.grill.weakSpots.forEach((w) => L.push(`- ${w}`));
+      L.push("");
     }
     if (S.twin) {
       L.push("\n## Interviewer twin (from public signals you pasted)\n");

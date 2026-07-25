@@ -29,10 +29,22 @@ from typing import Any, Literal, Optional, get_args
 from pydantic import BaseModel, Field, ValidationError
 
 from .delivery import FILLERS_CORE, FILLERS_SOFT
+from .prep_tracks import (
+    ALLOWED_RESOURCES,
+    DS_TAXONOMY,
+    PM_TAXONOMY,
+    all_competencies,
+    fallback_resources,
+    resource_pool,
+)
+from .prep_tracks import track as track_config
 
-# --- The competency taxonomy (closed list, spec section 4) --------------------
+# --- The competency taxonomies (closed lists; per-track tuples live in
+# --- prep_tracks.py, and this Literal is the union both tracks share so one
+# --- schema serves every structured-output call) ------------------------------
 
 Competency = Literal[
+    # pm (spec section 4)
     "product-sense",
     "zero-to-one-shipping",
     "execution-delivery",
@@ -45,11 +57,31 @@ Competency = Literal[
     "leadership-mentorship",
     "user-empathy-research",
     "metrics-experimentation",
+    # ds (grounded in the recruiter_kb research pass)
+    "sql-data-wrangling",
+    "statistics-probability",
+    "ml-fundamentals",
+    "experiment-design",
+    "product-metrics-sense",
+    "ml-system-design",
+    "genai-llm-fluency",
+    "coding-engineering-rigor",
+    "data-storytelling",
+    "stakeholder-influence",
+    "project-ownership",
+    "business-impact",
 ]
-TAXONOMY: tuple[str, ...] = get_args(Competency)
+TAXONOMY: tuple[str, ...] = PM_TAXONOMY  # the spec's original PM list, unchanged
+
+# The Literal above and the track tuples must never drift apart — fail the
+# import, not a 3am extraction.
+assert set(get_args(Competency)) == set(all_competencies())
 
 UnitType = Literal[
-    "launch", "growth", "fix", "strategy", "conflict", "leadership", "research"
+    # pm-flavored
+    "launch", "growth", "fix", "strategy", "conflict", "leadership", "research",
+    # ds-flavored
+    "analysis", "model", "pipeline", "experiment",
 ]
 
 
@@ -99,15 +131,23 @@ class RequiredCompetency(BaseModel):
 
 
 class TargetProfile(BaseModel):
-    """The role you're prepping for. interviewerProfiles is v2 — added when it exists."""
+    """The role you're prepping for. interviewerProfiles is v2 — added when it exists.
+
+    `track` names the role family (which taxonomy + page owns this target);
+    it is set by the SERVER from the requesting page, never by the model, and
+    defaults to "pm" so every pre-track saved row stays valid."""
 
     company: str
     roleTitle: str
-    seniority: Literal["APM", "PM", "Senior", "Group", "Director"]
+    seniority: Literal[
+        "APM", "PM", "Senior", "Group", "Director",  # pm ladder
+        "Junior", "Mid", "Staff", "Principal", "Lead",  # ds ladder (Senior shared)
+    ]
     archetype: str  # Growth / Platform / 0-1 / Data / AI ...
     requiredCompetencies: list[RequiredCompetency]
     unwrittenPain: str  # inferred: the real problem behind the hire
     companyValues: list[str]
+    track: Literal["pm", "ds"] = "pm"
 
 
 class CoverageCell(BaseModel):
@@ -231,6 +271,78 @@ class DeliveryCheck(BaseModel):
     rewrite: str  # strongest 2-sentence version, transcript facts only
 
 
+# --- v3 data model: project/CV grilling + the learning plan -------------------
+
+# The interrogation angles real deep-dive rounds cycle through (mirrors the
+# evaluation techniques researched in recruiter_kb: drill-down, trade-off,
+# failure, constraint twist, ownership audit, impact anchor — plus "rigor",
+# the methodology probe that DS loops add).
+GrillAngle = Literal[
+    "drill-down",
+    "trade-off",
+    "failure",
+    "constraint-twist",
+    "ownership",
+    "impact",
+    "rigor",
+]
+
+
+class GrillProbe(BaseModel):
+    question: str
+    angle: GrillAngle
+    listenFor: str  # what a strong answer contains — grounded in the project
+
+
+class GrillRound(BaseModel):
+    """One round of the project grill: verdicts on prior answers, next probes,
+    and the running list of weak spots exposed so far."""
+
+    verdicts: list[AttackVerdict]
+    probes: list[GrillProbe]
+    weakSpots: list[str]
+
+
+class GrillQuestion(BaseModel):
+    question: str
+    trap: str  # the weakness this question hunts
+
+
+class GrillMapRow(BaseModel):
+    """The exhaustive-CV-prep atom: one unit, pre-interrogated."""
+
+    unitId: str
+    questions: list[GrillQuestion]
+
+
+class GrillMap(BaseModel):
+    rows: list[GrillMapRow]
+
+
+class LearningResource(BaseModel):
+    """One curated link. URLs are allowlisted against prep_tracks — a URL the
+    curation pass never verified cannot survive the sanitizer."""
+
+    title: str
+    url: str
+    kind: str = "article"
+    time: str = ""
+
+
+class LearningItem(BaseModel):
+    competency: Competency
+    priority: Literal[1, 2, 3, 4, 5]
+    why: str  # tied to the JD's own words and the heatmap strength
+    topics: list[str]  # the concrete subtopics to actually study
+    resources: list[LearningResource]
+    practice: str  # the do-something exercise that proves it stuck
+
+
+class LearningPlan(BaseModel):
+    items: list[LearningItem]
+    sequence: str  # one short paragraph: what to do first and why
+
+
 # --- Prompts: loaded from /prompts/*.md, never inlined ------------------------
 
 PROMPTS_DIR = Path(__file__).resolve().parent.parent / "prompts"
@@ -270,11 +382,17 @@ GENERIC_GAP = (
 
 
 def sanitize_units(
-    raw: list[dict], source: Optional[str] = None
+    raw: list[dict],
+    source: Optional[str] = None,
+    taxonomy: Optional[tuple[str, ...]] = None,
 ) -> list[AchievementUnit]:
     """Validate + audit extracted units.
 
-    - competencies outside the closed taxonomy are dropped (not guessed);
+    - competencies outside the closed taxonomy are dropped (not guessed).
+      `taxonomy` narrows the check to one track's list (extraction time, so a
+      DS extraction can't tag PM competencies); the default is the union of
+      all tracks, which is what round-tripped units need — the genome is
+      shared across tracks and a PM tag must survive a DS-page save;
     - ids are made unique and non-empty so the heatmap/story can reference them;
     - with `source` given (extraction time), a metric whose numbers don't appear
       in that source text is NULLED — the spec's "never invent" rule enforced in
@@ -282,13 +400,14 @@ def sanitize_units(
       round-tripped through the browser), the metric audit is skipped: it
       already ran at extraction and the original CV isn't in the request.
     """
+    allowed = set(taxonomy if taxonomy is not None else all_competencies())
     src_numbers = _numbers(source) if source is not None else None
     out: list[AchievementUnit] = []
     seen: set[str] = set()
     for i, item in enumerate(raw):
         item = dict(item)
         item["competencies"] = [
-            c for c in (item.get("competencies") or []) if c in TAXONOMY
+            c for c in (item.get("competencies") or []) if c in allowed
         ]
         unit = AchievementUnit.model_validate(item)
         base = unit.id.strip() or f"u{i + 1}"
@@ -308,10 +427,21 @@ def sanitize_units(
     return out
 
 
-def sanitize_target(target: TargetProfile) -> TargetProfile:
-    """Dedupe required competencies (keep the highest weight per competency)."""
+def sanitize_target(
+    target: TargetProfile, track_key: Optional[str] = None
+) -> TargetProfile:
+    """Dedupe required competencies (keep the highest weight per competency).
+    With `track_key` given (extraction time), the track is stamped on the
+    target server-side and competencies from the OTHER track's taxonomy are
+    dropped — the schema Literal is the union, so the model could otherwise
+    hand a DS heatmap a PM row."""
+    if track_key is not None:
+        target.track = "ds" if track_key == "ds" else "pm"
+    allowed = set(track_config(target.track)["taxonomy"])
     best: dict[str, RequiredCompetency] = {}
     for rc in target.requiredCompetencies:
+        if rc.competency not in allowed:
+            continue
         prev = best.get(rc.competency)
         if prev is None or rc.weight > prev.weight:
             best[rc.competency] = rc
@@ -404,14 +534,18 @@ def audit_story(story: Story, units: list[AchievementUnit]) -> Story:
 # --- Model calls (one careful structured-output call each) --------------------
 
 
-def _taxonomy_str() -> str:
-    return ", ".join(TAXONOMY)
+def _taxonomy_str(taxonomy: Optional[tuple[str, ...]] = None) -> str:
+    return ", ".join(taxonomy if taxonomy is not None else TAXONOMY)
 
 
-def extract_units(client: Any, cv_text: str, model: str) -> list[AchievementUnit]:
+def extract_units(
+    client: Any, cv_text: str, model: str, track_key: str = "pm"
+) -> list[AchievementUnit]:
+    tr = track_config(track_key)
     prompt = fill_prompt(
         load_prompt("extract-units.md"),
-        TAXONOMY=_taxonomy_str(),
+        ROLE_CONTEXT=tr["extract_context"],
+        TAXONOMY=_taxonomy_str(tr["taxonomy"]),
         CV_OR_BRAINDUMP=cv_text,
     )
     resp = client.messages.parse(
@@ -421,13 +555,19 @@ def extract_units(client: Any, cv_text: str, model: str) -> list[AchievementUnit
         output_format=ExtractedUnits,
     )
     raw = [u.model_dump() for u in resp.parsed_output.units]
-    return sanitize_units(raw, cv_text)
+    return sanitize_units(raw, cv_text, taxonomy=tr["taxonomy"])
 
 
-def extract_target(client: Any, jd_text: str, model: str) -> TargetProfile:
+def extract_target(
+    client: Any, jd_text: str, model: str, track_key: str = "pm"
+) -> TargetProfile:
+    tr = track_config(track_key)
     prompt = fill_prompt(
         load_prompt("extract-target.md"),
-        TAXONOMY=_taxonomy_str(),
+        ROLE_CONTEXT=tr["target_context"],
+        TAXONOMY=_taxonomy_str(tr["taxonomy"]),
+        SENIORITY_LADDER=" | ".join(tr["seniority"]),
+        ARCHETYPES=tr["archetypes"],
         JOB_DESCRIPTION=jd_text,
     )
     resp = client.messages.parse(
@@ -436,7 +576,7 @@ def extract_target(client: Any, jd_text: str, model: str) -> TargetProfile:
         messages=[{"role": "user", "content": prompt}],
         output_format=TargetProfile,
     )
-    return sanitize_target(resp.parsed_output)
+    return sanitize_target(resp.parsed_output, track_key=tr["key"])
 
 
 def score_coverage(
@@ -557,7 +697,7 @@ def interviewer_twin(
 ) -> InterviewerTwin:
     prompt = fill_prompt(
         load_prompt("interviewer-twin.md"),
-        TAXONOMY=_taxonomy_str(),
+        TAXONOMY=_taxonomy_str(track_config(target.track)["taxonomy"]),
         NAME_AND_ROLE=f"{name} — {role}",
         SIGNALS=signals,
         TARGET_JSON=json.dumps(target.model_dump()),
@@ -638,9 +778,10 @@ def debrief_insights(
     """Mine a real interview's debrief. suggestedUnits pass through the same
     truthfulness audit as extraction — grounded in the debrief text itself, so
     a metric the user didn't write gets nulled before they even see it."""
+    taxonomy = track_config(target.track)["taxonomy"]
     prompt = fill_prompt(
         load_prompt("debrief.md"),
-        TAXONOMY=_taxonomy_str(),
+        TAXONOMY=_taxonomy_str(taxonomy),
         TARGET_JSON=json.dumps(target.model_dump()),
         NOTES=notes,
     )
@@ -652,10 +793,203 @@ def debrief_insights(
     )
     insights = resp.parsed_output
     insights.suggestedUnits = sanitize_units(
-        [u.model_dump() for u in insights.suggestedUnits], source=notes
+        [u.model_dump() for u in insights.suggestedUnits],
+        source=notes,
+        taxonomy=taxonomy,
     )
     insights.focusNext = insights.focusNext[:3]
     return insights
+
+
+# --- v3: project & CV grilling ------------------------------------------------
+
+
+def sanitize_grill_map(
+    raw_rows: list[dict], units: list[AchievementUnit]
+) -> list[GrillMapRow]:
+    """Rows must point at real units (one row per unit, first wins), carry
+    1-3 questions each, and a malformed row never sinks the map. Units the
+    model skipped stay visibly absent — the page renders every unit, so a
+    missing row reads as "not grilled yet", never as "nothing to ask"."""
+    unit_ids = {u.id for u in units}
+    seen: set[str] = set()
+    rows: list[GrillMapRow] = []
+    for item in raw_rows:
+        try:
+            row = GrillMapRow.model_validate(item)
+        except ValidationError:
+            continue
+        if row.unitId not in unit_ids or row.unitId in seen:
+            continue
+        row.questions = row.questions[:3]
+        if not row.questions:
+            continue
+        seen.add(row.unitId)
+        rows.append(row)
+    return rows
+
+
+def sanitize_grill_round(round_: GrillRound, n_exchanges: int) -> GrillRound:
+    """Bound the round: verdicts only for answers that exist, 1-4 probes,
+    at most 6 running weak spots."""
+    round_.verdicts = round_.verdicts[:n_exchanges]
+    round_.probes = round_.probes[:4]
+    if not round_.probes:
+        raise ValueError("the grill returned no probes")
+    round_.weakSpots = [w.strip() for w in round_.weakSpots if w.strip()][:6]
+    return round_
+
+
+def grill_map(
+    client: Any, units: list[AchievementUnit], target: TargetProfile, model: str
+) -> list[GrillMapRow]:
+    """The exhaustive CV prep: every unit in the genome pre-interrogated with
+    the nastiest fair questions this target's interviewers would ask."""
+    tr = track_config(target.track)
+    prompt = fill_prompt(
+        load_prompt("grill-map.md"),
+        ROLE_CONTEXT=tr["grill_context"],
+        TARGET_JSON=json.dumps(target.model_dump()),
+        UNITS_JSON=json.dumps([u.model_dump() for u in units]),
+    )
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=8000,
+        messages=[{"role": "user", "content": prompt}],
+        output_format=GrillMap,
+    )
+    return sanitize_grill_map([r.model_dump() for r in resp.parsed_output.rows], units)
+
+
+def project_grill(
+    client: Any,
+    project_text: str,
+    units: list[AchievementUnit],
+    target: TargetProfile,
+    exchanges: list[dict],
+    model: str,
+) -> GrillRound:
+    """One round of the project deep-dive. Same loop shape as the Devil's
+    Advocate — judge prior answers, then probe again — but aimed at ONE
+    project/CV claim and cycling through the interrogation angles a real
+    deep-dive round uses. The loop has no terminal verdict: the exposed
+    weak spots ARE the deliverable."""
+    prompt = fill_prompt(
+        load_prompt("project-grill.md"),
+        ROLE_CONTEXT=track_config(target.track)["grill_context"],
+        TARGET_JSON=json.dumps(target.model_dump()),
+        PROJECT=project_text,
+        UNITS_JSON=json.dumps([u.model_dump() for u in units]),
+        EXCHANGES_JSON=json.dumps(exchanges),
+    )
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=3000,
+        thinking={"type": "adaptive"},  # judging answers fairly needs care
+        messages=[{"role": "user", "content": prompt}],
+        output_format=GrillRound,
+    )
+    return sanitize_grill_round(resp.parsed_output, len(exchanges))
+
+
+# --- v3: the learning plan (suggested learnings from JD + heatmap) ------------
+
+
+def sanitize_learning_plan(
+    plan: LearningPlan,
+    target: TargetProfile,
+    cells: list[CoverageCell],
+    track_key: str,
+) -> LearningPlan:
+    """The truthfulness pass for suggested learnings:
+
+    - resources survive ONLY if their URL is in the curated allowlist, and a
+      surviving link's title/kind/time are replaced with the curated entry's
+      own fields — the model picks links, it never describes them;
+    - an item whose links all died falls back to the track's deterministic
+      picks for that competency (possibly empty — honest beats padded);
+    - off-track competencies are dropped, first mention wins;
+    - every amber/red heatmap competency the model skipped is back-filled —
+      a silent miss would read as "nothing to learn" on the weakest spot;
+    - items come back ordered red -> amber -> green, heaviest JD weight first.
+    """
+    allowed_comps = set(track_config(track_key)["taxonomy"])
+    weight = {rc.competency: rc.weight for rc in target.requiredCompetencies}
+    strength = {c.competency: c.strength for c in cells}
+    items: dict[str, LearningItem] = {}
+    for item in plan.items:
+        if item.competency not in allowed_comps or item.competency in items:
+            continue
+        fixed: list[LearningResource] = []
+        for res in item.resources:
+            canon = ALLOWED_RESOURCES.get((res.url or "").strip())
+            if canon is None:
+                continue
+            fixed.append(
+                LearningResource(
+                    title=canon["title"], url=canon["url"],
+                    kind=canon["kind"], time=canon["time"],
+                )
+            )
+        item.resources = fixed[:3] or [
+            LearningResource(**r) for r in fallback_resources(track_key, item.competency)
+        ]
+        item.topics = [t.strip() for t in item.topics if t.strip()][:6]
+        items[item.competency] = item
+    for cell in cells:
+        if cell.strength == "green" or cell.competency in items:
+            continue
+        items[cell.competency] = LearningItem(
+            competency=cell.competency,
+            priority=weight.get(cell.competency, 3),
+            why=cell.gapAction or GENERIC_GAP.format(competency=cell.competency),
+            topics=[],
+            resources=[
+                LearningResource(**r)
+                for r in fallback_resources(track_key, cell.competency)
+            ],
+            practice=cell.gapAction
+            or "Run a small real project that exercises this, and capture one concrete metric.",
+        )
+    rank = {"red": 0, "amber": 1, "green": 2}
+    plan.items = sorted(
+        items.values(),
+        key=lambda i: (
+            rank.get(strength.get(i.competency, "amber"), 1),
+            -weight.get(i.competency, 0),
+            -i.priority,
+        ),
+    )[:12]
+    if not plan.items:
+        raise ValueError("the learning plan came back empty")
+    return plan
+
+
+def learning_plan(
+    client: Any,
+    units: list[AchievementUnit],
+    target: TargetProfile,
+    cells: list[CoverageCell],
+    model: str,
+) -> LearningPlan:
+    tr = track_config(target.track)
+    units_summary = [{"id": u.id, "title": u.title, "skills": u.skills} for u in units]
+    prompt = fill_prompt(
+        load_prompt("learning-plan.md"),
+        ROLE_CONTEXT=tr["target_context"],
+        TARGET_JSON=json.dumps(target.model_dump()),
+        CELLS_JSON=json.dumps([c.model_dump() for c in cells]),
+        UNITS_SUMMARY_JSON=json.dumps(units_summary),
+        RESOURCES_JSON=json.dumps(resource_pool(tr["key"])),
+    )
+    resp = client.messages.parse(
+        model=model,
+        max_tokens=6000,
+        thinking={"type": "adaptive"},  # sequencing a study plan deserves a beat
+        messages=[{"role": "user", "content": prompt}],
+        output_format=LearningPlan,
+    )
+    return sanitize_learning_plan(resp.parsed_output, target, cells, tr["key"])
 
 
 # --- v1: delivery self-check (rehearse one answer aloud) ----------------------

@@ -6,9 +6,9 @@ file holds, per verified user (owner = login email):
   * units     — the genome. Editable: the extractor is a first draft, not
                 gospel. Re-extraction MERGES instead of duplicating (a unit
                 with the same title+rawEvidence updates in place).
-  * targets   — one row per application (TargetProfile + its cached heatmap),
-                which is what makes re-tuning instant: same genome, new
-                target, new heatmap.
+  * targets   — one row per application (TargetProfile + its cached heatmap,
+                learning plan, and grill map), which is what makes re-tuning
+                instant: same genome, new target, new heatmap.
   * stories   — drafted stories, with the devil's-advocate `solid` flag the
                 pressure-test loop flips when the user marks one bulletproof.
   * debriefs  — post-interview write-backs and the insights mined from them.
@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS prep_targets (
     id         TEXT NOT NULL,
     json       TEXT NOT NULL,
     heatmap    TEXT NOT NULL DEFAULT '[]',
+    learning   TEXT NOT NULL DEFAULT '{}',
+    grill      TEXT NOT NULL DEFAULT '[]',
     updated_at REAL NOT NULL,
     PRIMARY KEY (owner, id)
 );
@@ -92,6 +94,15 @@ class PrepBank:
     def __init__(self, path: str):
         self._db = sqlite3.connect(path)
         self._db.executescript(_SCHEMA)
+        # v3 columns on databases created before them: CREATE IF NOT EXISTS
+        # never alters an existing table, so add-column is the migration.
+        for col, default in (("learning", "'{}'"), ("grill", "'[]'")):
+            try:
+                self._db.execute(
+                    f"ALTER TABLE prep_targets ADD COLUMN {col} TEXT NOT NULL DEFAULT {default}"
+                )
+            except sqlite3.OperationalError:
+                pass  # already there
 
     def close(self) -> None:
         self._db.close()
@@ -105,11 +116,22 @@ class PrepBank:
         ).fetchall()
         return [json.loads(r[0]) for r in rows]
 
-    def save_units(self, owner: str, units: list[dict]) -> list[dict]:
+    def save_units(
+        self, owner: str, units: list[dict], merge_competencies: bool = False
+    ) -> list[dict]:
         """Merge units into the bank (dedupe by title+rawEvidence; a match
         updates in place and keeps the bank's id so stories that reference it
-        stay valid). Returns the full genome after the merge."""
-        existing = {_dedupe_key(u): u["id"] for u in self.units(owner)}
+        stay valid). Returns the full genome after the merge.
+
+        `merge_competencies` is the cross-track contract: the genome is ONE
+        bank shared by every track, so a re-extraction (which only tags its
+        own track's competencies) must UNION tags with what the unit already
+        carries — otherwise extracting on /prep-ds would strip the PM tags.
+        The unit editor passes False: a user un-checking a box is the editor
+        of record, and their choice replaces."""
+        stored = self.units(owner)
+        existing = {_dedupe_key(u): u["id"] for u in stored}
+        old_comps = {u["id"]: u.get("competencies") or [] for u in stored}
         now = time.time()
         for unit in units:
             unit = dict(unit)
@@ -132,6 +154,12 @@ class PrepBank:
                 existing[_dedupe_key(unit)] = unit["id"]
             else:
                 unit["id"] = kept_id
+                if merge_competencies:
+                    seen_comps = list(unit.get("competencies") or [])
+                    seen_comps += [
+                        c for c in old_comps.get(kept_id, []) if c not in seen_comps
+                    ]
+                    unit["competencies"] = seen_comps
             self._db.execute(
                 "INSERT INTO prep_units (owner, id, json, updated_at) VALUES (?,?,?,?) "
                 "ON CONFLICT (owner, id) DO UPDATE SET json=excluded.json, "
@@ -181,6 +209,22 @@ class PrepBank:
         )
         self._db.commit()
 
+    def save_learning(self, owner: str, target_id: str, plan: dict) -> None:
+        """Cache the learning plan on its application — same contract as the
+        heatmap: regenerate on demand, reload instantly."""
+        self._db.execute(
+            "UPDATE prep_targets SET learning=?, updated_at=? WHERE owner=? AND id=?",
+            (json.dumps(plan), time.time(), owner, target_id),
+        )
+        self._db.commit()
+
+    def save_grill_map(self, owner: str, target_id: str, rows: list[dict]) -> None:
+        self._db.execute(
+            "UPDATE prep_targets SET grill=?, updated_at=? WHERE owner=? AND id=?",
+            (json.dumps(rows), time.time(), owner, target_id),
+        )
+        self._db.commit()
+
     def targets(self, owner: str) -> list[dict]:
         """Campaign-dashboard summaries, most recent first."""
         rows = self._db.execute(
@@ -202,6 +246,7 @@ class PrepBank:
                     "roleTitle": target.get("roleTitle", ""),
                     "seniority": target.get("seniority", ""),
                     "archetype": target.get("archetype", ""),
+                    "track": target.get("track", "pm"),  # pre-track rows are pm
                     "green": sum(1 for c in cells if c.get("strength") == "green"),
                     "amber": sum(1 for c in cells if c.get("strength") == "amber"),
                     "red": sum(1 for c in cells if c.get("strength") == "red"),
@@ -213,7 +258,8 @@ class PrepBank:
 
     def target(self, owner: str, target_id: str) -> dict | None:
         row = self._db.execute(
-            "SELECT json, heatmap FROM prep_targets WHERE owner=? AND id=?",
+            "SELECT json, heatmap, learning, grill FROM prep_targets "
+            "WHERE owner=? AND id=?",
             (owner, target_id),
         ).fetchone()
         if row is None:
@@ -222,6 +268,8 @@ class PrepBank:
             "id": target_id,
             "target": json.loads(row[0]),
             "cells": json.loads(row[1]),
+            "learning": json.loads(row[2] or "{}"),
+            "grill": json.loads(row[3] or "[]"),
             "stories": self.stories(owner, target_id),
         }
 

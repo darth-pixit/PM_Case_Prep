@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An AI-first PM interview-prep product: **five separate experiments running on one
+An AI-first PM interview-prep product: **six separate experiments running on one
 FastAPI deploy, one domain, one SQLite-backed login, one PostHog project** — each
 experiment has its own page, UX, and analytics namespace so results never bleed
 into each other.
@@ -15,7 +15,8 @@ into each other.
 | `/arena` | **Case Arena** — 5 PM tracks × 5 cases, pick-your-case, same interview room | `case_loader.py`, `cases/arena/*.json`, `static/arena.js` |
 | `/recruiter` | **Recruiter Copilot** — chat grounded in a hand-researched KB | `recruiter_kb.py`, `static/recruiter.js` |
 | `/referrals` | **Referral Paths** — client-side referral mapping + multiplayer "pods" | `static/referrals.js` (solo, 100% browser), `web/pods.py` |
-| `/prep` | **Prep Engine** — CV+JD → story bank → coverage heatmap → pressure-tested STAR stories | `prep_engine.py`, `prep_bank.py`, `static/prep.js`, `prompts/*.md` |
+| `/prep` | **Prep Engine** — CV+JD → story bank → coverage heatmap → pressure-tested STAR stories → grill room → learning plan | `prep_engine.py`, `prep_bank.py`, `static/prep.js`, `prompts/*.md` |
+| `/prep-ds` | **Prep Engine · Data Science** — same engine on the DS track (own taxonomy, seniority ladder, loop map) | `prep_tracks.py`, `static/prep-ds.html` (shares `prep.js`) |
 
 `main` is the **Render deploy branch** — merging to `main` ships to production
 (`render.yaml` blueprint: `uvicorn pmcaseprep.web.app:app`, persistent disk at
@@ -100,7 +101,7 @@ matters:
   `TargetProfile`, `CoverageCell`, `Story`, …) — it mirrors the spec's
   TypeScript types byte-for-byte. Do not snake_case it. (The tutor's models in
   `models.py` are snake_case; the two coexist intentionally.)
-- **All 11 LLM prompts live in `/prompts/*.md`**, loaded from disk via
+- **All 14 LLM prompts live in `/prompts/*.md`**, loaded from disk via
   `load_prompt()`/`fill_prompt()` (raises on a missing `<PLACEHOLDER>`). Never
   inline a prompt in code. Tests pin the load-bearing guardrail phrases inside
   the prompt files — edit wording freely, keep those phrases.
@@ -109,15 +110,29 @@ matters:
   digits aren't in the source text, `sanitize_heatmap` downgrades "green" cells
   citing no real unit and back-fills skipped required competencies as red,
   `audit_story` flags story numbers found in no referenced unit into
-  `unverifiedClaims`. Extending the engine means extending the guards; the
-  model must never be able to fabricate *silently*.
+  `unverifiedClaims`, and `sanitize_learning_plan` drops any resource whose
+  URL is not in `prep_tracks.ALLOWED_RESOURCES` (curated, hand-verified) and
+  replaces surviving links' title/kind/time with the curated entry's own
+  fields. Extending the engine means extending the guards; the model must
+  never be able to fabricate *silently*.
 - **Model calls are stateless; results compound server-side** into
   `prep_bank.py` (owner = login email): the genome **merges** on re-extraction
   (dedupe key = normalized title + rawEvidence; bank ids survive edits so
   stories keep valid references), each JD is a saved application with its
-  cached heatmap (instant re-tune), stories carry a `solid` flag that only the
-  *user* flips (Devil's Advocate loop), and debrief-mined units enter the bank
-  only on explicit per-unit confirmation.
+  cached heatmap, learning plan, and grill map (instant re-tune), stories
+  carry a `solid` flag that only the *user* flips (Devil's Advocate loop),
+  and debrief-mined units enter the bank only on explicit per-unit
+  confirmation.
+- **Tracks** (`prep_tracks.py`): `/prep` = PM, `/prep-ds` = Data Science —
+  per-track taxonomy, seniority ladder, prompt framing, and curated resource
+  pools; `Competency` is the Literal UNION of both taxonomies and an
+  import-time assert keeps it in sync with the track tuples. The genome is
+  shared across tracks on purpose: extraction passes
+  `merge_competencies=True` so a DS re-extraction UNIONS tags instead of
+  stripping the PM ones (the unit editor passes False — the user's checkbox
+  choice replaces). Targets are stamped with their track server-side
+  (`sanitize_target`), pages list only their own track's applications, and
+  `prep.js` is one track-aware script driven by `window.PREP_TRACK`.
 
 ### Privacy contracts (enforced by code, mirrored in page copy)
 

@@ -312,11 +312,24 @@ def test_experiment_pages_served(tmp_path, monkeypatch):
         ("/arena", "Case Arena"),
         ("/recruiter", "Recruiter Copilot"),
         ("/referrals", "Referral Paths"),
+        ("/prep", "Prep Engine"),
+        ("/prep-ds", "Data Science"),
     ):
         r = client.get(path)
         assert r.status_code == 200 and marker in r.text, path
     guide = client.get("/api/recruiter/guide").json()
     assert "archetypes" in guide
+
+
+def test_prep_rounds_endpoint_is_open_and_track_scoped(tmp_path, monkeypatch):
+    client, _ = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    ds = client.get("/api/prep/rounds?track=ds").json()
+    assert ds["ok"] and len(ds["rounds"]) >= 5
+    assert all(r["name"] and r["example_questions"] for r in ds["rounds"])
+    pm = client.get("/api/prep/rounds?track=pm").json()
+    assert pm["ok"] and pm["rounds"] == []  # the PM loop map lives in the arena
 
 
 if __name__ == "__main__":
