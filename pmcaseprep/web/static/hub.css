@@ -233,6 +233,17 @@ table.hm td.w { color: var(--accent); letter-spacing: 0.12em; white-space: nowra
 .attack { border-left: 2px solid var(--border); padding: 0.4rem 0 0.4rem 0.8rem; margin: 0.5rem 0; }
 .attack textarea { margin-top: 0.35rem; }
 
+/* v3: grill room, learning plan, loop map */
+.attack .w { color: var(--accent); letter-spacing: 0.12em; white-space: nowrap; font-size: 0.8rem; margin-left: 0.4rem; }
+.attack ul { margin: 0.35rem 0 0.2rem; padding-left: 1.2rem; }
+.attack a { color: var(--accent); }
+details.round { border-top: 1px solid var(--border); padding: 0.45rem 0.2rem; }
+details.round:first-child { border-top: 0; }
+details.round > summary { cursor: pointer; }
+details.round > summary::marker { color: var(--muted); }
+details.round p, details.round ul { margin: 0.4rem 0 0.2rem; font-size: 0.88rem; }
+details.round ul { padding-left: 1.2rem; }
+
 @media (max-width: 560px) {
   .auth-email { flex-direction: column; }
   .msg { max-width: 100%; }

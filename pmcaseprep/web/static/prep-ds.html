@@ -3,21 +3,30 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Prep Engine — true stories, tuned to the role</title>
+  <title>Prep Engine · Data Science — true stories, real skills, tuned to the DS loop</title>
   <link rel="stylesheet" href="/static/hub.css" />
 </head>
 <body>
   <div class="wrap">
     <header class="hub">
-      <h1>🧬 Prep Engine</h1>
-      <span class="sub">build true stories that fit the role — never fake it</span>
+      <h1>🧪 Prep Engine · Data Science</h1>
+      <span class="sub">true stories + real skills, tuned to the DS loop — never fake it</span>
       <span class="whoami" id="whoami"></span>
     </header>
-    <p class="lede">Paste your CV (or a brain-dump) and a job description. The engine
-    atomizes your real work into a persistent <b>story bank</b>, decodes what each role
-    truly tests, shows the coverage heatmap, drafts STAR stories, and then attacks them
-    until they're bulletproof. Where you have a gap, it gives you a real plan to close
-    it — not spin.</p>
+    <p class="lede">Paste your CV (or a brain-dump) and a data-science job description. The
+    engine atomizes your real work — analyses, models, pipelines, experiments — into a
+    persistent <b>story bank</b>, decodes what the role truly tests (SQL, stats, ML,
+    experimentation, GenAI…), shows your coverage heatmap, drafts STAR stories, grills
+    your projects the way a real deep-dive round will, and turns every gap into a
+    concrete <b>learning plan</b> with curated resources — not spin.</p>
+
+    <div class="card" id="roundsCard">
+      <h2>🗺 The loop you're walking into</h2>
+      <p class="hint">The rounds data-science interviews actually run in 2024-26 — researched
+      from real loops, with example questions and what strong vs weak answers sound like.
+      Free to browse; the engine below preps you for them.</p>
+      <div id="roundsOut"><span class="hint">Loading the loop map…</span></div>
+    </div>
 
     <div class="card" id="appsCard" hidden>
       <h2>Your applications</h2>
@@ -35,7 +44,7 @@
             <p class="hint">Bullets, prose, half-sentences — anything true. Re-pasting
             merges into your bank; it never duplicates. Numbers you actually have; the
             engine will never add ones you don't.</p>
-            <textarea id="cvText" rows="10" placeholder="e.g. Led checkout revamp at Acme (team of 6). Cut drop-off 18%. Also: the failed loyalty launch I killed after 2 sprints…"></textarea>
+            <textarea id="cvText" rows="10" placeholder="e.g. Built churn model at Acme (XGBoost, 2M users) — recall up 22% over the rules baseline. Ran the checkout A/B program. Also: the segmentation project that died in review…"></textarea>
           </div>
           <div>
             <h3>Job description</h3>
@@ -67,7 +76,7 @@
     <div class="card" id="heatmapCard" hidden>
       <h2>Coverage heatmap</h2>
       <p class="hint">Green: direct evidence. Amber: adjacent — a story can bridge it.
-      Red: no evidence yet — the fix is a real 2-week plan, not framing.</p>
+      Red: no evidence yet — the fix is a real plan (see the learnings card), not framing.</p>
       <div class="mini-form" style="margin:0.5rem 0 0.7rem">
         <label class="hint" for="spine" style="white-space:nowrap">Story spine</label>
         <input id="spine" type="text" style="flex:1;max-width:none" placeholder="the one-line thread every story reinforces" />
@@ -91,8 +100,8 @@
       <h2>🔥 The grill room</h2>
       <p class="hint">Nothing on your CV goes into the interview un-interrogated. The
       <b>grill sheet</b> pre-asks the nastiest fair question at every unit; the
-      <b>deep-dive grill</b> takes ONE project and probes it the way a real
-      deep-dive round will — trade-offs, failures, ownership, impact.</p>
+      <b>deep-dive grill</b> takes ONE project and probes it the way a real DS
+      deep-dive round will — methods, leakage, baselines, ownership, impact.</p>
       <div class="prep-actions">
         <button class="btn" id="grillMapBtn">Grill my whole CV</button>
         <span class="hint" id="grillMapMsg"></span>
@@ -133,7 +142,7 @@
       titles, posts. Nothing is fetched, nothing is stored: the twin lives in this tab.</p>
       <div class="mini-form">
         <input id="twinName" type="text" placeholder="Interviewer name" style="max-width:200px" />
-        <input id="twinRole" type="text" placeholder="Their role (e.g. GPM, Payments)" style="max-width:240px" />
+        <input id="twinRole" type="text" placeholder="Their role (e.g. Staff DS, Experimentation)" style="max-width:240px" />
       </div>
       <textarea id="twinSignals" rows="5" style="margin-top:0.5rem" placeholder="Paste their public bio, recent post topics, talk titles…"></textarea>
       <div class="prep-actions">
@@ -165,7 +174,7 @@
       <p class="hint">Just had the real thing? Write what was asked, what landed, what
       blindsided you. Lessons sharpen the next loop; achievements you mention become
       DRAFT units you can confirm into your bank.</p>
-      <textarea id="debriefText" rows="6" placeholder="They asked about a time I disagreed with an exec — my metrics story landed, but I froze on the failure question. I also mentioned the pricing migration I ran, which isn't in my bank…"></textarea>
+      <textarea id="debriefText" rows="6" placeholder="They drilled into my churn model — the leakage question caught me flat. My A/B story landed. I also mentioned the fraud-rules migration I ran, which isn't in my bank…"></textarea>
       <div class="prep-actions">
         <button class="btn" id="debriefBtn">Mine the debrief</button>
         <span class="hint" id="debriefMsg"></span>
@@ -173,6 +182,7 @@
       <div id="debriefOut"></div>
     </div>
   </div>
+  <script>window.PREP_TRACK = "ds";</script>
   <script src="/static/shared.js?v=1"></script>
   <script src="/static/prep.js?v=3"></script>
 </body>

@@ -257,8 +257,11 @@ def test_story_unit_refs_are_pruned_to_real_units():
 # --- Prompt files (must exist, carry the hard rules, and fill cleanly) --------
 
 PROMPT_PLACEHOLDERS = {
-    "extract-units.md": {"TAXONOMY": "t", "CV_OR_BRAINDUMP": "cv"},
-    "extract-target.md": {"TAXONOMY": "t", "JOB_DESCRIPTION": "jd"},
+    "extract-units.md": {"ROLE_CONTEXT": "r", "TAXONOMY": "t", "CV_OR_BRAINDUMP": "cv"},
+    "extract-target.md": {
+        "ROLE_CONTEXT": "r", "TAXONOMY": "t", "SENIORITY_LADDER": "s",
+        "ARCHETYPES": "a", "JOB_DESCRIPTION": "jd",
+    },
     "score-coverage.md": {"UNITS_JSON": "[]", "REQUIRED_COMPETENCIES_JSON": "[]"},
     "craft-story.md": {"SPINE_TAG": "s", "COMPETENCY": "c", "REFERENCED_UNITS_JSON": "[]"},
 }

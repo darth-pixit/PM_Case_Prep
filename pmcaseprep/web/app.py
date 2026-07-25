@@ -68,13 +68,17 @@ from ..prep_engine import (
     extract_target,
     extract_units,
     gap_sprint,
+    grill_map,
     interviewer_twin,
+    learning_plan,
     mock_reply,
     mock_scorecard,
+    project_grill,
     sanitize_units,
     score_coverage,
     transcript_stats,
 )
+from ..prep_tracks import rounds_for
 from ..recruiter_kb import recruiter_guide, recruiter_system_prompt
 from ..resources import resources_for
 from ..skill_graph import SkillGraph
@@ -580,6 +584,13 @@ async def prep_page(request: Request) -> FileResponse:
     return _page("prep.html", request)
 
 
+@app.get("/prep-ds")
+async def prep_ds_page(request: Request) -> FileResponse:
+    """The Prep Engine's Data Science track — same engine, DS taxonomy,
+    DS-tuned prompts, its own analytics namespace."""
+    return _page("prep-ds.html", request)
+
+
 _CASE_ID_RE = re.compile(r"^[a-z0-9-]{1,80}$")
 
 
@@ -705,13 +716,17 @@ async def api_recruiter_guide() -> JSONResponse:
     return JSONResponse(recruiter_guide())
 
 
-# --- Prep Engine (behavioral storytelling + CV tuning, the /prep experiment) ----
+# --- Prep Engine (behavioral storytelling + CV tuning: /prep and /prep-ds) -----
 # v1 architecture: model calls remain stateless (the browser sends what each
 # call needs), but results now COMPOUND into the story bank (prep_bank.py,
 # keyed by verified email) — the genome merges on every extraction, each JD
 # becomes a saved application, stories persist with their pressure-test
 # status, and debriefs write back. All model logic lives in prep_engine.py;
 # these handlers gate, bound, translate, and persist.
+# v3: the engine is track-aware (prep_tracks.py). Each page sends its track
+# ("pm" | "ds") on extraction; the track is stamped on the target server-side
+# and every downstream call reads it from there. One genome serves both
+# tracks — that's why extraction merges competencies instead of replacing.
 
 def _prep_gate(request: Request) -> tuple[str, None] | tuple[None, JSONResponse]:
     """For model endpoints: verified login + the paid-call budget."""
@@ -785,6 +800,12 @@ def _prep_text(data: dict, key: str = "text") -> str:
     return str(data.get(key) or "").strip()[:PREP_MAX_CHARS]
 
 
+def _prep_track(data: dict) -> str:
+    """The requesting page's role family. Anything unrecognized degrades to
+    the original PM track — never an error."""
+    return "ds" if str(data.get("track") or "").strip() == "ds" else "pm"
+
+
 @app.post("/api/prep/extract-units")
 async def prep_extract_units(request: Request) -> JSONResponse:
     """CV / brain-dump -> AchievementUnit[], merged into the persistent genome.
@@ -796,12 +817,16 @@ async def prep_extract_units(request: Request) -> JSONResponse:
     text = _prep_text(data or {})
     if not text:
         return JSONResponse({"ok": False, "error": "paste your CV first"}, status_code=400)
-    result = await _prep_model_call(extract_units, text, PREP_MODEL)
+    result = await _prep_model_call(extract_units, text, PREP_MODEL, _prep_track(data or {}))
     if isinstance(result, JSONResponse):
         return result
     bank = _bank()
     try:
-        genome = bank.save_units(email, [u.model_dump() for u in result])
+        # merge_competencies: the genome is shared across tracks — a DS
+        # extraction must not strip a unit's PM tags (or vice versa).
+        genome = bank.save_units(
+            email, [u.model_dump() for u in result], merge_competencies=True
+        )
     except BankFull as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     finally:
@@ -819,7 +844,7 @@ async def prep_extract_target(request: Request) -> JSONResponse:
     text = _prep_text(data or {})
     if not text:
         return JSONResponse({"ok": False, "error": "paste the JD first"}, status_code=400)
-    result = await _prep_model_call(extract_target, text, PREP_MODEL)
+    result = await _prep_model_call(extract_target, text, PREP_MODEL, _prep_track(data or {}))
     if isinstance(result, JSONResponse):
         return result
     bank = _bank()
@@ -1255,6 +1280,116 @@ async def prep_delivery(request: Request) -> JSONResponse:
     if isinstance(result, JSONResponse):
         return result
     return JSONResponse({"ok": True, "stats": stats, "check": result.model_dump()})
+
+
+# --- v3 model endpoints: grill map, project grill, learning plan, loop map ------
+
+
+@app.get("/api/prep/rounds")
+async def prep_rounds(track: str = "pm") -> JSONResponse:
+    """The researched interview-loop map for a track (which rounds this role
+    family actually faces). Static curated data straight from the recruiter
+    KB — browsable without login, like the recruiter's field guide."""
+    return JSONResponse({"ok": True, "rounds": rounds_for("ds" if track == "ds" else "pm")})
+
+
+@app.post("/api/prep/grill-map")
+async def prep_grill_map(request: Request) -> JSONResponse:
+    """Exhaustive CV prep: one careful call that pre-interrogates EVERY unit
+    in the genome for this target. Cached onto the application row so the
+    map reloads instantly next visit."""
+    email, err = _prep_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    units = _prep_units(data or {})
+    target = _prep_target(data or {})
+    if units is None or target is None:
+        return JSONResponse(
+            {"ok": False, "error": "extract units and target first"}, status_code=400
+        )
+    result = await _prep_model_call(grill_map, units, target, PREP_MODEL)
+    if isinstance(result, JSONResponse):
+        return result
+    rows = [r.model_dump() for r in result]
+    tid = str((data or {}).get("targetId") or "").strip()
+    if tid:
+        bank = _bank()
+        try:
+            bank.save_grill_map(email, tid, rows)
+        finally:
+            bank.close()
+    return JSONResponse({"ok": True, "rows": rows})
+
+
+@app.post("/api/prep/grill")
+async def prep_grill(request: Request) -> JSONResponse:
+    """One round of the project deep-dive: judge the answers to the last
+    probes, then probe again from fresh angles. The browser owns the
+    exchange history (same statelessness as the Devil's Advocate)."""
+    email, err = _prep_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    units = _prep_units(data or {})
+    target = _prep_target(data or {})
+    project = _prep_text(data or {}, "project")
+    if units is None or target is None or not project:
+        return JSONResponse(
+            {"ok": False, "error": "pick a project (or paste one) first"},
+            status_code=400,
+        )
+    exchanges = []
+    raw_ex = (data or {}).get("exchanges")
+    if isinstance(raw_ex, list):
+        for e in raw_ex[:10]:
+            if isinstance(e, dict) and str(e.get("answer") or "").strip():
+                exchanges.append(
+                    {
+                        "question": str(e.get("question") or "")[:1000],
+                        "answer": str(e.get("answer") or "")[:3000],
+                    }
+                )
+    result = await _prep_model_call(
+        project_grill, project, units, target, exchanges, PREP_MODEL
+    )
+    if isinstance(result, JSONResponse):
+        return result
+    return JSONResponse({"ok": True, "round": result.model_dump()})
+
+
+@app.post("/api/prep/learn")
+async def prep_learn(request: Request) -> JSONResponse:
+    """Suggested learnings: JD + heatmap -> a prioritized study plan whose
+    links can only come from the curated allowlist. Cached onto the
+    application row, heatmap-style."""
+    email, err = _prep_gate(request)
+    if err is not None:
+        return err
+    data = await _prep_body(request)
+    units = _prep_units(data or {})
+    target = _prep_target(data or {})
+    try:
+        cells = [CoverageCell.model_validate(c) for c in ((data or {}).get("cells") or [])]
+    except Exception:  # noqa: BLE001
+        cells = []
+    if units is None or target is None or not cells:
+        return JSONResponse(
+            {"ok": False, "error": "build the heatmap before the learning plan"},
+            status_code=400,
+        )
+    result = await _prep_model_call(learning_plan, units, target, cells, PREP_MODEL)
+    if isinstance(result, JSONResponse):
+        return result
+    plan = result.model_dump()
+    tid = str((data or {}).get("targetId") or "").strip()
+    if tid:
+        bank = _bank()
+        try:
+            bank.save_learning(email, tid, plan)
+        finally:
+            bank.close()
+    return JSONResponse({"ok": True, "plan": plan})
 
 
 # --- Referral pods (the opt-in multiplayer layer of /referrals) -----------------
