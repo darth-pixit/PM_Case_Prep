@@ -3,187 +3,96 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Prep Engine · Data Science — true stories, real skills, tuned to the DS loop</title>
+  <title>Prep Engine · Data Science — your CV and your story, told like a data scientist</title>
   <link rel="stylesheet" href="/static/hub.css" />
 </head>
 <body>
   <div class="wrap">
     <header class="hub">
       <h1>🧪 Prep Engine · Data Science</h1>
-      <span class="sub">true stories + real skills, tuned to the DS loop — never fake it</span>
+      <span class="sub">your CV points and your story — told like a data scientist, never faked</span>
       <span class="whoami" id="whoami"></span>
     </header>
-    <p class="lede">Paste your CV (or a brain-dump) and a data-science job description. The
-    engine atomizes your real work — analyses, models, pipelines, experiments — into a
-    persistent <b>story bank</b>, decodes what the role truly tests (SQL, stats, ML,
-    experimentation, GenAI…), shows your coverage heatmap, drafts STAR stories, grills
-    your projects the way a real deep-dive round will, and turns every gap into a
-    concrete <b>learning plan</b> with curated resources — not spin.</p>
+    <p class="lede">Paste your CV and get point-by-point advice on how each line reads
+    to a DS screener — question, method, rigor, impact — and the strongest
+    <b>honest</b> way to say it. Then shape the intro that ties it together: why data
+    science, why this role, why you. A job description is <b>optional</b>: decode one
+    when you have a specific opening, or just prep for the role in general.</p>
 
-    <div class="card" id="roundsCard">
-      <h2>🗺 The loop you're walking into</h2>
-      <p class="hint">The rounds data-science interviews actually run in 2024-26 — researched
-      from real loops, with example questions and what strong vs weak answers sound like.
-      Free to browse; the engine below preps you for them.</p>
-      <div id="roundsOut"><span class="hint">Loading the loop map…</span></div>
-    </div>
-
-    <div class="card" id="appsCard" hidden>
-      <h2>Your applications</h2>
-      <p class="hint">One genome, many roles. Click one to re-tune instantly.</p>
-      <div id="appsOut"></div>
-    </div>
-
-    <div class="card" id="inputCard">
-      <h2>New application</h2>
+    <div class="card" id="startCard">
+      <h2>Start here</h2>
       <div id="authMount"></div>
-      <div id="builder" hidden>
-        <div class="prep-inputs">
-          <div>
-            <h3>CV / brain-dump</h3>
-            <p class="hint">Bullets, prose, half-sentences — anything true. Re-pasting
-            merges into your bank; it never duplicates. Numbers you actually have; the
-            engine will never add ones you don't.</p>
-            <textarea id="cvText" rows="10" placeholder="e.g. Built churn model at Acme (XGBoost, 2M users) — recall up 22% over the rules baseline. Ran the checkout A/B program. Also: the segmentation project that died in review…"></textarea>
-          </div>
-          <div>
-            <h3>Job description</h3>
-            <p class="hint">Paste the JD. The engine reads between the lines for the
-            unwritten pain behind the hire.</p>
-            <textarea id="jdText" rows="10" placeholder="Paste the full job description here…"></textarea>
-          </div>
+      <div id="whoFor" hidden>
+        <h3>Who are you presenting to?</h3>
+        <label class="radio"><input type="radio" name="mode" value="general" checked />
+          A DS role in general — no specific opening yet</label>
+        <label class="radio"><input type="radio" name="mode" value="jd" />
+          A specific opening — I have the job description</label>
+        <div class="mini-form" id="generalPick" style="margin-top:0.5rem">
+          <select id="seniority" style="max-width:200px"></select>
+          <select id="archetype" style="max-width:200px"></select>
+          <span class="hint">both optional — “any” is a real answer</span>
         </div>
-        <div class="prep-actions">
-          <button class="btn" id="buildBtn">Build my heatmap</button>
-          <span class="hint" id="buildMsg"></span>
+        <div id="jdPick" hidden style="margin-top:0.5rem">
+          <textarea id="jdText" rows="7" placeholder="Paste the full data-science job description here…"></textarea>
+          <div class="prep-actions">
+            <button class="btn" id="decodeBtn">Decode what this role really tests</button>
+            <span class="hint" id="decodeMsg"></span>
+          </div>
+          <div id="targetOut"></div>
         </div>
       </div>
     </div>
 
-    <div class="card" id="targetCard" hidden>
-      <h2>What this role is really testing</h2>
-      <div id="targetOut"></div>
-    </div>
-
-    <div class="card" id="unitsCard" hidden>
-      <h2 id="unitsHead">Your story bank</h2>
-      <p class="hint">The extractor is a first draft, not gospel — edit anything. Every
-      unit keeps the exact source line it came from. A missing metric stays missing:
-      that's the point.</p>
-      <div id="unitsOut" class="unit-grid"></div>
-    </div>
-
-    <div class="card" id="heatmapCard" hidden>
-      <h2>Coverage heatmap</h2>
-      <p class="hint">Green: direct evidence. Amber: adjacent — a story can bridge it.
-      Red: no evidence yet — the fix is a real plan (see the learnings card), not framing.</p>
-      <div class="mini-form" style="margin:0.5rem 0 0.7rem">
-        <label class="hint" for="spine" style="white-space:nowrap">Story spine</label>
-        <input id="spine" type="text" style="flex:1;max-width:none" placeholder="the one-line thread every story reinforces" />
-      </div>
-      <div id="heatmapOut"></div>
-      <div id="sprintOut"></div>
+    <div class="card" id="cvCard" hidden>
+      <h2>Fine-tune your CV points</h2>
+      <p class="hint">Every line, reviewed through a DS hiring lens: how it reads today,
+      what weakens it, and a stronger version that uses <b>only your facts</b> — a
+      number you don't have becomes an <mark class="add">[ADD: …]</mark> placeholder
+      to fill in, never an invention.</p>
+      <textarea id="cvText" rows="10"></textarea>
       <div class="prep-actions">
-        <button class="btn ghost" id="exportBtn">Export prep pack (.md)</button>
-        <span class="hint" id="exportMsg"></span>
+        <button class="btn" id="reviewBtn">Review my CV points</button>
+        <button class="btn ghost" id="clearReviewBtn" hidden>Start over</button>
+        <span class="hint" id="reviewMsg"></span>
       </div>
+      <div id="overallOut"></div>
+      <div id="pointsOut"></div>
     </div>
 
     <div class="card" id="storyCard" hidden>
-      <h2 id="storyHead">Story</h2>
-      <div id="storyOut"></div>
-      <div id="attackOut"></div>
-      <div id="rehearseOut"></div>
+      <h2>Your intro, your story</h2>
+      <p class="hint">Why you want the role, why you do what you do — shaped into the
+      spoken “tell me about yourself”, built from <b>your</b> answers and CV, in your
+      register. Answer what you can; skip what you can't. Then revise it until it
+      sounds like you on a good day.</p>
+      <div id="questionsOut"></div>
+      <div class="prep-actions">
+        <button class="btn" id="storyBtn">Draft my story</button>
+        <button class="btn ghost" id="clearStoryBtn" hidden>Start over</button>
+        <span class="hint" id="storyMsg"></span>
+      </div>
+      <div id="kitOut"></div>
+      <div class="mini-form" id="refineRow" hidden style="margin-top:0.6rem">
+        <input id="refineNote" type="text" style="flex:1;max-width:none"
+          placeholder="What should change? e.g. tighter · lead with the failure · less formal" />
+        <button class="btn" id="refineBtn">Revise</button>
+      </div>
+      <span class="hint" id="refineMsg"></span>
     </div>
 
-    <div class="card" id="grillCard" hidden>
-      <h2>🔥 The grill room</h2>
-      <p class="hint">Nothing on your CV goes into the interview un-interrogated. The
-      <b>grill sheet</b> pre-asks the nastiest fair question at every unit; the
-      <b>deep-dive grill</b> takes ONE project and probes it the way a real DS
-      deep-dive round will — methods, leakage, baselines, ownership, impact.</p>
+    <div class="card" id="exportCard" hidden>
+      <h2>Take it with you</h2>
+      <p class="hint">One markdown sheet: your tuned CV points and your story kit.
+      Built in your browser — nothing extra leaves it.</p>
       <div class="prep-actions">
-        <button class="btn" id="grillMapBtn">Grill my whole CV</button>
-        <span class="hint" id="grillMapMsg"></span>
+        <button class="btn ghost" id="exportBtn">Download prep sheet (.md)</button>
+        <span class="hint" id="exportMsg"></span>
       </div>
-      <div id="grillMapOut"></div>
-      <h3 style="margin-top:1rem">Deep-dive one project</h3>
-      <p class="hint">Pick a unit or paste the project as you'd tell it. It probes from
-      rotating interrogation angles, judges each answer held/cracked, and keeps a
-      running list of your weak spots — fix them before an interviewer finds them.</p>
-      <div class="mini-form">
-        <select id="grillUnit"></select>
-      </div>
-      <textarea id="grillText" rows="4" style="margin-top:0.5rem" placeholder="…or paste the project here, the way you'd tell it out loud."></textarea>
-      <div class="prep-actions">
-        <button class="btn" id="grillBtn">Start the grill</button>
-        <button class="btn ghost" id="grillReset" hidden>New project</button>
-        <span class="hint" id="grillMsg"></span>
-      </div>
-      <div id="grillOut"></div>
-    </div>
-
-    <div class="card" id="learnCard" hidden>
-      <h2>📚 Suggested learnings</h2>
-      <p class="hint">A study plan built from THIS JD and your heatmap — reds first,
-      weighted by what the role pays for. Each item: the exact subtopics to study,
-      curated links (never invented — every URL was verified by hand), and a
-      practice exercise that leaves an artifact you can talk about.</p>
-      <div class="prep-actions">
-        <button class="btn" id="learnBtn">Build my learning plan</button>
-        <span class="hint" id="learnMsg"></span>
-      </div>
-      <div id="learnOut"></div>
-    </div>
-
-    <div class="card" id="twinCard" hidden>
-      <h2>Interviewer twin</h2>
-      <p class="hint">Paste ONLY public signals you can see yourself — profile text, talk
-      titles, posts. Nothing is fetched, nothing is stored: the twin lives in this tab.</p>
-      <div class="mini-form">
-        <input id="twinName" type="text" placeholder="Interviewer name" style="max-width:200px" />
-        <input id="twinRole" type="text" placeholder="Their role (e.g. Staff DS, Experimentation)" style="max-width:240px" />
-      </div>
-      <textarea id="twinSignals" rows="5" style="margin-top:0.5rem" placeholder="Paste their public bio, recent post topics, talk titles…"></textarea>
-      <div class="prep-actions">
-        <button class="btn" id="twinBtn">Predict their interview</button>
-        <span class="hint" id="twinMsg"></span>
-      </div>
-      <div id="twinOut"></div>
-    </div>
-
-    <div class="card" id="mockCard" hidden>
-      <h2>Mock interview</h2>
-      <p class="hint">Adaptive probing aimed at your weakest competencies — because that's
-      where the real interview will hurt. Up to 8 questions, then a scorecard.</p>
-      <div class="chat" id="mockChat"></div>
-      <div class="chat-compose" id="mockCompose" hidden>
-        <textarea id="mockInput" placeholder="Answer out loud first, then type the gist…"></textarea>
-        <button class="btn" id="mockSend">Send</button>
-      </div>
-      <div class="prep-actions">
-        <button class="btn" id="mockStart">Start mock</button>
-        <button class="btn ghost" id="mockEnd" hidden>End &amp; grade</button>
-        <span class="hint" id="mockMsg"></span>
-      </div>
-      <div id="mockScoreOut"></div>
-    </div>
-
-    <div class="card" id="debriefCard" hidden>
-      <h2>Post-interview debrief</h2>
-      <p class="hint">Just had the real thing? Write what was asked, what landed, what
-      blindsided you. Lessons sharpen the next loop; achievements you mention become
-      DRAFT units you can confirm into your bank.</p>
-      <textarea id="debriefText" rows="6" placeholder="They drilled into my churn model — the leakage question caught me flat. My A/B story landed. I also mentioned the fraud-rules migration I ran, which isn't in my bank…"></textarea>
-      <div class="prep-actions">
-        <button class="btn" id="debriefBtn">Mine the debrief</button>
-        <span class="hint" id="debriefMsg"></span>
-      </div>
-      <div id="debriefOut"></div>
     </div>
   </div>
   <script>window.PREP_TRACK = "ds";</script>
   <script src="/static/shared.js?v=1"></script>
-  <script src="/static/prep.js?v=3"></script>
+  <script src="/static/prep.js?v=4"></script>
 </body>
 </html>
