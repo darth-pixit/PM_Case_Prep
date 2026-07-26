@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import sys
 import time
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -321,15 +322,114 @@ def test_experiment_pages_served(tmp_path, monkeypatch):
     assert "archetypes" in guide
 
 
-def test_prep_rounds_endpoint_is_open_and_track_scoped(tmp_path, monkeypatch):
+def _prep_client(tmp_path, monkeypatch):
+    """A logged-in client aimed at a tmp prep DB, with a fake API key so
+    endpoint stubs are reached instead of a client-construction error. The
+    login email is unique per test: the per-email code-request limiter is
+    module state shared across the whole pytest process."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return None, None
+    monkeypatch.setattr(webapp, "PREP_DB", str(tmp_path / "prep.db"))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-never-used")
+    # The per-IP auth limiter is module state shared by every TestClient in
+    # the process ("testclient") — patch a fresh one so these logins don't
+    # drain the budget later files (pods) rely on. monkeypatch restores it.
+    monkeypatch.setattr(webapp, "AUTH_ATTEMPTS", webapp.SlidingLimit(100, 3600))
+    email = f"prep-{uuid.uuid4().hex[:8]}@example.com"
+    client.get("/prep")
+    d = client.post("/api/auth/email/request", json={"email": email}).json()
+    client.post("/api/auth/email/verify", json={"email": email, "code": d["dev_code"]})
+    return client, webapp
+
+
+def _fake_review():
+    from pmcaseprep.prep_engine import CVReview
+
+    return CVReview.model_validate({
+        "points": [{
+            "original": "Led the revamp.", "read": "vague",
+            "issues": ["vague-verb"], "rewrite": "Led the revamp of [ADD: what]",
+            "why": "names the work", "flags": [],
+        }],
+        "overall": {"readsAs": "a builder", "leadWith": [], "cut": [],
+                    "missing": [], "ordering": "fine"},
+    })
+
+
+def test_prep_model_endpoints_require_login(tmp_path, monkeypatch):
     client, _ = _client(tmp_path, monkeypatch)
     if client is None:
         return
-    ds = client.get("/api/prep/rounds?track=ds").json()
-    assert ds["ok"] and len(ds["rounds"]) >= 5
-    assert all(r["name"] and r["example_questions"] for r in ds["rounds"])
-    pm = client.get("/api/prep/rounds?track=pm").json()
-    assert pm["ok"] and pm["rounds"] == []  # the PM loop map lives in the arena
+    client.get("/prep")
+    for path in ("/api/prep/target", "/api/prep/review", "/api/prep/story"):
+        assert client.post(path, json={"track": "pm"}).status_code == 401, path
+    assert client.get("/api/prep/bank").status_code == 401
+
+
+def test_prep_review_works_without_a_jd_and_persists(tmp_path, monkeypatch):
+    """The JD-optional contract end to end: no target, just a role hint —
+    the review builds, persists per (login, track), and clears on demand."""
+    client, webapp = _prep_client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    seen = {}
+
+    def fake_tune(client_, cv_text, model, track, target, hint):
+        seen.update(cv=cv_text, target=target, hint=hint, track=track)
+        return _fake_review()
+
+    monkeypatch.setattr(webapp, "tune_cv", fake_tune)
+    r = client.post("/api/prep/review", json={
+        "track": "pm", "cvText": "Led the revamp.",
+        "roleHint": {"archetype": "Growth", "seniority": ""},
+    }).json()
+    assert r["ok"] and r["review"]["points"][0]["issues"] == ["vague-verb"]
+    assert seen["target"] is None  # no JD is a supported path, not an error
+    assert seen["hint"] == {"archetype": "Growth", "seniority": ""}
+
+    bank = client.get("/api/prep/bank?track=pm").json()
+    assert bank["ok"] and bank["review"]["cvText"] == "Led the revamp."
+    assert bank["review"]["target"] is None
+    assert client.get("/api/prep/bank?track=ds").json()["review"] is None
+
+    assert client.post("/api/prep/bank/clear", json={"track": "pm", "kind": "review"}).json()["ok"]
+    assert client.get("/api/prep/bank?track=pm").json()["review"] is None
+
+
+def test_prep_review_requires_a_cv(tmp_path, monkeypatch):
+    client, _ = _prep_client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    assert client.post("/api/prep/review", json={"track": "pm"}).status_code == 400
+
+
+def test_prep_story_passes_prior_and_note_for_refinement(tmp_path, monkeypatch):
+    client, webapp = _prep_client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    from pmcaseprep.prep_engine import StoryKit
+
+    kit = StoryKit(throughLine="t", tellMe="hi", whyRole="w", whyThis="x",
+                   beats=["b"], tips=[])
+    seen = {}
+
+    def fake_story(client_, answers, cv_text, model, track, target, hint, prior, note):
+        seen.update(answers=answers, prior=prior, note=note)
+        return kit
+
+    monkeypatch.setattr(webapp, "intro_story", fake_story)
+    # No answers -> a clear 400, not a model call.
+    assert client.post("/api/prep/story", json={"track": "pm"}).status_code == 400
+    r = client.post("/api/prep/story", json={
+        "track": "pm",
+        "answers": [{"question": "Why?", "answer": "Because."}, {"question": "skip", "answer": ""}],
+        "prior": kit.model_dump(), "note": "tighter",
+    }).json()
+    assert r["ok"] and r["kit"]["tellMe"] == "hi"
+    assert seen["answers"] == [{"question": "Why?", "answer": "Because."}]
+    assert seen["prior"] is not None and seen["note"] == "tighter"
+    assert client.get("/api/prep/bank?track=pm").json()["story"]["kit"]["tellMe"] == "hi"
 
 
 if __name__ == "__main__":

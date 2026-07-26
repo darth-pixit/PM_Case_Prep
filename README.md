@@ -27,8 +27,8 @@ bleed into each other:
 | `/arena` | **Case Arena** — 5 PM tracks × 5 cases each, pick-your-case | **required at start** | `experiment=arena`, `arena_*` events |
 | `/recruiter` | **Recruiter Copilot** — hiring for AI/DS without being an expert | required for chat; field guide open | `experiment=recruiter`, `recruiter_*` events |
 | `/referrals` | **Referral Paths** — closeness-ranked referral map from your own data exports, plus multiplayer job-hunt pods | solo: none (all client-side) · pods: required | `experiment=referrals`, `referrals_*` events |
-| `/prep` | **Prep Engine** — a compounding story bank: CV + JD → coverage heatmap, pressure-tested STAR stories, grill room, learning plan, mock loop, debrief write-back | **required** (bank follows the account) | `experiment=prep`, `prep_*` events |
-| `/prep-ds` | **Prep Engine · Data Science** — the same engine on the DS track: DS taxonomy (SQL, stats, ML, experimentation, GenAI…), DS-tuned prompts, researched loop map | **required** (loop map open) | `experiment=prep-ds`, `prep-ds_*` events |
+| `/prep` | **Prep Engine** — fine-tune how each CV point reads to a PM screener (honest rewrites, `[ADD: …]` placeholders, never inventions) + shape your own intro story (tell-me-about-yourself / why product / why this role); JD optional | **required** (your docs follow the account) | `experiment=prep`, `prep_*` events |
+| `/prep-ds` | **Prep Engine · Data Science** — the same two tools through the DS hiring lens (question, method, rigor, impact), with DS archetype/seniority pickers | **required** | `experiment=prep-ds`, `prep-ds_*` events |
 
 Every PostHog event carries an `experiment` super property, so per-experiment
 dashboards are one filter away while a single (free-tier) PostHog project and
@@ -70,54 +70,46 @@ rank accordingly ("they owe you one", "referral talk already happened",
 touch the server in solo mode.
 
 **The Prep Engine** (`pmcaseprep/prep_engine.py`, `prep_bank.py`,
-`/api/prep/*`) is the behavioral-storytelling wedge: paste a CV / brain-dump
-and a JD, and it (1) atomizes real work into **achievement units**
-(competencies from a closed 12-item taxonomy, provenance quote,
-`metric: null` when the source had no number), (2) decodes the role into a
-**TargetProfile** including the *unwritten pain* behind the hire, (3) scores
-a red/amber/green **coverage heatmap**, and (4) drafts **STAR stories** in
-30-second / 2-minute / deep-dive versions — exportable as one markdown prep
-pack. Truthfulness is enforced in code, not just prompts: a deterministic
-audit nulls extracted metrics whose numbers aren't in the source, downgrades
-"green" cells that cite no real unit, and flags story numbers found in no
-unit under `unverifiedClaims` for explicit user confirmation.
+`/api/prep/*`) is the present-yourself wedge, built on one belief: you
+already did the work — the engine helps you *present* it. Two tools on one
+page:
 
-The engine is **track-aware** (`prep_tracks.py`): `/prep` runs the PM track,
-`/prep-ds` runs Data Science on the same loop with its own 12-competency
-taxonomy (SQL & wrangling, statistics, ML fundamentals, experiment design,
-ML system design, GenAI/LLM fluency…), its own seniority ladder, DS-tuned
-extraction/grilling prompts, and a researched **loop map** of the rounds DS
-interviews actually run (from the recruiter KB, free to browse). The genome
-is deliberately shared across tracks: re-extraction UNIONS competency tags
-instead of replacing them, each page shows its own track's tags and
-preserves the other's on edit, and applications are listed per track.
+1. **Fine-tune your CV points.** Paste a CV (or just bullets) and every
+   point comes back reviewed through the role family's hiring lens: how the
+   line honestly READS to a screener today, which presentation flaws it
+   carries (a closed 12-tag list — vague verb, activity-not-outcome,
+   feature-not-problem, buried lede, no ownership…), the strongest honest
+   rewrite of the same facts, and why that version lands. On top sits the
+   whole-CV read: what the document currently says you are, what to lead
+   with, what to cut, the honest gaps to go close, and the ordering. A
+   number you don't have becomes an explicit `[ADD: …]` placeholder — the
+   engine never invents one.
+2. **Your intro, your story.** Five guided questions (what pulled you in,
+   why you do what you do, the work you're proudest of, why this role now,
+   what you're getting better at — answer any of them) plus the CV become a
+   **StoryKit**: the through-line, the spoken 60-90s "tell me about
+   yourself", the "why product?" (or "why data science?"), the "why this
+   role", cue-card beats to adapt live, and delivery tips. A revise loop
+   ("tighter · lead with the failure · less formal") reshapes it until it
+   sounds like you on a good day.
 
-The moat is the **story bank** (`prep_bank.py`, SQLite next to the skill
-graph on the persistent disk): the genome MERGES on every re-extraction
-(dedupe by title + provenance — no duplicates), units are editable in place,
-and each JD becomes a saved **application** on a campaign dashboard that
-re-tunes instantly — same genome, new heatmap. On top of the loop sit the
-pressure layers: **Devil's Advocate** (adversarial attack rounds that judge
-your answers held/cracked until YOU mark the story solid), the **grill
-room** — a one-call **grill sheet** that pre-interrogates EVERY unit in the
-genome (the exhaustive CV prep: each unit's nastiest fair questions plus
-the trap each one hunts, cached per application) and a **deep-dive project
-grill** that takes ONE project through rotating interrogation angles
-(drill-down, trade-off, failure, constraint-twist, ownership, impact,
-rigor), judges each answer held/cracked, and keeps a running weak-spot
-list — **Gap-to-Sprint** (every red cell can become a concrete 2-week
-become-qualified plan — close the gap, never spin it), **suggested
-learnings** (a prioritized study plan from the JD + heatmap whose links are
-allowlisted to the repo's hand-verified resource pools — an invented URL
-cannot survive the sanitizer, and skipped gaps are back-filled with curated
-picks), an **Interviewer Twin** built ONLY from public signals the user
-pastes themselves (nothing fetched, nothing stored), an adaptive **mock
-interview** that probes the heatmap's weakest competencies and ends in a
-scorecard, a **delivery self-check** (browser dictation + computed
-pace/fillers, model-judged structure), and a **debrief write-back** that
-mines a real interview's notes into lessons plus DRAFT units the user must
-explicitly confirm into the bank. All fourteen LLM prompts live in
-`/prompts/*.md` — editable without touching code.
+**The JD is optional by design** — that's the point. Prepping for a
+specific opening? Paste the JD and one call decodes a **TargetProfile**
+(seniority, archetype, weighted competencies from the track's closed
+taxonomy, and the *unwritten pain* behind the hire) that tunes all advice.
+Prepping for a role in general? Pick an archetype + seniority — or nothing
+— and the advice stays honestly role-family-level.
+
+Truthfulness is enforced in code, not just prompts: a reviewed point whose
+"original" can't be found in the pasted CV is dropped, numbers in a rewrite
+or story that appear in none of your inputs are flagged for confirmation,
+and off-list issue tags die. The engine is **track-aware**
+(`prep_tracks.py`): `/prep` runs the PM lens, `/prep-ds` the DS lens
+(question, method, rigor, impact), each with its own taxonomy, pickers, and
+prompt framing. The latest review and story kit persist per (login, track)
+in `prep_bank.py` — SQLite next to the skill graph on the persistent disk —
+so the page restores your work on the next visit. All three LLM prompts
+live in `/prompts/*.md` — editable without touching code.
 
 **Pods** (`pmcaseprep/web/pods.py`, `/api/pods/*`) are the opt-in multiplayer
 layer: friends job-hunting together pool (1) who can refer directly where

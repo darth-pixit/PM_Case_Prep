@@ -15,8 +15,8 @@ into each other.
 | `/arena` | **Case Arena** — 5 PM tracks × 5 cases, pick-your-case, same interview room | `case_loader.py`, `cases/arena/*.json`, `static/arena.js` |
 | `/recruiter` | **Recruiter Copilot** — chat grounded in a hand-researched KB | `recruiter_kb.py`, `static/recruiter.js` |
 | `/referrals` | **Referral Paths** — client-side referral mapping + multiplayer "pods" | `static/referrals.js` (solo, 100% browser), `web/pods.py` |
-| `/prep` | **Prep Engine** — CV+JD → story bank → coverage heatmap → pressure-tested STAR stories → grill room → learning plan | `prep_engine.py`, `prep_bank.py`, `static/prep.js`, `prompts/*.md` |
-| `/prep-ds` | **Prep Engine · Data Science** — same engine on the DS track (own taxonomy, seniority ladder, loop map) | `prep_tracks.py`, `static/prep-ds.html` (shares `prep.js`) |
+| `/prep` | **Prep Engine** — CV-point presentation review (honest rewrites, `[ADD: …]` placeholders) + the candidate's own intro story; JD optional | `prep_engine.py`, `prep_bank.py`, `static/prep.js`, `prompts/*.md` |
+| `/prep-ds` | **Prep Engine · Data Science** — same two tools through the DS hiring lens (own taxonomy, pickers, prompt framing) | `prep_tracks.py`, `static/prep-ds.html` (shares `prep.js`) |
 
 `main` is the **Render deploy branch** — merging to `main` ships to production
 (`render.yaml` blueprint: `uvicorn pmcaseprep.web.app:app`, persistent disk at
@@ -94,53 +94,55 @@ and only sees the transcript at the end.
 
 ### The Prep Engine
 
-The behavioral-storytelling experiment, built from a written spec whose contract
-matters:
+The present-yourself experiment: you already did the work — the engine helps
+you *present* it. Two tools per page: the CV-point review (how each line
+reads through the role family's hiring lens + the strongest honest rewrite)
+and the intro StoryKit (tell-me-about-yourself / why-this-craft / why-this-
+role, from guided answers + the CV, with a revise loop). The contract:
 
-- **Data model is camelCase on purpose** (`prep_engine.py`: `AchievementUnit`,
-  `TargetProfile`, `CoverageCell`, `Story`, …) — it mirrors the spec's
-  TypeScript types byte-for-byte. Do not snake_case it. (The tutor's models in
+- **The JD is optional by design.** A pasted JD decodes into a
+  `TargetProfile` that tunes the advice; without one, `role_context()`
+  builds an honest role-family line from the archetype+seniority hint (or
+  nothing). No endpoint may require a target — people prep for roles, not
+  only for specific openings.
+- **Data model is camelCase on purpose** (`prep_engine.py`: `CVReview`,
+  `PointReview`, `StoryKit`, `TargetProfile`, …) — it mirrors a TS client's
+  types byte-for-byte. Do not snake_case it. (The tutor's models in
   `models.py` are snake_case; the two coexist intentionally.)
-- **All 14 LLM prompts live in `/prompts/*.md`**, loaded from disk via
-  `load_prompt()`/`fill_prompt()` (raises on a missing `<PLACEHOLDER>`). Never
-  inline a prompt in code. Tests pin the load-bearing guardrail phrases inside
-  the prompt files — edit wording freely, keep those phrases.
-- **Truthfulness is enforced in code, not just prompts**: deterministic audits
-  run on every model response — `sanitize_units` nulls extracted metrics whose
-  digits aren't in the source text, `sanitize_heatmap` downgrades "green" cells
-  citing no real unit and back-fills skipped required competencies as red,
-  `audit_story` flags story numbers found in no referenced unit into
-  `unverifiedClaims`, and `sanitize_learning_plan` drops any resource whose
-  URL is not in `prep_tracks.ALLOWED_RESOURCES` (curated, hand-verified) and
-  replaces surviving links' title/kind/time with the curated entry's own
-  fields. Extending the engine means extending the guards; the model must
-  never be able to fabricate *silently*.
-- **Model calls are stateless; results compound server-side** into
-  `prep_bank.py` (owner = login email): the genome **merges** on re-extraction
-  (dedupe key = normalized title + rawEvidence; bank ids survive edits so
-  stories keep valid references), each JD is a saved application with its
-  cached heatmap, learning plan, and grill map (instant re-tune), stories
-  carry a `solid` flag that only the *user* flips (Devil's Advocate loop),
-  and debrief-mined units enter the bank only on explicit per-unit
-  confirmation.
+- **All 3 LLM prompts live in `/prompts/*.md`** (`tune-cv`, `intro-story`,
+  `extract-target`), loaded from disk via `load_prompt()`/`fill_prompt()`
+  (raises on a missing `<PLACEHOLDER>`). Never inline a prompt in code.
+  Tests pin the load-bearing guardrail phrases inside the prompt files —
+  edit wording freely, keep those phrases.
+- **Truthfulness is enforced in code, not just prompts**: deterministic
+  audits run on every model response — `sanitize_review` DROPS any reviewed
+  point whose `original` isn't actually in the pasted CV, flags rewrite
+  numbers that appear nowhere in the CV, and kills off-list issue tags;
+  `audit_kit` flags story numbers found in none of the candidate's inputs.
+  Missing facts become explicit `[ADD: …]` placeholders, never guesses.
+  Extending the engine means extending the guards; the model must never be
+  able to fabricate *silently*.
+- **Model calls are stateless; the latest docs persist server-side** in
+  `prep_bank.py` (one `prep_docs` table keyed (owner=login email, kind ∈
+  review|story, track)) — saving overwrites, the page restores on login,
+  and `bank/clear` deletes one doc. Files from the story-bank era carry
+  legacy tables (`prep_units`, `prep_targets`, `prep_stories`,
+  `prep_debriefs`) — leave them untouched.
 - **Tracks** (`prep_tracks.py`): `/prep` = PM, `/prep-ds` = Data Science —
-  per-track taxonomy, seniority ladder, prompt framing, and curated resource
-  pools; `Competency` is the Literal UNION of both taxonomies and an
-  import-time assert keeps it in sync with the track tuples. The genome is
-  shared across tracks on purpose: extraction passes
-  `merge_competencies=True` so a DS re-extraction UNIONS tags instead of
-  stripping the PM ones (the unit editor passes False — the user's checkbox
-  choice replaces). Targets are stamped with their track server-side
-  (`sanitize_target`), pages list only their own track's applications, and
-  `prep.js` is one track-aware script driven by `window.PREP_TRACK`.
+  per-track hiring lenses (`review_lens`, `story_lens`), taxonomy,
+  seniority ladder, and archetype picker; `Competency` is the Literal UNION
+  of both taxonomies and an import-time assert keeps it in sync with the
+  track tuples. Targets are stamped with their track server-side
+  (`sanitize_target`, off-track competency rows drop), and `prep.js` is one
+  track-aware script driven by `window.PREP_TRACK`.
 
 ### Privacy contracts (enforced by code, mirrored in page copy)
 
 - **Pods** (`web/pods.py`): members share only SHA-256 hashes of connection
   profile URLs + company names; endpoints reject anything not hash-shaped.
   Names never reach the server. Solo referral mapping is entirely client-side.
-- **Interviewer Twin** (`/api/prep/interviewer`): the user pastes public
-  signals themselves; nothing is fetched, nothing is stored.
+- **Prep export**: the .md prep sheet is assembled in the browser from state
+  already on the page — the export button sends nothing extra to the server.
 
 If you change one of these flows, keep the code-level enforcement and the page
 copy in sync.
