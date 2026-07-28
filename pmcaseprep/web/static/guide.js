@@ -304,6 +304,10 @@
     track("screen_viewed", { screen, explored: Object.keys(S.visited).length });
     render();
     window.scrollTo(0, 0);
+    // Chapter 4 is the one you operate rather than read — offer the walkthrough
+    // on arrival. Fired from go(), not render(), so re-renders mid-case (every
+    // pick is one) can't relaunch it.
+    tour.maybeStart();
   }
 
   // ── render helpers ────────────────────────────────────────────────────────
@@ -544,6 +548,7 @@
         ${CONTENT.rounds.map((_, i) => `
           <div class="g-pip${i < S.round ? " is-done" : i === S.round ? " is-now" : ""}">${i + 1}</div>`).join("")}
         <span class="g-pips-label">Round ${done ? 6 : S.round + 1} of 6</span>
+        <button class="g-tour-replay" ${act("tour")}>How this page works</button>
       </div>
 
       ${done ? finished : live}
@@ -663,6 +668,239 @@
       </div>`,
   };
 
+  // ── "what does this mean?" ─────────────────────────────────────────────────
+  // Select any word (or double-tap it) anywhere in the guide and a chip offers
+  // to explain it; the popover also takes a typed question. Most lookups are
+  // answered from a curated glossary server-side, so they're instant and cost
+  // nothing — the model is only reached for words we haven't written down.
+  const ask = (() => {
+    let chip = null, pop = null, lastTerm = "";
+
+    const close = () => {
+      if (chip) { chip.remove(); chip = null; }
+      if (pop) { pop.remove(); pop = null; }
+    };
+    const hideChip = () => { if (chip) { chip.remove(); chip = null; } };
+
+    // The sentence around the selection, so the model can tell "ship a
+    // feature" from "ship at sea". Cheap to send, and it stays server-capped.
+    function sentenceAround(sel) {
+      try {
+        const whole = sel.anchorNode && sel.anchorNode.textContent;
+        if (!whole) return "";
+        return whole.trim().slice(0, 300);
+      } catch { return ""; }
+    }
+
+    function place(node, rect) {
+      // Positioned in page space so the popover scrolls with the text.
+      node.style.left = (rect.left + rect.width / 2 + window.scrollX) + "px";
+      node.style.top = (rect.bottom + window.scrollY + 8) + "px";
+    }
+
+    function open(term, context, rect) {
+      close();
+      lastTerm = term;
+      pop = document.createElement("div");
+      pop.className = "g-pop";
+      pop.innerHTML = `
+        <div class="g-pop-head">
+          <div class="g-pop-term">${esc(term)}</div>
+          <button class="g-pop-x" data-x aria-label="Close">×</button>
+        </div>
+        <div class="g-pop-body" data-body>Looking that up…</div>
+        <div class="g-pop-hint">
+          <input type="text" data-q placeholder="Ask about another word…"
+                 style="width:100%;padding:7px 12px;border-radius:999px;border:1px solid var(--color-divider);font:inherit;font-size:13.5px;background:var(--color-bg);color:var(--color-text);" />
+        </div>`;
+      document.body.appendChild(pop);
+      place(pop, rect);
+      pop.querySelector("[data-x]").onclick = close;
+      const q = pop.querySelector("[data-q]");
+      q.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        const v = q.value.trim();
+        if (v) { open(v, "", rect); }
+      });
+      fetchExplain(term, context, rect);
+    }
+
+    async function fetchExplain(term, context, rect) {
+      let d = null;
+      try {
+        const r = await fetch("/api/guide/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ term, context }),
+        });
+        d = await r.json();
+      } catch { d = null; }
+      if (!pop || lastTerm !== term) return; // a newer question overtook this one
+      const body = pop.querySelector("[data-body]");
+      if (!d || !d.ok) {
+        body.textContent = (d && d.error) || "Couldn't look that one up — try again.";
+      } else {
+        body.innerHTML = esc(d.plain).replace(/\n+/g, "<br>") +
+          (d.example ? `<div class="g-pop-eg"><b>For example</b>${esc(d.example)}</div>` : "");
+        track("term_explained", { term: term.slice(0, 40), source: d.source });
+      }
+      place(pop, rect);
+    }
+
+    // Offer the chip whenever there's a real selection inside the guide.
+    document.addEventListener("mouseup", onSelect);
+    document.addEventListener("touchend", onSelect);
+
+    function onSelect(e) {
+      if (pop && pop.contains(e.target)) return;
+      setTimeout(() => {
+        const sel = window.getSelection();
+        const text = sel ? String(sel).trim() : "";
+        // A phrase is fine; a paragraph isn't what this is for.
+        if (!text || text.length > 60 || text.split(/\s+/).length > 6) return hideChip();
+        const main = el("main");
+        if (!main || !sel.anchorNode || !main.contains(sel.anchorNode)) return hideChip();
+        const rect = sel.getRangeAt(0).getBoundingClientRect();
+        if (!rect.width && !rect.height) return hideChip();
+        hideChip();
+        chip = document.createElement("button");
+        chip.className = "g-ask";
+        chip.textContent = `What does "${text.length > 22 ? text.slice(0, 22) + "…" : text}" mean?`;
+        chip.onclick = () => open(text, sentenceAround(sel), rect);
+        document.body.appendChild(chip);
+        place(chip, rect);
+      }, 0);
+    }
+
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    document.addEventListener("mousedown", (e) => {
+      if (pop && !pop.contains(e.target) && !(chip && chip.contains(e.target))) close();
+    });
+
+    return { open, close };
+  })();
+
+  // ── first-run walkthrough (chapter 4 only) ────────────────────────────────
+  // Every other chapter you just read. Chapter 4 you operate: you pick, you
+  // lock in, you carry choices forward — and the select-to-explain gesture is
+  // invisible until someone tells you. So the first visit gets four short
+  // coach marks, once, remembered in localStorage and replayable from a link.
+  const tour = (() => {
+    const KEY = "pmcp_guide_tour_v1";
+    const STEPS = [
+      {
+        sel: ".g-brief",
+        title: "One brief, six rounds",
+        body: "This is your case. The problem never changes — what changes is what you learn from each call you make.",
+      },
+      {
+        sel: ".g-round .g-opts",
+        title: "Pick, and see the thinking",
+        body: "Choose an option and it tells you straight away how a seasoned PM would read it. There's no way to lose — the 'wrong' answers are where the lesson is.",
+      },
+      {
+        sel: ".g-brief-t",
+        title: "Stuck on a word?",
+        body: "Select any word or phrase — anywhere on the page — and we'll explain it in plain English. You can type a question too.",
+      },
+      {
+        sel: ".g-run",
+        title: "Your run builds up here",
+        body: "Each call is added to your run. At the end of the quarter you compare it against how an experienced PM would have played it.",
+      },
+    ];
+
+    let i = 0, veil = null, ring = null, card = null;
+    const seen = () => { try { return localStorage.getItem(KEY) === "1"; } catch { return true; } };
+    const remember = () => { try { localStorage.setItem(KEY, "1"); } catch { /* private mode */ } };
+
+    function teardown() {
+      [veil, ring, card].forEach((n) => n && n.remove());
+      veil = ring = card = null;
+      window.removeEventListener("resize", reposition);
+    }
+
+    function stop(completed) {
+      if (card) track("tour_" + (completed ? "completed" : "skipped"), { step: i + 1 });
+      remember();
+      teardown();
+    }
+
+    function reposition() {
+      if (!card) return;
+      const step = STEPS[i];
+      const node = document.querySelector(step.sel);
+      if (!node) return;
+      const r = node.getBoundingClientRect();
+      ring.style.left = (r.left + window.scrollX) + "px";
+      ring.style.top = (r.top + window.scrollY) + "px";
+      ring.style.width = r.width + "px";
+      ring.style.height = r.height + "px";
+      // Prefer below the target; flip above when that would run off-screen.
+      const below = r.bottom + window.scrollY + 18;
+      const fitsBelow = r.bottom + 200 < window.innerHeight;
+      card.style.top = fitsBelow ? below + "px" : (r.top + window.scrollY - card.offsetHeight - 18) + "px";
+      const left = Math.min(
+        Math.max(12, r.left + window.scrollX),
+        window.scrollX + window.innerWidth - card.offsetWidth - 12
+      );
+      card.style.left = left + "px";
+    }
+
+    function show() {
+      // Skip a step whose target isn't on screen (the sidebar is laid out
+      // differently on phones, and the round card is gone once the case ends).
+      while (i < STEPS.length && !document.querySelector(STEPS[i].sel)) i++;
+      if (i >= STEPS.length) return stop(true);
+      const step = STEPS[i];
+      document.querySelector(step.sel).scrollIntoView({ block: "center", behavior: "smooth" });
+      card.innerHTML = `
+        <div class="g-tour-step">Step ${i + 1} of ${STEPS.length}</div>
+        <div class="g-tour-t">${esc(step.title)}</div>
+        <div class="g-tour-b">${esc(step.body)}</div>
+        <div class="g-tour-actions">
+          <div class="g-tour-dots">
+            ${STEPS.map((_, n) => `<span class="g-tour-dot${n === i ? " is-on" : ""}"></span>`).join("")}
+          </div>
+          <button class="g-tour-skip" data-skip>Skip</button>
+          <button class="btn btn-primary" data-next>${i === STEPS.length - 1 ? "Got it" : "Next"}</button>
+        </div>`;
+      card.querySelector("[data-skip]").onclick = () => stop(false);
+      card.querySelector("[data-next]").onclick = () => {
+        i++;
+        if (i >= STEPS.length) return stop(true);
+        show();
+      };
+      // Wait for the smooth scroll to settle before measuring.
+      setTimeout(reposition, 260);
+      reposition();
+    }
+
+    function start() {
+      if (card) return;
+      i = 0;
+      veil = document.createElement("div");
+      veil.className = "g-tour-veil";
+      veil.onclick = () => stop(false);
+      ring = document.createElement("div");
+      ring.className = "g-tour-ring";
+      card = document.createElement("div");
+      card.className = "g-tour-card";
+      document.body.append(veil, ring, card);
+      window.addEventListener("resize", reposition);
+      track("tour_started");
+      show();
+    }
+
+    // Auto-run once, and only after the screen has actually rendered.
+    function maybeStart() {
+      if (S.screen !== "cases" || seen()) return;
+      setTimeout(start, 400);
+    }
+
+    return { start, maybeStart, stop: () => stop(false) };
+  })();
+
   // ── render ────────────────────────────────────────────────────────────────
 
   function render() {
@@ -734,6 +972,7 @@
       set({ planOpen: !S.planOpen });
       if (S.planOpen) track("plan_opened");
     },
+    tour: () => tour.start(),
   };
 
   document.addEventListener("click", (e) => {

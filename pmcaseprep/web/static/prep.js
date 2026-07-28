@@ -87,6 +87,25 @@
     el.style.color = bad ? "var(--bad)" : "";
   }
 
+  // --- No-JD role category ---------------------------------------------------
+  // The ONE optional question the no-JD path asks. Options come from the
+  // server's own closed list, so the picker can't offer a value the server
+  // would reject; if that fetch fails we simply never show the row and the
+  // build falls back to the plain generic role. Only relevant while the JD
+  // box is empty — a pasted posting decides the category itself.
+  (async function initRoleCategory() {
+    const sync = () => { $("roleHint").hidden = !!$("jdText").value.trim(); };
+    $("jdText").addEventListener("input", sync);
+    $("roleHint").hidden = true;
+    try {
+      const d = await api(`role-categories?track=${TRACK}`);
+      $("hintArchetype").innerHTML = d.categories
+        .map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`)
+        .join("");
+      sync();
+    } catch { /* generic role it is */ }
+  })();
+
   // --- Auth + bank load ------------------------------------------------------
   PMCP.mountAuth($("authMount"), {
     reason: "Sign in to run the engine — your story bank follows your account.",
@@ -175,13 +194,20 @@
   $("buildBtn").onclick = async () => {
     const cv = $("cvText").value.trim();
     const jd = $("jdText").value.trim();
-    if (!cv && !jd) { msg("buildMsg", "Paste your CV and the JD first.", true); return; }
-    if (!jd) { msg("buildMsg", "Paste the JD too — the heatmap needs a target.", true); return; }
+    // The JD is optional: without one we prep against the role family, so the
+    // only hard requirement is a CV — that's what the heatmap scores.
+    if (!cv && !jd) { msg("buildMsg", "Paste your CV to get started.", true); return; }
     $("buildBtn").disabled = true;
-    x.track("build_started", { cv_chars: cv.length, jd_chars: jd.length });
+    x.track("build_started", { cv_chars: cv.length, jd_chars: jd.length, has_jd: !!jd });
     try {
-      msg("buildMsg", cv ? "Extracting units + decoding the role…" : "Decoding the role…");
-      const calls = [api("extract-target", { text: jd, track: TRACK })];
+      msg("buildMsg", cv
+        ? (jd ? "Extracting units + decoding the role…" : "Extracting units + framing the role…")
+        : "Decoding the role…");
+      const calls = [api("extract-target", {
+        text: jd, track: TRACK,
+        // Ignored server-side when a JD is present — the posting wins.
+        archetype: $("hintArchetype").value,
+      })];
       if (cv) calls.push(api("extract-units", { text: cv, track: TRACK }));
       const [t, u] = await Promise.all(calls);
       if (u) S.units = u.units; // the merged genome, not just this extraction

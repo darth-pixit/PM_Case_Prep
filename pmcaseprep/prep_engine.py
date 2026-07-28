@@ -558,6 +558,64 @@ def extract_units(
     return sanitize_units(raw, cv_text, taxonomy=tr["taxonomy"])
 
 
+def generic_target(
+    track_key: str = "pm", archetype: Optional[str] = None
+) -> TargetProfile:
+    """The target to prep against when there is NO job description.
+
+    The JD is optional by design — you prep for a role, not only for one
+    opening. Everything downstream (heatmap, stories, grill map, learning
+    plan) reads a TargetProfile, so rather than special-casing the no-JD path
+    through the whole engine we build an honest profile here:
+
+    - no company is invented (the field stays empty),
+    - every competency in the track's taxonomy is required at equal weight,
+      because without a JD we have no basis to rank one above another,
+    - each `evidence` string says plainly that it came from the role family
+      and not from a posting, so nothing downstream can mistake it for a
+      quote from a real JD.
+
+    `archetype` is the ONE optional question we're willing to ask — the role
+    category (AI PM, Growth PM, …) when the candidate happens to know it.
+    Anything outside the track's own list is ignored rather than trusted, so
+    the fallback is always the plain generic role. We deliberately do NOT ask
+    for seniority: without a posting we have no honest way to pick a rung, so
+    the schema's required field takes the track's middle default and no prose
+    claims a level.
+
+    Costs no model call — there is no text to read.
+    """
+    tr = track_config(track_key)
+    flavour = (archetype or "").strip()
+    if flavour not in tr["archetype_options"]:
+        flavour = tr["default_archetype"]
+    generic = flavour == tr["default_archetype"]
+    described = tr["role_noun"] if generic else f"{flavour} {tr['role_noun']}"
+    return sanitize_target(
+        TargetProfile(
+            company="",
+            roleTitle=described[:1].upper() + described[1:],
+            seniority=tr["default_seniority"],
+            archetype=flavour,
+            requiredCompetencies=[
+                RequiredCompetency(
+                    competency=c,
+                    weight=3,
+                    evidence=f"No job description — core competency for {described} roles.",
+                )
+                for c in tr["taxonomy"]
+            ],
+            unwrittenPain=(
+                f"No specific opening: preparing for {described} roles in "
+                "general, so treat every competency as equally likely to be "
+                "tested."
+            ),
+            companyValues=[],
+        ),
+        track_key=tr["key"],
+    )
+
+
 def extract_target(
     client: Any, jd_text: str, model: str, track_key: str = "pm"
 ) -> TargetProfile:

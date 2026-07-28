@@ -68,6 +68,7 @@ from ..prep_engine import (
     extract_target,
     extract_units,
     gap_sprint,
+    generic_target,
     grill_map,
     interviewer_twin,
     learning_plan,
@@ -78,7 +79,11 @@ from ..prep_engine import (
     score_coverage,
     transcript_stats,
 )
+from ..guide_glossary import STOPWORDS as GLOSSARY_STOPWORDS
+from ..guide_glossary import lookup as glossary_lookup
+from ..guide_glossary import normalize as glossary_normalize
 from ..prep_tracks import rounds_for
+from ..prep_tracks import track as track_config
 from ..recruiter_kb import recruiter_guide, recruiter_system_prompt
 from ..resources import resources_for
 from ..skill_graph import SkillGraph
@@ -139,6 +144,11 @@ RECRUITER_MODEL = os.environ.get(
     "PMCP_RECRUITER_MODEL", _MODEL_OVERRIDE or "claude-sonnet-5"
 )
 RECRUITER_HOURLY_PER_IP = int(os.environ.get("PMCP_RECRUITER_HOURLY_PER_IP", "40"))
+# The guide's word-explainer. Haiku on purpose: the answers are two sentences
+# of plain English, the endpoint is open, and this is the cheapest model we
+# have. Override with PMCP_GUIDE_MODEL; _MODEL_OVERRIDE deliberately does NOT
+# apply, so pointing PMCP_MODEL at Opus can't silently make this expensive.
+GUIDE_MODEL = os.environ.get("PMCP_GUIDE_MODEL", "claude-haiku-4-5-20251001")
 RECRUITER_MAX_HISTORY = 30  # messages of context kept per request
 RECRUITER_MAX_CHARS = 6000  # per-message input cap
 AUTH_HOURLY_PER_IP = int(os.environ.get("PMCP_AUTH_HOURLY_PER_IP", "20"))
@@ -215,6 +225,17 @@ PREP_BANK_CALLS = SlidingLimit(PREP_BANK_HOURLY_PER_IP, 3600)
 # uploads rewrite up to 30k rows each, so they get their own tighter budget.
 PODS_CALLS = SlidingLimit(int(os.environ.get("PMCP_PODS_HOURLY_PER_IP", "240")), 3600)
 PODS_SHARES = SlidingLimit(int(os.environ.get("PMCP_PODS_SHARES_PER_IP", "12")), 3600)
+# The Field Guide's "what does this word mean?" popover. This is the ONE model
+# endpoint that is deliberately open — its readers are people who don't know
+# what a PM is yet, and making them sign in to look up "funnel" would defeat
+# the page. Being open, it carries its own belt and braces instead of a login:
+# the curated glossary answers most lookups with no model call at all, the
+# model is Haiku with a ~200-token ceiling, and there is a GLOBAL hourly cap on
+# top of the per-IP one so rotating IPs still can't run up a bill.
+GUIDE_EXPLAIN = SlidingLimit(int(os.environ.get("PMCP_GUIDE_HOURLY_PER_IP", "40")), 3600)
+GUIDE_EXPLAIN_ALL = SlidingLimit(
+    int(os.environ.get("PMCP_GUIDE_HOURLY_TOTAL", "600")), 3600
+)
 ACTIVE = Gauge()
 
 
@@ -572,6 +593,106 @@ async def guide_page(request: Request) -> FileResponse:
     return _page("guide.html", request)
 
 
+GUIDE_EXPLAIN_PROMPT = """You explain one word or phrase to someone who has \
+never worked in tech and is reading a beginner's guide to product management.
+
+Explain: {term}
+{context}
+Rules:
+- Two or three short sentences, then one concrete everyday example.
+- Plain English only. Never explain jargon using more jargon.
+- If it is an ordinary English word here and not a work term, just say what it \
+means in this sentence — do not invent a business meaning for it.
+- No preamble, no "great question", no markdown headings. Just the explanation.
+"""
+
+
+@app.post("/api/guide/explain")
+async def guide_explain(request: Request) -> JSONResponse:
+    """"What does this word mean?" for the Field Guide.
+
+    Deliberately OPEN — no login. The guide exists for people who don't yet
+    know what a PM is, and a sign-in wall in front of the word "funnel" would
+    defeat it. The cost controls stand in for the login:
+
+      * the curated glossary answers first, with no model call at all, and it
+        covers the guide's own vocabulary by construction (we write the copy),
+      * anything else goes to Haiku with a ~200-token ceiling and hard input
+        caps, so a single call is worth a fraction of a penny,
+      * per-IP AND global hourly limits, so rotating IPs can't run up a bill,
+      * same-origin + visitor cookie, so it isn't trivially scriptable from
+        another page.
+    """
+    if not _same_origin(request):
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=403)
+    try:
+        data = await request.json()
+        assert isinstance(data, dict)
+    except Exception:  # noqa: BLE001
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=400)
+
+    term = str(data.get("term") or "").strip()[:60]
+    if not term:
+        return JSONResponse({"ok": False, "error": "nothing to explain"}, status_code=400)
+
+    # The free path first: no limiter, no spend, works for everyone forever.
+    hit = glossary_lookup(term)
+    if hit:
+        return JSONResponse({"ok": True, "found": True, "source": "glossary", **hit})
+
+    # Selecting text catches stray everyday words. Answering those from the
+    # model would be spend with no value, so they're turned away before it.
+    words = glossary_normalize(term).split()
+    if words and all(w in GLOSSARY_STOPWORDS for w in words):
+        return JSONResponse(
+            {
+                "ok": True,
+                "found": False,
+                "term": term,
+                "plain": "That's just an everyday word here — nothing technical to unpack.",
+            }
+        )
+
+    if not request.cookies.get(UID_COOKIE):
+        return JSONResponse({"ok": False, "error": "bad request"}, status_code=403)
+    if not GUIDE_EXPLAIN.allow(_client_ip(request)) or not GUIDE_EXPLAIN_ALL.allow("*"):
+        return JSONResponse(
+            {"ok": False, "error": "too many lookups just now — try again shortly"},
+            status_code=429,
+        )
+
+    sentence = str(data.get("context") or "").strip()[:300]
+    prompt = GUIDE_EXPLAIN_PROMPT.format(
+        term=term,
+        context=f'It appeared in this sentence: "{sentence}"\n' if sentence else "",
+    )
+    try:
+        resp = await asyncio.to_thread(
+            lambda: anthropic.Anthropic().messages.create(
+                model=GUIDE_MODEL,
+                max_tokens=200,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        )
+        plain = "".join(
+            b.text for b in resp.content if getattr(b, "type", "") == "text"
+        ).strip()
+    except Exception as exc:  # noqa: BLE001
+        print(f"guide explain model error: {exc!r}", flush=True)
+        return JSONResponse(
+            {"ok": False, "error": "couldn't look that one up — try again"},
+            status_code=502,
+        )
+    if not plain:
+        return JSONResponse(
+            {"ok": False, "error": "couldn't look that one up — try again"},
+            status_code=502,
+        )
+    return JSONResponse(
+        {"ok": True, "found": True, "source": "model", "term": term, "plain": plain}
+    )
+
+
 @app.get("/arena")
 async def arena_page(request: Request) -> FileResponse:
     return _page("arena.html", request)
@@ -844,17 +965,29 @@ async def prep_extract_units(request: Request) -> JSONResponse:
 
 @app.post("/api/prep/extract-target")
 async def prep_extract_target(request: Request) -> JSONResponse:
-    """JD -> TargetProfile, saved as an application (campaign) row."""
+    """JD -> TargetProfile, saved as an application (campaign) row.
+
+    The JD is OPTIONAL. With one, the model decodes the specific opening.
+    Without one, we build the track's role-family target instead — same
+    shape, so the heatmap and everything after it work identically. The only
+    thing we'll optionally ask for is `archetype`, the role category (AI PM,
+    Growth PM, …); off-list values fall back to the plain generic role, and
+    seniority is never asked. That path costs no model call, so it isn't
+    rate-limited into the model budget either."""
     email, err = _prep_gate(request)
     if err is not None:
         return err
     data = await _prep_body(request)
     text = _prep_text(data or {})
+    track = _prep_track(data or {})
     if not text:
-        return JSONResponse({"ok": False, "error": "paste the JD first"}, status_code=400)
-    result = await _prep_model_call(extract_target, text, PREP_MODEL, _prep_track(data or {}))
-    if isinstance(result, JSONResponse):
-        return result
+        result = generic_target(
+            track, archetype=str((data or {}).get("archetype") or "").strip() or None
+        )
+    else:
+        result = await _prep_model_call(extract_target, text, PREP_MODEL, track)
+        if isinstance(result, JSONResponse):
+            return result
     bank = _bank()
     try:
         tid = bank.save_target(email, result.model_dump(), [])
@@ -1299,6 +1432,25 @@ async def prep_rounds(track: str = "pm") -> JSONResponse:
     family actually faces). Static curated data straight from the recruiter
     KB — browsable without login, like the recruiter's field guide."""
     return JSONResponse({"ok": True, "rounds": rounds_for("ds" if track == "ds" else "pm")})
+
+
+@app.get("/api/prep/role-categories")
+async def prep_role_categories(track: str = "pm") -> JSONResponse:
+    """The role categories the no-JD path will accept, with display labels.
+
+    Served rather than mirrored in JS so the picker can never drift from the
+    closed list the server validates against — an option the page offers is
+    by construction one the server honours."""
+    tr = track_config("ds" if track == "ds" else "pm")
+    return JSONResponse(
+        {
+            "ok": True,
+            "categories": [
+                {"value": v, "label": lab}
+                for v, lab in zip(tr["archetype_options"], tr["archetype_labels"])
+            ],
+        }
+    )
 
 
 @app.post("/api/prep/grill-map")

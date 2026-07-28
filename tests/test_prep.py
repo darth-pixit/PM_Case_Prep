@@ -23,6 +23,7 @@ from pmcaseprep.prep_engine import (  # noqa: E402
     TargetProfile,
     audit_story,
     fill_prompt,
+    generic_target,
     load_prompt,
     sanitize_heatmap,
     sanitize_target,
@@ -287,3 +288,66 @@ def test_prompts_state_the_no_fabrication_rule():
 def test_fill_prompt_rejects_missing_placeholder():
     with pytest.raises(KeyError):
         fill_prompt("no tokens here", TAXONOMY="x")
+
+
+# --- The JD is optional -------------------------------------------------------
+
+def test_generic_target_covers_the_whole_track_taxonomy():
+    """No JD means no basis to rank one competency above another, so the
+    role-family target requires all of them at equal weight — and the shape
+    stays a real TargetProfile so the heatmap needs no special case."""
+    from pmcaseprep.prep_tracks import track as track_config
+
+    for track_key in ("pm", "ds"):
+        t = generic_target(track_key)
+        taxonomy = set(track_config(track_key)["taxonomy"])
+        assert {rc.competency for rc in t.requiredCompetencies} == taxonomy
+        assert {rc.weight for rc in t.requiredCompetencies} == {3}
+        assert t.track == track_key
+
+
+def test_generic_target_invents_no_employer():
+    """The whole point of the no-JD path is honesty: it must never conjure a
+    company, and its evidence must not read like a quote from a real posting."""
+    t = generic_target("pm")
+    assert t.company == ""
+    assert t.companyValues == []
+    for rc in t.requiredCompetencies:
+        assert "No job description" in rc.evidence
+    assert "No specific opening" in t.unwrittenPain
+
+
+def test_generic_target_takes_a_role_category_but_never_trusts_it():
+    """The role category is the ONE optional question — and it's a closed
+    list, so anything else quietly becomes the plain generic role."""
+    t = generic_target("pm", archetype="AI")
+    assert t.archetype == "AI" and t.roleTitle == "AI product manager"
+
+    for bogus in ("Emperor", "ML & Modeling", "<script>", "", None):
+        g = generic_target("pm", archetype=bogus)
+        assert g.archetype == "General", bogus
+        # A generic role names no category, in the title or the prose.
+        assert g.roleTitle == "Product manager"
+        assert "General" not in g.unwrittenPain
+
+    assert generic_target("ds", archetype="ML & Modeling").archetype == "ML & Modeling"
+    assert generic_target("ds", archetype="AI").archetype == "General"  # PM's list
+
+
+def test_generic_target_never_claims_a_seniority():
+    """We don't ask for a rung without a posting, so no prose may imply one —
+    the schema's required field just takes the track's middle default."""
+    for track_key, default in (("pm", "PM"), ("ds", "Mid")):
+        t = generic_target(track_key)
+        assert t.seniority == default
+        blob = t.unwrittenPain + t.roleTitle + t.requiredCompetencies[0].evidence
+        assert default not in blob
+
+
+def test_generic_target_feeds_the_heatmap_unchanged():
+    """The no-JD target must survive the same sanitizer the real pipeline
+    runs, so nothing downstream can tell the two apart structurally."""
+    t = generic_target("pm")
+    cells = sanitize_heatmap([], t, [])
+    assert len(cells) == len(t.requiredCompetencies)
+    assert all(c.strength == "red" for c in cells)  # no units -> nothing covered

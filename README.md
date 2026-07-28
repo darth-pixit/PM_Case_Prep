@@ -28,7 +28,7 @@ bleed into each other:
 | `/arena` | **Case Arena** — 5 PM tracks × 5 cases each, pick-your-case | **required at start** | `experiment=arena`, `arena_*` events |
 | `/recruiter` | **Recruiter Copilot** — hiring for AI/DS without being an expert | required for chat; field guide open | `experiment=recruiter`, `recruiter_*` events |
 | `/referrals` | **Referral Paths** — closeness-ranked referral map from your own data exports, plus multiplayer job-hunt pods | solo: none (all client-side) · pods: required | `experiment=referrals`, `referrals_*` events |
-| `/prep` | **Prep Engine** — a compounding story bank: CV + JD → coverage heatmap, pressure-tested STAR stories, grill room, learning plan, mock loop, debrief write-back | **required** (bank follows the account) | `experiment=prep`, `prep_*` events |
+| `/prep` | **Prep Engine** — a compounding story bank: CV (+ optional JD) → coverage heatmap, pressure-tested STAR stories, grill room, learning plan, mock loop, debrief write-back | **required** (bank follows the account) | `experiment=prep`, `prep_*` events |
 | `/prep-ds` | **Prep Engine · Data Science** — the same engine on the DS track: DS taxonomy (SQL, stats, ML, experimentation, GenAI…), DS-tuned prompts, researched loop map | **required** (loop map open) | `experiment=prep-ds`, `prep-ds_*` events |
 
 Every PostHog event carries an `experiment` super property, so per-experiment
@@ -60,6 +60,44 @@ editorial and they're tools. Content lives in one `CONTENT` object in
 `web/static/guide.js` so copy edits never touch render code. Like every other
 experiment it is **self-contained** — it links to no other surface, so its
 funnel measures the guide and nothing else.
+
+**The guide keeps the real vocabulary on purpose.** Cart abandonment, funnel,
+segmenting, A/B test, sprint — a reader who finishes it should have *learned*
+those words, not been protected from them. Two features carry that load
+instead of dumbed-down prose: an explainer on any word, and a walkthrough of
+the one screen you operate rather than read.
+
+**A walkthrough on "You're the PM."** Every other chapter you just read;
+chapter 4 you play — you pick, you lock in, you carry choices forward, and the
+select-to-explain gesture is invisible until someone points it out. So the
+first visit gets four short coach marks (the brief, picking an option, the
+explainer, your running log), shown once, remembered in `localStorage`, and
+replayable any time from the "How this page works" link next to the round
+counter. A step whose target isn't on screen is skipped rather than pointing
+at nothing.
+
+**"What does this mean?"** Select any word or phrase anywhere in the guide and
+a chip offers to explain it; the popover also takes a typed question. This is
+the **one model endpoint with no login** (`/api/guide/explain`) — its readers
+are exactly the people who don't have an account, and a sign-in wall in front
+of the word *funnel* would defeat the page. It carries its own cost controls
+instead:
+
+- `guide_glossary.py` is a **curated plain-English glossary** that answers
+  first, with no model call at all. It covers the guide's own vocabulary by
+  construction, since we write the copy. Keys are normalized (lowercased,
+  depluralized, de-gerunded) because text selection yields whatever the cursor
+  grabbed — `Funnels`, `funnel,` and `FUNNEL` all hit one entry.
+- Stray everyday words (`changes`, `everyone`, `the`) hit a **stopword list**
+  and are turned away *before* the model — otherwise every clumsy double-click
+  would be a paid call. It's checked after the glossary, so terms that are also
+  ordinary words (`ship`, `default`, `margin`, `spec`) still get explained.
+- Only genuine misses reach the model, and that's **Haiku** with a 200-token
+  ceiling, capped input, same-origin + visitor-cookie checks, and **both** a
+  per-IP and a global hourly limit (`PMCP_GUIDE_HOURLY_PER_IP`,
+  `PMCP_GUIDE_HOURLY_TOTAL`) so rotating IPs can't run up a bill. `PMCP_MODEL`
+  deliberately does **not** override `PMCP_GUIDE_MODEL`, so pointing the global
+  override at Opus can't silently make this expensive.
 
 **The arena's case bank** lives in `cases/arena/` (the tutor's bank at
 `cases/` is untouched): 25 original cases across the five highest-hiring PM
@@ -100,6 +138,27 @@ pack. Truthfulness is enforced in code, not just prompts: a deterministic
 audit nulls extracted metrics whose numbers aren't in the source, downgrades
 "green" cells that cite no real unit, and flags story numbers found in no
 unit under `unverifiedClaims` for explicit user confirmation.
+
+**The JD is optional.** Paste one and the model decodes that specific opening;
+leave it empty and you prep for a **generic PM role** instead — you're usually
+prepping for a role, not only for one posting. Without a JD the engine invents
+no employer (`company` stays empty) and requires *every* competency in the
+track's taxonomy at equal weight, because there's no basis to rank one above
+another; each `evidence` line says so plainly, so nothing downstream can
+mistake it for a quote from a real posting.
+
+The one thing it will optionally ask is the **role category** — AI PM, Growth
+PM, Platform, 0-to-1, Data, Core (and the DS equivalents on `/prep-ds`) — for
+candidates who know it. That list is a closed set served by
+`/api/prep/role-categories`, so the picker can never offer a value the server
+would discard, and anything off-list falls back to the plain generic role.
+Seniority is deliberately **never asked**: without a posting there's no honest
+way to pick a rung, so the schema's required field takes the track's middle
+default and no prose claims a level.
+
+The path costs **no model call** — there's no text to read — and the result is
+an ordinary `TargetProfile`, so the heatmap, stories, grill room and learning
+plan all run unchanged.
 
 The engine is **track-aware** (`prep_tracks.py`): `/prep` runs the PM track,
 `/prep-ds` runs Data Science on the same loop with its own 12-competency
