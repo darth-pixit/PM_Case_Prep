@@ -17,6 +17,9 @@
 
   const track = PMCP.experiment("guide").track;
   const esc = PMCP.esc;
+  // Phone layout, live — the ask box and the walkthrough both behave
+  // differently there, and it has to survive a rotation mid-tour.
+  const MOBILE = window.matchMedia("(max-width: 720px)");
 
   // ── content ───────────────────────────────────────────────────────────────
 
@@ -535,7 +538,7 @@
       <div class="g-intro">
         <div class="g-kicker">Chapter 4 · You're the PM</div>
         <h1 class="g-chapter-h1">One problem. Six decisions. Your quarter.</h1>
-        <p>This is a case you play. The mission never changes — but every call you make changes what you know for the next one. Pick, see how a seasoned PM would think about it, then carry your choices forward. At the end, compare your run to the ideal one.</p>
+        <p>This is a case you play. The mission never changes — but every call you make changes what you know for the next one. Pick, see how a seasoned PM would think about it, then carry your choices forward. At the end, compare your run to the ideal one. Hit a word you don't know? <b>Explain a word</b> is in the corner of every chapter.</p>
       </div>
 
       <div class="g-dark g-brief">
@@ -668,145 +671,155 @@
       </div>`,
   };
 
-  // ── "what does this mean?" ─────────────────────────────────────────────────
-  // Select any word (or double-tap it) anywhere in the guide and a chip offers
-  // to explain it; the popover also takes a typed question. Most lookups are
-  // answered from a curated glossary server-side, so they're instant and cost
-  // nothing — the model is only reached for words we haven't written down.
+  // ── "explain a word" ──────────────────────────────────────────────────────
+  // A button that's always there, on every chapter, opening a box you type a
+  // word into. It used to be a select-the-word gesture; that's genuinely
+  // awkward on a phone — the OS selection handles fight anything you float
+  // next to them — so the box is now permanent and always typed into.
+  //
+  // Most answers come from a curated glossary server-side: instant, free, and
+  // available logged out. Only words we haven't written down reach the model.
   const ask = (() => {
-    let chip = null, pop = null, lastTerm = "";
+    let launcher = null, panel = null, out = null, input = null;
+    let starters = null;  // fetched once, lazily, on first open
+    let pending = "";     // the term whose answer we're waiting on
 
-    const close = () => {
-      if (chip) { chip.remove(); chip = null; }
-      if (pop) { pop.remove(); pop = null; }
-    };
-    const hideChip = () => { if (chip) { chip.remove(); chip = null; } };
-
-    // The sentence around the selection, so the model can tell "ship a
-    // feature" from "ship at sea". Cheap to send, and it stays server-capped.
-    function sentenceAround(sel) {
-      try {
-        const whole = sel.anchorNode && sel.anchorNode.textContent;
-        if (!whole) return "";
-        return whole.trim().slice(0, 300);
-      } catch { return ""; }
+    function mount() {
+      launcher = document.createElement("button");
+      launcher.type = "button";
+      launcher.className = "g-ask-btn";
+      launcher.setAttribute("aria-haspopup", "dialog");
+      launcher.setAttribute("aria-expanded", "false");
+      launcher.innerHTML =
+        `<span class="g-ask-btn-i" aria-hidden="true">?</span><span>Explain a word</span>`;
+      launcher.onclick = () => (panel ? close() : open());
+      document.body.appendChild(launcher);
     }
 
-    function place(node, rect) {
-      // Positioned in page space so the popover scrolls with the text.
-      node.style.left = (rect.left + rect.width / 2 + window.scrollX) + "px";
-      node.style.top = (rect.bottom + window.scrollY + 8) + "px";
+    function close() {
+      if (!panel) return;
+      panel.remove();
+      panel = out = input = null;
+      document.body.classList.remove("g-ask-on");
+      launcher.setAttribute("aria-expanded", "false");
     }
 
-    function open(term, context, rect) {
-      close();
-      lastTerm = term;
-      pop = document.createElement("div");
-      pop.className = "g-pop";
-      pop.innerHTML = `
-        <div class="g-pop-head">
-          <div class="g-pop-term">${esc(term)}</div>
-          <button class="g-pop-x" data-x aria-label="Close">×</button>
+    function open(term) {
+      if (panel) { if (term) submit(term); return; }
+      panel = document.createElement("div");
+      panel.className = "g-ask-panel";
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-label", "Explain a word");
+      panel.innerHTML = `
+        <div class="g-ask-head">
+          <div class="g-ask-title">Explain a word</div>
+          <button class="g-ask-x" type="button" data-x aria-label="Close">×</button>
         </div>
-        <div class="g-pop-body" data-body>Looking that up…</div>
-        <div class="g-pop-hint">
-          <input type="text" data-q placeholder="Ask about another word…"
-                 style="width:100%;padding:7px 12px;border-radius:999px;border:1px solid var(--color-divider);font:inherit;font-size:13.5px;background:var(--color-bg);color:var(--color-text);" />
+        <form class="g-ask-form" data-form>
+          <input class="g-ask-in" data-in type="text" autocomplete="off"
+                 enterkeyhint="go" aria-label="Word or phrase to explain"
+                 placeholder="Type a word — funnel, churn, A/B test…" />
+          <button class="btn btn-primary g-ask-go" type="submit">Explain</button>
+        </form>
+        <div class="g-ask-chips" data-chips></div>
+        <div class="g-ask-out" data-out>
+          <div class="g-ask-idle">Any word from the guide — or any word at all. You get
+          two sentences of plain English and an everyday example. No jargon, no account.</div>
         </div>`;
-      document.body.appendChild(pop);
-      place(pop, rect);
-      pop.querySelector("[data-x]").onclick = close;
-      const q = pop.querySelector("[data-q]");
-      q.addEventListener("keydown", (e) => {
-        if (e.key !== "Enter") return;
-        const v = q.value.trim();
-        if (v) { open(v, "", rect); }
-      });
-      fetchExplain(term, context, rect);
+      document.body.appendChild(panel);
+      document.body.classList.add("g-ask-on");
+      launcher.setAttribute("aria-expanded", "true");
+      out = panel.querySelector("[data-out]");
+      input = panel.querySelector("[data-in]");
+      panel.querySelector("[data-x]").onclick = close;
+      panel.querySelector("[data-form]").onsubmit = (e) => {
+        e.preventDefault();
+        submit(input.value);
+      };
+      loadStarters();
+      track("ask_opened", { screen: S.screen });
+      if (term) submit(term); else input.focus();
     }
 
-    async function fetchExplain(term, context, rect) {
+    async function loadStarters() {
+      if (!starters) {
+        try {
+          const r = await fetch("/api/guide/terms");
+          const d = await r.json();
+          starters = d && d.ok && Array.isArray(d.terms) ? d.terms : [];
+        } catch { starters = []; }
+      }
+      if (!panel) return;
+      const box = panel.querySelector("[data-chips]");
+      box.innerHTML = starters
+        .map((t) => `<button type="button" class="g-ask-chip" data-t="${esc(t)}">${esc(t)}</button>`)
+        .join("");
+      box.querySelectorAll("[data-t]").forEach((b) => {
+        b.onclick = () => submit(b.dataset.t);
+      });
+    }
+
+    async function submit(raw) {
+      const term = String(raw || "").trim().slice(0, 60);
+      if (!term) { if (input) input.focus(); return; }
+      if (input) input.value = term;
+      pending = term;
+      out.innerHTML = `<div class="g-ask-idle">Looking up “${esc(term)}”…</div>`;
       let d = null;
       try {
         const r = await fetch("/api/guide/explain", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ term, context }),
+          body: JSON.stringify({ term }),
         });
         d = await r.json();
       } catch { d = null; }
-      if (!pop || lastTerm !== term) return; // a newer question overtook this one
-      const body = pop.querySelector("[data-body]");
+      if (!panel || pending !== term) return;  // a newer question overtook this one
       if (!d || !d.ok) {
-        body.textContent = (d && d.error) || "Couldn't look that one up — try again.";
-      } else {
-        body.innerHTML = esc(d.plain).replace(/\n+/g, "<br>") +
-          (d.example ? `<div class="g-pop-eg"><b>For example</b>${esc(d.example)}</div>` : "");
-        track("term_explained", { term: term.slice(0, 40), source: d.source });
+        out.innerHTML =
+          `<div class="g-ask-err">${esc((d && d.error) || "Couldn't look that one up — try again.")}</div>`;
+        return;
       }
-      place(pop, rect);
-    }
-
-    // Offer the chip whenever there's a real selection inside the guide.
-    document.addEventListener("mouseup", onSelect);
-    document.addEventListener("touchend", onSelect);
-
-    function onSelect(e) {
-      if (pop && pop.contains(e.target)) return;
-      setTimeout(() => {
-        const sel = window.getSelection();
-        const text = sel ? String(sel).trim() : "";
-        // A phrase is fine; a paragraph isn't what this is for.
-        if (!text || text.length > 60 || text.split(/\s+/).length > 6) return hideChip();
-        const main = el("main");
-        if (!main || !sel.anchorNode || !main.contains(sel.anchorNode)) return hideChip();
-        const rect = sel.getRangeAt(0).getBoundingClientRect();
-        if (!rect.width && !rect.height) return hideChip();
-        hideChip();
-        chip = document.createElement("button");
-        chip.className = "g-ask";
-        chip.textContent = `What does "${text.length > 22 ? text.slice(0, 22) + "…" : text}" mean?`;
-        chip.onclick = () => open(text, sentenceAround(sel), rect);
-        document.body.appendChild(chip);
-        place(chip, rect);
-      }, 0);
+      out.innerHTML =
+        `<div class="g-ask-term">${esc(d.term || term)}</div>` +
+        `<div class="g-ask-plain">${esc(d.plain).replace(/\n+/g, "<br>")}</div>` +
+        (d.example ? `<div class="g-ask-eg"><b>For example</b>${esc(d.example)}</div>` : "");
+      track("term_explained", { term: term.slice(0, 40), source: d.source || "none" });
     }
 
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    // Click-away closes the floating desktop panel. On a phone it's a
+    // full-screen sheet, so there is no "away" to click.
     document.addEventListener("mousedown", (e) => {
-      if (pop && !pop.contains(e.target) && !(chip && chip.contains(e.target))) close();
+      if (!panel || MOBILE.matches) return;
+      if (!panel.contains(e.target) && !launcher.contains(e.target)) close();
     });
 
+    mount();
     return { open, close };
   })();
 
   // ── first-run walkthrough (chapter 4 only) ────────────────────────────────
-  // Every other chapter you just read. Chapter 4 you operate: you pick, you
-  // lock in, you carry choices forward — and the select-to-explain gesture is
-  // invisible until someone tells you. So the first visit gets four short
-  // coach marks, once, remembered in localStorage and replayable from a link.
+  // Every other chapter you just read. Chapter 4 you operate — and the two
+  // things that aren't obvious are that picking an option explains itself, and
+  // that there's a word-explainer one tap away. So: exactly two coach marks,
+  // once, remembered in localStorage and replayable from a link.
   const tour = (() => {
-    const KEY = "pmcp_guide_tour_v1";
+    const KEY = "pmcp_guide_tour_v2";
     const STEPS = [
       {
-        sel: ".g-brief",
-        title: "One brief, six rounds",
-        body: "This is your case. The problem never changes — what changes is what you learn from each call you make.",
-      },
-      {
         sel: ".g-round .g-opts",
-        title: "Pick, and see the thinking",
-        body: "Choose an option and it tells you straight away how a seasoned PM would read it. There's no way to lose — the 'wrong' answers are where the lesson is.",
+        title: "Pick one — then read the reasoning",
+        body: "Every option explains itself the moment you choose it: why a seasoned PM would rate that call the way they do. Nothing is scored against you, and the tempting wrong answers are where most of the lesson lives.",
       },
       {
-        sel: ".g-brief-t",
-        title: "Stuck on a word?",
-        body: "Select any word or phrase — anywhere on the page — and we'll explain it in plain English. You can type a question too.",
-      },
-      {
-        sel: ".g-run",
-        title: "Your run builds up here",
-        body: "Each call is added to your run. At the end of the quarter you compare it against how an experienced PM would have played it.",
+        sel: ".g-ask-btn",
+        title: "Hit a word you don't know? Ask",
+        body: "That button is on every chapter. Type any word into it and you get plain English back — no jargon explained with more jargon.",
+        eg: {
+          term: "funnel",
+          text: "the steps someone walks through to finish something. 100 people start, 30 finish — the other 70 leaked out along the way.",
+        },
       },
     ];
 
@@ -818,6 +831,7 @@
       [veil, ring, card].forEach((n) => n && n.remove());
       veil = ring = card = null;
       window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition);
     }
 
     function stop(completed) {
@@ -826,38 +840,61 @@
       teardown();
     }
 
+    // Ring and card are position:fixed, so viewport coordinates are all that's
+    // needed and scrolling mid-step can't leave the highlight behind.
     function reposition() {
       if (!card) return;
-      const step = STEPS[i];
-      const node = document.querySelector(step.sel);
+      const node = document.querySelector(STEPS[i].sel);
       if (!node) return;
       const r = node.getBoundingClientRect();
-      ring.style.left = (r.left + window.scrollX) + "px";
-      ring.style.top = (r.top + window.scrollY) + "px";
+      ring.style.left = r.left + "px";
+      ring.style.top = r.top + "px";
       ring.style.width = r.width + "px";
       ring.style.height = r.height + "px";
-      // Prefer below the target; flip above when that would run off-screen.
-      const below = r.bottom + window.scrollY + 18;
-      const fitsBelow = r.bottom + 200 < window.innerHeight;
-      card.style.top = fitsBelow ? below + "px" : (r.top + window.scrollY - card.offsetHeight - 18) + "px";
-      const left = Math.min(
-        Math.max(12, r.left + window.scrollX),
-        window.scrollX + window.innerWidth - card.offsetWidth - 12
-      );
-      card.style.left = left + "px";
+      if (MOBILE.matches) {
+        // On phones the card is a sheet pinned to one edge (guide.css) —
+        // inline positioning would beat that stylesheet rule, so leave it
+        // alone and just pick the edge furthest from what's highlighted.
+        card.style.top = card.style.left = "";
+        card.classList.toggle("is-top", r.top > window.innerHeight / 2);
+        return;
+      }
+      // Below the target if it fits, above if that fits instead; if neither
+      // does, the roomier side, clamped on screen. The card must never cover
+      // the thing it's describing.
+      const h = card.offsetHeight, gap = 18, edge = 12;
+      const below = window.innerHeight - r.bottom, above = r.top;
+      let top;
+      if (below >= h + gap + edge) top = r.bottom + gap;
+      else if (above >= h + gap + edge) top = r.top - h - gap;
+      else if (below >= above) top = Math.min(r.bottom + gap, window.innerHeight - h - edge);
+      else top = Math.max(edge, r.top - h - gap);
+      card.style.top = top + "px";
+      card.style.left =
+        Math.min(Math.max(edge, r.left), window.innerWidth - card.offsetWidth - edge) + "px";
     }
 
     function show() {
-      // Skip a step whose target isn't on screen (the sidebar is laid out
-      // differently on phones, and the round card is gone once the case ends).
+      // Skip a step whose target isn't on the page — the round card is gone
+      // once the case is finished.
       while (i < STEPS.length && !document.querySelector(STEPS[i].sel)) i++;
       if (i >= STEPS.length) return stop(true);
       const step = STEPS[i];
-      document.querySelector(step.sel).scrollIntoView({ block: "center", behavior: "smooth" });
+      const node = document.querySelector(step.sel);
+      // Instant, not smooth: we measure right after, and a smooth scroll would
+      // still be moving. Fixed targets (the ask button) are already in view.
+      //
+      // Parked near the top rather than centred: centring splits the leftover
+      // room in half, and half a viewport often isn't enough for the card.
+      if (getComputedStyle(node).position !== "fixed") {
+        node.scrollIntoView({ block: "start" });
+        window.scrollBy(0, MOBILE.matches ? -86 : -100);  // clear the sticky header
+      }
       card.innerHTML = `
         <div class="g-tour-step">Step ${i + 1} of ${STEPS.length}</div>
         <div class="g-tour-t">${esc(step.title)}</div>
         <div class="g-tour-b">${esc(step.body)}</div>
+        ${step.eg ? `<div class="g-tour-eg"><b>${esc(step.eg.term)}</b>${esc(step.eg.text)}</div>` : ""}
         <div class="g-tour-actions">
           <div class="g-tour-dots">
             ${STEPS.map((_, n) => `<span class="g-tour-dot${n === i ? " is-on" : ""}"></span>`).join("")}
@@ -871,13 +908,12 @@
         if (i >= STEPS.length) return stop(true);
         show();
       };
-      // Wait for the smooth scroll to settle before measuring.
-      setTimeout(reposition, 260);
       reposition();
     }
 
     function start() {
       if (card) return;
+      ask.close();  // the sheet would sit on top of the coach marks
       i = 0;
       veil = document.createElement("div");
       veil.className = "g-tour-veil";
@@ -888,6 +924,7 @@
       card.className = "g-tour-card";
       document.body.append(veil, ring, card);
       window.addEventListener("resize", reposition);
+      window.addEventListener("scroll", reposition, { passive: true });
       track("tour_started");
       show();
     }

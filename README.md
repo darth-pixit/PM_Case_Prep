@@ -68,17 +68,25 @@ instead of dumbed-down prose: an explainer on any word, and a walkthrough of
 the one screen you operate rather than read.
 
 **A walkthrough on "You're the PM."** Every other chapter you just read;
-chapter 4 you play — you pick, you lock in, you carry choices forward, and the
-select-to-explain gesture is invisible until someone points it out. So the
-first visit gets four short coach marks (the brief, picking an option, the
-explainer, your running log), shown once, remembered in `localStorage`, and
-replayable any time from the "How this page works" link next to the round
-counter. A step whose target isn't on screen is skipped rather than pointing
-at nothing.
+chapter 4 you play. Exactly **two** coach marks on the first visit, because
+only two things there aren't self-evident: that picking an option opens up the
+reasoning behind it, and that a word explainer is one tap away (that step
+shows a worked example — *funnel* — and a test pins the term it quotes to a
+real glossary entry, so the demo can't drift from what the box answers). Shown
+once, remembered in `localStorage`, replayable from the "How this page works"
+link next to the round counter. The card is placed on whichever side of the
+highlight has room, so it never covers the thing it's describing.
 
-**"What does this mean?"** Select any word or phrase anywhere in the guide and
-a chip offers to explain it; the popover also takes a typed question. This is
-the **one model endpoint with no login** (`/api/guide/explain`) — its readers
+**"Explain a word."** A button on every chapter opens a box you type any word
+into — a floating card on desktop, a full-height sheet on a phone with the
+field at the *top*, since a bottom-anchored box is exactly what the on-screen
+keyboard covers. Starter chips (`/api/guide/terms`) are all glossary hits by
+construction, so tapping one is instant and free. This was originally a
+select-the-word gesture; selection is awkward on a phone — the OS handles
+fight anything floated next to them — so the gesture is gone and the
+affordance is visible instead.
+
+`/api/guide/explain` is the **one model endpoint with no login**: its readers
 are exactly the people who don't have an account, and a sign-in wall in front
 of the word *funnel* would defeat the page. It carries its own cost controls
 instead:
@@ -86,12 +94,13 @@ instead:
 - `guide_glossary.py` is a **curated plain-English glossary** that answers
   first, with no model call at all. It covers the guide's own vocabulary by
   construction, since we write the copy. Keys are normalized (lowercased,
-  depluralized, de-gerunded) because text selection yields whatever the cursor
-  grabbed — `Funnels`, `funnel,` and `FUNNEL` all hit one entry.
+  depluralized, de-gerunded), so `Funnels`, `funnel,` and `FUNNEL` all hit one
+  entry however someone types it.
 - Stray everyday words (`changes`, `everyone`, `the`) hit a **stopword list**
-  and are turned away *before* the model — otherwise every clumsy double-click
-  would be a paid call. It's checked after the glossary, so terms that are also
-  ordinary words (`ship`, `default`, `margin`, `spec`) still get explained.
+  and are turned away *before* the model — otherwise every idle "why does
+  everyone say ship" would be a paid call. It's checked after the glossary, so
+  terms that are also ordinary words (`ship`, `default`, `margin`, `spec`)
+  still get explained.
 - Only genuine misses reach the model, and that's **Haiku** with a 200-token
   ceiling, capped input, same-origin + visitor-cookie checks, and **both** a
   per-IP and a global hourly limit (`PMCP_GUIDE_HOURLY_PER_IP`,

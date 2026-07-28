@@ -79,6 +79,7 @@ from ..prep_engine import (
     score_coverage,
     transcript_stats,
 )
+from ..guide_glossary import STARTERS as GLOSSARY_STARTERS
 from ..guide_glossary import STOPWORDS as GLOSSARY_STOPWORDS
 from ..guide_glossary import lookup as glossary_lookup
 from ..guide_glossary import normalize as glossary_normalize
@@ -607,6 +608,15 @@ means in this sentence — do not invent a business meaning for it.
 """
 
 
+@app.get("/api/guide/terms")
+async def guide_terms() -> JSONResponse:
+    """The starter chips under the guide's ask box.
+
+    Static and free: every one of these is a glossary hit by construction, so
+    tapping a chip never costs a model call."""
+    return JSONResponse({"ok": True, "terms": list(GLOSSARY_STARTERS)})
+
+
 @app.post("/api/guide/explain")
 async def guide_explain(request: Request) -> JSONResponse:
     """"What does this word mean?" for the Field Guide.
@@ -640,8 +650,8 @@ async def guide_explain(request: Request) -> JSONResponse:
     if hit:
         return JSONResponse({"ok": True, "found": True, "source": "glossary", **hit})
 
-    # Selecting text catches stray everyday words. Answering those from the
-    # model would be spend with no value, so they're turned away before it.
+    # People type whole ordinary phrases into an open box. Answering those from
+    # the model would be spend with no value, so they're turned away before it.
     words = glossary_normalize(term).split()
     if words and all(w in GLOSSARY_STOPWORDS for w in words):
         return JSONResponse(

@@ -1,4 +1,4 @@
-"""Plain-English glossary for the PM Field Guide's "explain this" popover.
+"""Plain-English glossary for the PM Field Guide's "explain a word" box.
 
 The guide is the one surface with no login and no model spend, and its readers
 are the people least likely to have an account — someone who doesn't yet know
@@ -39,9 +39,9 @@ _SPACE = re.compile(r"\s+")
 def normalize(term: str) -> str:
     """Fold the ways people type the same word into one key.
 
-    Selection-based lookup means we get whatever the user's cursor grabbed:
-    trailing commas, capitals, a plural, a gerund. Folding here is far cheaper
-    than storing every variant."""
+    We get whatever someone typed into the ask box: capitals, a trailing
+    comma, a plural, a gerund. Folding here is far cheaper than storing every
+    variant."""
     t = _PUNCT.sub(" ", str(term or "").lower()).strip()
     t = _SPACE.sub(" ", t)
     words = []
@@ -317,15 +317,31 @@ _g(
 )
 
 
-# Everyday English that needs no explaining. Selection-based lookup means a
-# stray double-click lands on words like "changes" or "everyone"; on an open,
-# login-free endpoint each of those would otherwise be a real model call spent
-# on nothing. Checked AFTER the glossary, so terms that are also common words
-# ("ship", "default", "margin", "spec") are answered rather than skipped.
+# The chips the guide's ask box offers before you've typed anything: the words
+# a first-time reader trips over soonest, roughly in the order the guide throws
+# them at you. Every one must resolve in GLOSSARY (a test pins that), so a chip
+# is always instant, always free, and never reaches the model.
+STARTERS: tuple[str, ...] = (
+    "funnel",
+    "cart abandonment",
+    "conversion",
+    "A/B test",
+    "segment",
+    "churn",
+    "MVP",
+    "roadmap",
+)
+
+
+# Everyday English that needs no explaining. People type whole phrases into the
+# ask box — "why does everyone say ship" — and on an open, login-free endpoint
+# each of those would otherwise be a real model call spent on nothing. Checked
+# AFTER the glossary, so terms that are also common words ("ship", "default",
+# "margin", "spec") are answered rather than skipped.
 #
 # Stored NORMALIZED, because that's what the endpoint compares against: the
 # normalizer folds plurals and -ing forms ("changes" -> "chang"), so a raw
-# word list would silently miss exactly the variants a text selection yields.
+# word list would silently miss exactly the variants real typing yields.
 STOPWORDS = frozenset(
     normalize(w)
     for w in """

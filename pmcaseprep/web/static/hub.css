@@ -248,4 +248,8 @@ details.round ul { padding-left: 1.2rem; }
   .auth-email { flex-direction: column; }
   .msg { max-width: 100%; }
   .prep-inputs { grid-template-columns: 1fr; }
+  /* Thumbs, not cursors: the compact variants are comfortable to click and
+     fiddly to tap, so they get their height back on a phone. */
+  .chip { padding: 0.55rem 0.9rem; }
+  .btn.small { padding: 0.5rem 0.8rem; }
 }
