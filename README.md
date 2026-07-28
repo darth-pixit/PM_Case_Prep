@@ -14,9 +14,9 @@ clarify  ->  solve (candidate drives)  ->  graduated hints on demand
          ->  rubric-graded scorecard  ->  longitudinal skill graph
 ```
 
-## Six experiments, one deploy
+## Seven experiments, one deploy
 
-The site runs **six separate experiments on one Render service, one domain,
+The site runs **seven separate experiments on one Render service, one domain,
 one database, and one login system** — but each experiment has its own page,
 its own user experience, and its own analytics namespace, so results never
 bleed into each other:
@@ -24,6 +24,7 @@ bleed into each other:
 | Route | Experiment | Login | Analytics namespace |
 |---|---|---|---|
 | `/` | **Tutor** — the original single-case interview (unchanged) | optional, at scorecard | `experiment=tutor` |
+| `/guide` | **The PM Field Guide** — a six-chapter explainer of the job, with a case you play | **none** — nothing to sign up for | `experiment=guide`, `guide_*` events |
 | `/arena` | **Case Arena** — 5 PM tracks × 5 cases each, pick-your-case | **required at start** | `experiment=arena`, `arena_*` events |
 | `/recruiter` | **Recruiter Copilot** — hiring for AI/DS without being an expert | required for chat; field guide open | `experiment=recruiter`, `recruiter_*` events |
 | `/referrals` | **Referral Paths** — closeness-ranked referral map from your own data exports, plus multiplayer job-hunt pods | solo: none (all client-side) · pods: required | `experiment=referrals`, `referrals_*` events |
@@ -41,6 +42,24 @@ with Google" (a Google-signed ID token verified server-side — set
 so there is nothing to forget and no reset flow to build. Both doors land on
 the same `users` table the tutor already used, and anonymous work done before
 signing in merges into the account.
+
+**The PM Field Guide** (`/guide`) is the only surface that costs nothing to
+serve: no login, no mic, no model call. It's the top of the funnel — someone
+who doesn't yet know what a PM *is* reads six chapters (the role, the six
+flavors of PM, five legendary product calls, a playable case, the skill map,
+breaking in) and comes out knowing whether they want to practice at all.
+Chapter 4 is a **six-round case you play**: one brief (cart abandonment at
+70%), three options a round, immediate feedback on each pick, a running log of
+your calls, and at the end your run against the ideal one plus "what's easy to
+miss". Every chapter is a real URL (`/guide#decisions`), so chapters are
+shareable and the back button works. It was designed in
+[Claude Design](https://claude.ai/design) and ported to vanilla HTML/CSS/JS —
+its "Organic" design tokens live in `web/static/guide.css`, deliberately
+separate from the dark app shell the other pages share, because this page is
+editorial and they're tools. Content lives in one `CONTENT` object in
+`web/static/guide.js` so copy edits never touch render code. Like every other
+experiment it is **self-contained** — it links to no other surface, so its
+funnel measures the guide and nothing else.
 
 **The arena's case bank** lives in `cases/arena/` (the tutor's bank at
 `cases/` is untouched): 25 original cases across the five highest-hiring PM

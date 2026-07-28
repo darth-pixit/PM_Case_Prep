@@ -564,6 +564,14 @@ def _page(name: str, request: Request) -> FileResponse:
     return resp
 
 
+@app.get("/guide")
+async def guide_page(request: Request) -> FileResponse:
+    """The PM Field Guide — pure content, no login, no model spend. It's the
+    top of the funnel: someone who doesn't know what a PM does reads this and
+    leaves knowing whether they want to practice at all."""
+    return _page("guide.html", request)
+
+
 @app.get("/arena")
 async def arena_page(request: Request) -> FileResponse:
     return _page("arena.html", request)

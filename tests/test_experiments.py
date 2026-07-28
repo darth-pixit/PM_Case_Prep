@@ -309,6 +309,7 @@ def test_experiment_pages_served(tmp_path, monkeypatch):
     if client is None:
         return
     for path, marker in (
+        ("/guide", "The Field Guide"),
         ("/arena", "Case Arena"),
         ("/recruiter", "Recruiter Copilot"),
         ("/referrals", "Referral Paths"),
@@ -319,6 +320,35 @@ def test_experiment_pages_served(tmp_path, monkeypatch):
         assert r.status_code == 200 and marker in r.text, path
     guide = client.get("/api/recruiter/guide").json()
     assert "archetypes" in guide
+
+
+def test_field_guide_is_self_contained(tmp_path, monkeypatch):
+    """Like every other experiment, the guide stands alone: it must carry its
+    own assets and analytics namespace, and link to no other surface (see the
+    'each experiment should be self-contained' rule that stripped the
+    cross-experiment footers)."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    html = client.get("/guide").text
+    assert "/static/guide.css" in html and "/static/guide.js" in html
+    # It leans on the shared analytics/login plumbing like every other page.
+    assert "/static/shared.js" in html
+
+    static = webapp.STATIC_DIR
+    js = (static / "guide.js").read_text()
+    # Its own PostHog namespace, so guide funnels never mix with the others.
+    assert 'PMCP.experiment("guide")' in js
+    # All six chapters plus the playable case survived the port.
+    for chapter in ("role", "types", "decisions", "cases", "skills", "breakin"):
+        assert f"{chapter}:" in js, chapter
+    assert js.count('verdict: "best"') == 8  # 6 case rounds + 2 quick-fires
+
+    # No doors out of the guide, and no door in from another experiment.
+    for other in ("/arena", "/recruiter", "/referrals", "/prep", "/prep-ds"):
+        assert f'"{other}"' not in html and f'"{other}"' not in js, other
+    for page in ("arena.html", "recruiter.html", "referrals.html"):
+        assert "/guide" not in (static / page).read_text(), page
 
 
 def test_prep_rounds_endpoint_is_open_and_track_scoped(tmp_path, monkeypatch):
