@@ -410,6 +410,86 @@ def test_role_categories_endpoint_matches_what_the_server_accepts(tmp_path, monk
         assert d["categories"][0]["value"] == "General"  # generic is the default
 
 
+def test_guide_explain_answers_from_the_glossary_without_login_or_model(tmp_path, monkeypatch):
+    """The guide's word-explainer is the one OPEN model endpoint, so the free
+    glossary path must work with no account at all — and must not touch the
+    model. PMCP_GUIDE_MODEL points at nothing here: a model call would 502."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    monkeypatch.setattr(webapp, "GUIDE_MODEL", "no-such-model")
+    client.get("/guide")  # uid cookie, no login
+
+    for term in ("funnel", "Funnels", "FUNNEL,", "segmenting", "A/B test", "cart abandonment"):
+        r = client.post("/api/guide/explain", json={"term": term})
+        assert r.status_code == 200, term
+        d = r.json()
+        assert d["ok"] and d["source"] == "glossary", term
+        assert d["plain"] and d["example"], term
+
+    # Nothing to explain is a 400, not a wasted model call.
+    assert client.post("/api/guide/explain", json={"term": "   "}).status_code == 400
+
+    # Stray everyday words are turned away before the model, not sent to it —
+    # a fake GUIDE_MODEL means any model call here would 502.
+    for filler in ("changes", "everyone", "the", "what you know"):
+        d = client.post("/api/guide/explain", json={"term": filler}).json()
+        assert d["ok"] and d["found"] is False, filler
+
+    # …but a term that is ALSO an everyday word is still explained properly.
+    for real in ("ship", "default", "margin", "spec"):
+        d = client.post("/api/guide/explain", json={"term": real}).json()
+        assert d["ok"] and d.get("source") == "glossary", real
+
+
+def test_guide_explain_guards_the_open_model_path(tmp_path, monkeypatch):
+    """Being login-free, the fallback leans on its other guards: same-origin,
+    a visitor cookie, and rate limits. A glossary miss with no cookie must not
+    reach the model."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    monkeypatch.setattr(webapp, "GUIDE_MODEL", "no-such-model")
+
+    # A foreign page can't drive it, even for a glossary word.
+    r = client.post(
+        "/api/guide/explain",
+        json={"term": "funnel"},
+        headers={"origin": "https://evil.example"},
+    )
+    assert r.status_code == 403
+
+    # No visitor cookie -> the miss is refused before any model call.
+    r = client.post("/api/guide/explain", json={"term": "zzz not a real term"})
+    assert r.status_code == 403
+
+    # With a cookie, the limiter still stands in front of the model.
+    client.get("/guide")
+    monkeypatch.setattr(webapp, "GUIDE_EXPLAIN", webapp.SlidingLimit(0, 3600))
+    r = client.post("/api/guide/explain", json={"term": "zzz not a real term"})
+    assert r.status_code == 429
+
+
+def test_guide_glossary_entries_are_plain_english():
+    """The whole point is explaining jargon to someone who has none, so an
+    entry must not lean on the guide's other jargon to do it."""
+    from pmcaseprep.guide_glossary import GLOSSARY, lookup, normalize, terms
+
+    assert len(terms()) >= 25
+    for entry in GLOSSARY.values():
+        assert entry["plain"] and entry["example"]
+        assert len(entry["plain"]) > 40, entry["term"]
+        # The FIRST sentence has to stand on its own, so it may not lean on the
+        # term itself. Later sentences may ("it's called a funnel because…"),
+        # which explains the name rather than dodging the definition.
+        opener = normalize(entry["plain"].split(".")[0]).split(" ")
+        head = normalize(entry["term"]).split(" ")[0]
+        assert head not in opener, entry["term"]
+    # Normalization folds the shapes a text selection actually produces.
+    assert lookup("Funnels") is lookup("funnel") is lookup("  FUNNEL,  ")
+    assert lookup("nonsense term here") is None
+
+
 def test_prep_rounds_endpoint_is_open_and_track_scoped(tmp_path, monkeypatch):
     client, _ = _client(tmp_path, monkeypatch)
     if client is None:

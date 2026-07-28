@@ -59,7 +59,32 @@ separate from the dark app shell the other pages share, because this page is
 editorial and they're tools. Content lives in one `CONTENT` object in
 `web/static/guide.js` so copy edits never touch render code. Like every other
 experiment it is **self-contained** — it links to no other surface, so its
-funnel measures the guide and nothing else.
+funnel measures the guide and nothing else. The prose is deliberately written
+for someone with no tech background: no jargon goes unexplained, and where a
+term is unavoidable it's said in plain words first.
+
+**"What does this mean?"** Select any word or phrase anywhere in the guide and
+a chip offers to explain it; the popover also takes a typed question. This is
+the **one model endpoint with no login** (`/api/guide/explain`) — its readers
+are exactly the people who don't have an account, and a sign-in wall in front
+of the word *funnel* would defeat the page. It carries its own cost controls
+instead:
+
+- `guide_glossary.py` is a **curated plain-English glossary** that answers
+  first, with no model call at all. It covers the guide's own vocabulary by
+  construction, since we write the copy. Keys are normalized (lowercased,
+  depluralized, de-gerunded) because text selection yields whatever the cursor
+  grabbed — `Funnels`, `funnel,` and `FUNNEL` all hit one entry.
+- Stray everyday words (`changes`, `everyone`, `the`) hit a **stopword list**
+  and are turned away *before* the model — otherwise every clumsy double-click
+  would be a paid call. It's checked after the glossary, so terms that are also
+  ordinary words (`ship`, `default`, `margin`, `spec`) still get explained.
+- Only genuine misses reach the model, and that's **Haiku** with a 200-token
+  ceiling, capped input, same-origin + visitor-cookie checks, and **both** a
+  per-IP and a global hourly limit (`PMCP_GUIDE_HOURLY_PER_IP`,
+  `PMCP_GUIDE_HOURLY_TOTAL`) so rotating IPs can't run up a bill. `PMCP_MODEL`
+  deliberately does **not** override `PMCP_GUIDE_MODEL`, so pointing the global
+  override at Opus can't silently make this expensive.
 
 **The arena's case bank** lives in `cases/arena/` (the tutor's bank at
 `cases/` is untouched): 25 original cases across the five highest-hiring PM

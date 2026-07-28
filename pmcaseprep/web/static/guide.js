@@ -123,71 +123,71 @@
         ask: "Your first move?",
         info: "Day 1. The CEO forwarded the dashboard with \"fix this\" in the subject line. Everyone has a theory. You have twelve weeks.",
         options: [
-          { text: "Propose discounted shipping — attack the obvious cause", verdict: "trap", feedback: "You just prescribed before diagnosing. Discounts cost real margin, and you still don't know whether price is even the problem. Great PMs are slow to solutions and fast to questions." },
-          { text: "Ask analytics exactly where in checkout users drop off", verdict: "best", feedback: "Right instinct: locate the leak before plugging it. A funnel breakdown costs a day and might save the quarter. It comes back: almost all of the drop happens on the exact screen where shipping cost first appears." },
-          { text: "Call a cross-team workshop to brainstorm fixes", verdict: "ok", feedback: "Collaborative, but premature — you'd be brainstorming without facts. Workshops amplify whatever data you bring; bring none and you get loud opinions. Get the funnel numbers first." },
+          { text: "Propose discounted shipping — go straight at the obvious cause", verdict: "trap", feedback: "You just prescribed before diagnosing. Discounts cost real margin, and you still don't know whether price is even the problem. Great PMs are slow to solutions and fast to questions." },
+          { text: "Ask the data team exactly which step shoppers quit on", verdict: "best", feedback: "Right instinct: find the leak before you plug it. A step-by-step breakdown costs a day and might save the quarter. It comes back: nearly everyone quits on the exact screen where the delivery cost first appears." },
+          { text: "Call a cross-team workshop to brainstorm fixes", verdict: "ok", feedback: "Team-spirited, but too early — you'd be brainstorming without facts. A workshop only amplifies the facts you bring; bring none and you get loud opinions. Get the numbers first." },
         ],
       },
       {
         ask: "The drop happens right when shipping cost appears. What do you ask next?",
         info: "So it's the moment costs show up. But is the problem the amount — or the ambush?",
         options: [
-          { text: "Ask: does abandonment change when shipping is cheap vs expensive?", verdict: "best", feedback: "The discriminating question. The data comes back: users abandon at nearly the same rate at $2 shipping as at $12. It's not the price — it's the surprise. You just found the real enemy." },
+          { text: "Ask: does abandonment change when delivery is cheap vs expensive?", verdict: "best", feedback: "Exactly the question that settles it. The data comes back: people quit at nearly the same rate whether delivery costs $2 or $12. It's not the price — it's the surprise. You just found the real enemy." },
           { text: "Email a survey: \"Why didn't you complete your purchase?\"", verdict: "ok", feedback: "Surveys are fine but slow and unreliable here — people rationalize after the fact (\"too expensive\") even when their behavior says otherwise. The behavioral data can answer this faster and more honestly." },
-          { text: "Skip the questions — start negotiating cheaper carrier rates", verdict: "trap", feedback: "Months of logistics work, hinged on an unverified guess. If the real issue is surprise, cheaper rates won't move the number at all. One database query would have told you." },
+          { text: "Skip the questions — start haggling with delivery firms for cheaper rates", verdict: "trap", feedback: "Months of delivery-contract work, resting on a guess nobody checked. If the real issue is surprise, cheaper rates won't move the number at all. One database query would have told you." },
         ],
       },
       {
         ask: "It's surprise, not price. What do you build?",
         info: "New picture: users feel ambushed at the last step. The fix should kill the surprise as early as possible.",
         options: [
-          { text: "Show an estimated shipping cost right on the product page", verdict: "best", feedback: "The smallest change that attacks the diagnosis head-on: users see the full picture before they emotionally commit. Cheap to build, easy to A/B test, fast to learn from." },
+          { text: "Show an estimated delivery cost right on the product page", verdict: "best", feedback: "The smallest change that goes straight at what you found: users see the full picture before they emotionally commit. Cheap to build, easy to test on half your shoppers, fast to learn from." },
           { text: "Redesign the whole checkout into one premium page", verdict: "trap", feedback: "A quarter-long bet that buries your one clear insight under fifty other changes — if the number moves, you won't know why. Big redesigns are where sharp diagnoses go to die." },
           { text: "Add a \"Free shipping over $50\" banner to grow cart size", verdict: "ok", feedback: "A reasonable revenue lever, but it sidesteps your diagnosis: the ambush is still there for everyone under $50. Might help the business; won't fix the cliff." },
         ],
       },
       {
-        ask: "Engineering pushback: exact quotes need a zip code you don't have at browse time. Now what?",
-        info: "Your clean fix just hit reality. Precise shipping costs require address data that doesn't exist yet.",
+        ask: "Engineering pushback: exact prices need a postcode you don't have at browse time. Now what?",
+        info: "Your clean fix just hit reality. Exact delivery prices need an address you don't have yet.",
         options: [
-          { text: "Show a range instead: \"Shipping: $4–8\"", verdict: "best", feedback: "Perfect-is-the-enemy-of-shipped thinking. A range kills 90% of the surprise for 10% of the effort, and the hypothesis gets tested this sprint. Precision can come later — if it's even needed." },
-          { text: "Pause the feature until zip-code detection is built", verdict: "trap", feedback: "You just traded a two-week test for a two-quarter dependency. Waiting for perfect data is how promising fixes quietly die on roadmaps." },
-          { text: "Show the flat average: \"Most orders ship for ~$6\"", verdict: "ok", feedback: "Workable — but averages mislead the heavy-item buyers, who'll now feel ambushed twice. The range is barely more work and stays honest with everyone." },
+          { text: "Show a range instead: \"Delivery: $4–8\"", verdict: "best", feedback: "Good enough now beats perfect later. A range kills 90% of the surprise for 10% of the effort, and you find out this fortnight instead of next year. Precision can come later — if it's even needed." },
+          { text: "Pause it until the site can work out the shopper's postcode", verdict: "trap", feedback: "You just traded a two-week test for a six-month wait on someone else. Waiting for perfect data is how promising fixes quietly die on roadmaps." },
+          { text: "Show one flat average: \"Most orders deliver for about $6\"", verdict: "ok", feedback: "Workable — but averages mislead anyone buying something bulky, who'll now feel ambushed twice. The range is barely more work and stays honest with everyone." },
         ],
       },
       {
-        ask: "One week into the A/B test: abandonment is down 18%… but overall conversion looks flat. The CEO wants an update. What do you say?",
+        ask: "One week into the A/B test: 18% fewer people are quitting… but total sales look flat. The CEO wants an update. What do you say?",
         info: "The metric you targeted moved. The metric the company cares about didn't. Something's hiding.",
         options: [
-          { text: "\"Give me two days — I'm segmenting the results first\"", verdict: "best", feedback: "A flat average often hides two opposite stories. You segment: mobile conversion is meaningfully up, desktop slightly down — the estimate crowds the layout there. That's a real insight, not noise." },
-          { text: "Declare victory — abandonment was the goal, and it dropped", verdict: "trap", feedback: "You'd be reporting the metric you moved instead of the outcome the company needs. CEOs remember the PM whose \"win\" never showed up in revenue. Never celebrate before segmenting." },
-          { text: "Extend the test another month for more confidence", verdict: "ok", feedback: "More data isn't the problem — undissected data is. The answer is already sitting in the segments. Cut the data first; extend only if it's still genuinely ambiguous." },
+          { text: "\"Give me two days — I want to split the results up first\"", verdict: "best", feedback: "A flat average often hides two opposite stories. You split it up: phone sales are clearly up, computer sales slightly down — the estimate crowds the page there. That's a real insight, not noise." },
+          { text: "Declare victory — fewer people quitting was the goal, and that happened", verdict: "trap", feedback: "You'd be reporting the metric you moved instead of the result the company actually needs. CEOs remember the PM whose \"win\" never showed up in revenue. Never celebrate before you split the numbers up." },
+          { text: "Extend the test another month for more confidence", verdict: "ok", feedback: "More data isn't the problem — data nobody has broken apart is. The answer is already sitting in the groups. Split the data first; extend only if it's still genuinely ambiguous." },
         ],
       },
       {
-        ask: "Mobile wins clearly; desktop is neutral-to-slightly-negative. Final call of the quarter: ship it?",
+        ask: "Phones win clearly; computers are flat to slightly worse. Final call of the quarter: ship it?",
         info: "Marketing wants an announcement. Engineering wants a decision. Twelve weeks are up.",
         options: [
-          { text: "Ship to mobile now; iterate the desktop layout next sprint", verdict: "best", feedback: "Decompose the decision — take the win where it's proven, keep working where it isn't. You shipped a measurable improvement inside one quarter with a clear next step. That's the job, done well." },
-          { text: "Ship everywhere — desktop is only slightly negative", verdict: "ok", feedback: "Defensible if speed matters most, but you're knowingly shipping a small regression to half your users when a split rollout costs almost nothing extra." },
-          { text: "Hold everything until desktop also wins", verdict: "trap", feedback: "You're holding a proven mobile win hostage to a desktop problem. Users lose value every week it waits. Ship what works; fix the rest." },
+          { text: "Release it on phones now; keep working on the computer version", verdict: "best", feedback: "Break the decision in two — take the win where it's proven, keep working where it isn't. You shipped a measurable improvement inside one quarter with a clear next step. That's the job, done well." },
+          { text: "Release it everywhere — computers are only slightly worse", verdict: "ok", feedback: "Defensible if speed matters most, but you're knowingly shipping a small regression to half your users when releasing to phones only costs almost nothing extra." },
+          { text: "Hold everything until computers win too", verdict: "trap", feedback: "You're holding a proven win on phones hostage to a problem on computers. Users lose value every week it waits. Ship what works; fix the rest." },
         ],
       },
     ],
 
     idealSteps: [
-      "Diagnose before you prescribe — pull the funnel data and find exactly where users leave.",
-      "Ask the discriminating question: does abandonment track shipping price? (It didn't — the ambush was the problem, not the amount.)",
-      "Choose the smallest build that attacks the diagnosis: show the cost before users emotionally commit.",
-      "Trade precision for speed — a $4–8 range ships this sprint; perfect quotes can come later.",
-      "Segment before celebrating: the flat average hid a mobile win and a desktop dip.",
-      "Decompose the final call — ship the proven win now, keep iterating the rest.",
+      "Work out what's wrong before you prescribe a cure — pull the step-by-step numbers and find exactly where people leave.",
+      "Ask the one question that settles it: do people quit more when delivery costs more? (They didn't — the surprise was the problem, not the price.)",
+      "Build the smallest thing that fixes what you found: show the cost before people get their hopes up.",
+      "Trade exactness for speed — a $4–8 range goes live in a fortnight; exact prices can come later.",
+      "Split the numbers up before celebrating: the flat average hid a win on phones and a dip on computers.",
+      "Break the final call in two — release the proven win now, keep working on the rest.",
     ],
 
     missed: [
-      "The most valuable moves cost nothing to build: a funnel query, one comparison, a segmentation. The leverage lived in questions, not code.",
-      "Every trap had the same shape — acting on an assumption that a one-day check could have verified.",
-      "The mission never changed; only your information did. Good PMs re-plan every time reality answers back.",
+      "The most valuable moves cost nothing to build: one look at the numbers, one comparison, one split. The power was in the questions, not the code.",
+      "Every trap had the same shape — acting on a hunch that one day of checking would have settled.",
+      "The goal never changed; only what you knew did. Good PMs re-plan every time reality answers back.",
     ],
 
     quick: [
@@ -536,8 +536,9 @@
 
       <div class="g-dark g-brief">
         <div class="g-label">The brief</div>
-        <div class="g-brief-t">Cart abandonment just hit 70% at checkout. Fix it this quarter.</div>
-        <div class="g-brief-b">You're the PM of a mid-size e-commerce app. Five engineers, one designer, twelve weeks. The mission stays the same all the way through — what changes is what you know.</div>
+        <div class="g-brief-t">7 out of 10 shoppers now quit at the payment step. Fix it this quarter.</div>
+        <div class="g-brief-b">You're the PM of an online shop. Five engineers, one designer, twelve weeks. The mission stays the same all the way through — what changes is what you know.</div>
+        <div class="g-brief-b" style="margin-top:10px;opacity:0.85;">💡 Hit a word you don't know? Select it — anywhere on this page — and we'll explain it in plain English.</div>
       </div>
 
       <div class="g-pips">
@@ -662,6 +663,118 @@
         <button class="btn btn-secondary" style="margin-top:10px;" ${act("go-home")}>← Back to the start</button>
       </div>`,
   };
+
+  // ── "what does this mean?" ─────────────────────────────────────────────────
+  // Select any word (or double-tap it) anywhere in the guide and a chip offers
+  // to explain it; the popover also takes a typed question. Most lookups are
+  // answered from a curated glossary server-side, so they're instant and cost
+  // nothing — the model is only reached for words we haven't written down.
+  const ask = (() => {
+    let chip = null, pop = null, lastTerm = "";
+
+    const close = () => {
+      if (chip) { chip.remove(); chip = null; }
+      if (pop) { pop.remove(); pop = null; }
+    };
+    const hideChip = () => { if (chip) { chip.remove(); chip = null; } };
+
+    // The sentence around the selection, so the model can tell "ship a
+    // feature" from "ship at sea". Cheap to send, and it stays server-capped.
+    function sentenceAround(sel) {
+      try {
+        const whole = sel.anchorNode && sel.anchorNode.textContent;
+        if (!whole) return "";
+        return whole.trim().slice(0, 300);
+      } catch { return ""; }
+    }
+
+    function place(node, rect) {
+      // Positioned in page space so the popover scrolls with the text.
+      node.style.left = (rect.left + rect.width / 2 + window.scrollX) + "px";
+      node.style.top = (rect.bottom + window.scrollY + 8) + "px";
+    }
+
+    function open(term, context, rect) {
+      close();
+      lastTerm = term;
+      pop = document.createElement("div");
+      pop.className = "g-pop";
+      pop.innerHTML = `
+        <div class="g-pop-head">
+          <div class="g-pop-term">${esc(term)}</div>
+          <button class="g-pop-x" data-x aria-label="Close">×</button>
+        </div>
+        <div class="g-pop-body" data-body>Looking that up…</div>
+        <div class="g-pop-hint">
+          <input type="text" data-q placeholder="Ask about another word…"
+                 style="width:100%;padding:7px 12px;border-radius:999px;border:1px solid var(--color-divider);font:inherit;font-size:13.5px;background:var(--color-bg);color:var(--color-text);" />
+        </div>`;
+      document.body.appendChild(pop);
+      place(pop, rect);
+      pop.querySelector("[data-x]").onclick = close;
+      const q = pop.querySelector("[data-q]");
+      q.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter") return;
+        const v = q.value.trim();
+        if (v) { open(v, "", rect); }
+      });
+      fetchExplain(term, context, rect);
+    }
+
+    async function fetchExplain(term, context, rect) {
+      let d = null;
+      try {
+        const r = await fetch("/api/guide/explain", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ term, context }),
+        });
+        d = await r.json();
+      } catch { d = null; }
+      if (!pop || lastTerm !== term) return; // a newer question overtook this one
+      const body = pop.querySelector("[data-body]");
+      if (!d || !d.ok) {
+        body.textContent = (d && d.error) || "Couldn't look that one up — try again.";
+      } else {
+        body.innerHTML = esc(d.plain).replace(/\n+/g, "<br>") +
+          (d.example ? `<div class="g-pop-eg"><b>For example</b>${esc(d.example)}</div>` : "");
+        track("term_explained", { term: term.slice(0, 40), source: d.source });
+      }
+      place(pop, rect);
+    }
+
+    // Offer the chip whenever there's a real selection inside the guide.
+    document.addEventListener("mouseup", onSelect);
+    document.addEventListener("touchend", onSelect);
+
+    function onSelect(e) {
+      if (pop && pop.contains(e.target)) return;
+      setTimeout(() => {
+        const sel = window.getSelection();
+        const text = sel ? String(sel).trim() : "";
+        // A phrase is fine; a paragraph isn't what this is for.
+        if (!text || text.length > 60 || text.split(/\s+/).length > 6) return hideChip();
+        const main = el("main");
+        if (!main || !sel.anchorNode || !main.contains(sel.anchorNode)) return hideChip();
+        const rect = sel.getRangeAt(0).getBoundingClientRect();
+        if (!rect.width && !rect.height) return hideChip();
+        hideChip();
+        chip = document.createElement("button");
+        chip.className = "g-ask";
+        chip.textContent = `What does "${text.length > 22 ? text.slice(0, 22) + "…" : text}" mean?`;
+        chip.onclick = () => open(text, sentenceAround(sel), rect);
+        document.body.appendChild(chip);
+        place(chip, rect);
+      }, 0);
+    }
+
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+    document.addEventListener("mousedown", (e) => {
+      if (pop && !pop.contains(e.target) && !(chip && chip.contains(e.target))) close();
+    });
+
+    return { open, close };
+  })();
 
   // ── render ────────────────────────────────────────────────────────────────
 
