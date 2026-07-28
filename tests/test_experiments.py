@@ -4,6 +4,7 @@ no real Google/Resend/Anthropic calls."""
 
 from __future__ import annotations
 
+import re
 import sys
 import time
 from pathlib import Path
@@ -468,6 +469,52 @@ def test_guide_explain_guards_the_open_model_path(tmp_path, monkeypatch):
     monkeypatch.setattr(webapp, "GUIDE_EXPLAIN", webapp.SlidingLimit(0, 3600))
     r = client.post("/api/guide/explain", json={"term": "zzz not a real term"})
     assert r.status_code == 429
+
+
+def test_guide_word_help_is_a_typed_box_not_a_text_selection(tmp_path, monkeypatch):
+    """The explainer used to appear when you selected a word. Text selection is
+    genuinely awkward on a phone — the OS handles fight anything floated next
+    to them — so the gesture is gone entirely. What's left is a button that is
+    always on screen and a field you type into.
+
+    The starter chips under that field must every one be a glossary hit, so
+    tapping one is instant and can never cost a model call."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    js = (webapp.STATIC_DIR / "guide.js").read_text()
+    css = (webapp.STATIC_DIR / "guide.css").read_text()
+    for gone in ("getSelection", "mouseup", "touchend", "selectionchange", '"g-ask"'):
+        assert gone not in js, gone
+    assert ".g-ask {" not in css and ".g-pop" not in css
+    assert "g-ask-btn" in js and "Explain a word" in js
+
+    d = client.get("/api/guide/terms").json()
+    assert d["ok"] and len(d["terms"]) >= 5
+    # A fake model means any chip that missed the glossary would 502 here.
+    monkeypatch.setattr(webapp, "GUIDE_MODEL", "no-such-model")
+    client.get("/guide")
+    for term in d["terms"]:
+        got = client.post("/api/guide/explain", json={"term": term}).json()
+        assert got["ok"] and got["source"] == "glossary", term
+
+
+def test_guide_walkthrough_is_two_steps_with_a_real_example(tmp_path, monkeypatch):
+    """Two pop-ups, not four: what happens when you pick an option, and where
+    the word explainer lives. The second one shows a worked example, so the
+    term it quotes has to be a genuine glossary entry rather than invented
+    copy that could drift away from what the box actually answers."""
+    from pmcaseprep.guide_glossary import lookup
+
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    js = (webapp.STATIC_DIR / "guide.js").read_text()
+    steps = js.split("first-run walkthrough")[1].split("const STEPS = [")[1].split("\n    ];")[0]
+    targets = re.findall(r'sel:\s*"([^"]+)"', steps)
+    assert targets == [".g-round .g-opts", ".g-ask-btn"]
+    term = re.search(r'term:\s*"([^"]+)"', steps).group(1)
+    assert lookup(term) is not None, term
 
 
 def test_guide_glossary_entries_are_plain_english():

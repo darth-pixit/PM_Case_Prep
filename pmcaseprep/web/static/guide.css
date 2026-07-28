@@ -434,79 +434,127 @@ a:hover { color: var(--color-accent-800); }
 .g-closing { max-width: 640px; }
 .g-closing p { font-family: var(--font-heading); font-size: 21px; line-height: 1.4; }
 
-/* ── "what does this mean?" popover ─────────────────────────────────────── */
+/* ── "explain a word" ───────────────────────────────────────────────────── */
 
-/* Double-tap or select any word in the case and this explains it. Anchored to
-   the selection on desktop; on a phone it becomes a bottom sheet, because a
-   popover next to a text selection there fights the OS selection handles. */
-.g-ask {
-  position: absolute; z-index: 60; transform: translate(-50%, 0);
+/* A permanent button rather than a select-the-word gesture: selection is
+   fiddly on a phone, and an affordance you can see beats one you have to be
+   told about. Floating card on desktop, full-screen sheet on a phone. */
+.g-ask-btn {
+  position: fixed; z-index: 55;
+  right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: inline-flex; align-items: center; gap: 8px;
   border: 0; cursor: pointer; border-radius: 999px;
-  padding: 7px 14px; font: 600 13px/1 var(--font-body);
+  padding: 11px 18px 11px 11px; font: 600 14px/1 var(--font-body);
   background: var(--color-neutral-900); color: var(--color-neutral-100);
-  box-shadow: var(--shadow-md); white-space: nowrap;
+  box-shadow: var(--shadow-lg);
 }
-.g-ask:hover { background: var(--color-accent-800); }
-.g-pop {
-  position: absolute; z-index: 61; transform: translate(-50%, 0);
-  width: min(340px, calc(100vw - 32px));
-  background: var(--color-neutral-100); border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg); padding: 16px 18px;
-  border: 1px solid var(--color-divider);
+.g-ask-btn:hover { background: var(--color-accent-800); }
+.g-ask-btn-i {
+  width: 22px; height: 22px; border-radius: 999px; flex-shrink: 0;
+  background: var(--color-accent); color: var(--color-neutral-100);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-heading); font-size: 12px;
 }
-.g-pop-head {
-  display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px;
+.g-ask-panel {
+  position: fixed; z-index: 65;
+  right: 16px; bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  width: min(390px, calc(100vw - 32px));
+  max-height: min(72vh, 560px);
+  display: flex; flex-direction: column;
+  background: var(--color-neutral-100); border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-lg);
+  padding: 16px 18px 18px;
 }
-.g-pop-term {
-  font-family: var(--font-heading); font-size: 16px; min-width: 0;
+.g-ask-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.g-ask-title { font-family: var(--font-heading); font-size: 17px; }
+.g-ask-x {
+  margin: -10px -12px -10px auto; border: 0; background: none; cursor: pointer;
+  width: 44px; height: 44px; font-size: 24px; line-height: 1;
+  color: var(--color-neutral-600);
+}
+.g-ask-x:hover { color: var(--color-text); }
+.g-ask-form { display: flex; gap: 8px; }
+.g-ask-in {
+  flex: 1; min-width: 0; border-radius: 999px; padding: 11px 16px;
+  border: 1.5px solid var(--color-neutral-300);
+  /* 16px is deliberate: anything smaller and iOS Safari zooms the whole page
+     when the field takes focus. */
+  font-family: var(--font-body); font-size: 16px;
+  background: var(--color-bg); color: var(--color-text);
+}
+.g-ask-in:focus { outline: none; border-color: var(--color-accent); }
+.g-ask-go { flex-shrink: 0; padding: 11px 18px; }
+.g-ask-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.g-ask-chip {
+  border: 1px solid var(--color-divider); background: var(--color-bg);
+  border-radius: 999px; padding: 7px 13px; cursor: pointer;
+  font-family: var(--font-body); font-size: 13px; color: var(--color-neutral-800);
+}
+.g-ask-chip:hover { border-color: var(--color-accent); color: var(--color-accent-800); }
+.g-ask-out { margin-top: 14px; overflow-y: auto; min-height: 0; }
+.g-ask-idle { font-size: 13.5px; color: var(--color-neutral-600); }
+.g-ask-err { font-size: 14.5px; color: var(--color-accent-800); }
+.g-ask-term {
+  font-family: var(--font-heading); font-size: 17px; margin-bottom: 4px;
   overflow-wrap: anywhere;
 }
-.g-pop-x {
-  margin-left: auto; border: 0; background: none; cursor: pointer;
-  font-size: 18px; line-height: 1; color: var(--color-neutral-600); padding: 0 2px;
-}
-.g-pop-x:hover { color: var(--color-text); }
-.g-pop-body { font-size: 14.5px; color: var(--color-neutral-800); }
-.g-pop-eg {
+.g-ask-plain { font-size: 15px; color: var(--color-neutral-800); }
+.g-ask-eg {
   margin-top: 10px; padding: 10px 12px; font-size: 13.5px;
   background: var(--color-accent-2-100); border-radius: var(--radius-sm);
   color: var(--color-neutral-800);
 }
-.g-pop-eg b {
+.g-ask-eg b {
   display: block; font-size: 10.5px; letter-spacing: 0.1em;
   text-transform: uppercase; color: var(--color-accent-2-700); margin-bottom: 3px;
 }
-.g-pop-hint { margin-top: 10px; font-size: 12px; color: var(--color-neutral-600); }
 
 @media (max-width: 720px) {
-  .g-pop {
-    position: fixed; left: 16px; right: 16px; bottom: 16px; top: auto;
-    width: auto; transform: none;
+  /* Full-height sheet with the field at the TOP. A bottom-anchored box is the
+     obvious phone pattern and the wrong one here: the on-screen keyboard
+     covers it the instant you tap in. */
+  .g-ask-panel {
+    inset: 0; width: auto; max-height: none; border: 0; border-radius: 0;
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
   }
+  .g-ask-out { flex: 1; }
+  body.g-ask-on { overflow: hidden; }
 }
 
 /* ── first-run walkthrough (chapter 4) ──────────────────────────────────── */
 
-/* Chapter 4 is the only screen you *operate* rather than read, so it gets a
-   short coach-mark tour the first time. Dimmer + a cut-out ring around the
-   thing being described, so the pointer is unambiguous without arrows. */
+/* Chapter 4 is the only screen you *operate* rather than read, so it gets two
+   coach marks the first time: what happens when you pick, and where the word
+   explainer is. Dimmer + a cut-out ring around the thing being described, so
+   the pointer is unambiguous without arrows. */
 /* Transparent on purpose: it only catches the click-outside-to-dismiss. The
    dimming is the RING's huge spread shadow, which is what cuts the highlighted
    element out of the dark. Dimming here too would grey out the very thing the
    step is pointing at. */
 .g-tour-veil { position: fixed; inset: 0; z-index: 70; }
+/* Fixed, not absolute: guide.js positions both of these from viewport
+   coordinates so a scroll mid-step can't strand the highlight. */
 .g-tour-ring {
-  position: absolute; z-index: 71; pointer-events: none;
+  position: fixed; z-index: 71; pointer-events: none;
   border-radius: var(--radius-md);
   outline: 3px solid var(--color-accent);
   outline-offset: 4px;
   box-shadow: 0 0 0 9999px color-mix(in srgb, var(--color-neutral-900) 55%, transparent);
 }
 .g-tour-card {
-  position: absolute; z-index: 72;
+  position: fixed; z-index: 72;
   width: min(330px, calc(100vw - 32px));
   background: var(--color-neutral-100); border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg); padding: 18px 20px;
+}
+.g-tour-eg {
+  margin-top: 10px; padding: 10px 12px; font-size: 13.5px;
+  background: var(--color-accent-2-100); border-radius: var(--radius-sm);
+  color: var(--color-neutral-800);
+}
+.g-tour-eg b {
+  display: block; font-family: var(--font-heading); font-weight: 400;
+  font-size: 14px; color: var(--color-accent-2-800); margin-bottom: 2px;
 }
 .g-tour-step {
   font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
@@ -523,20 +571,28 @@ a:hover { color: var(--color-accent-800); }
 }
 .g-tour-dot.is-on { background: var(--color-accent); }
 .g-tour-skip {
-  border: 0; background: none; cursor: pointer; padding: 4px;
+  border: 0; background: none; cursor: pointer; padding: 9px 10px;
   font: inherit; font-size: 13px; color: var(--color-neutral-700);
 }
 .g-tour-skip:hover { color: var(--color-text); }
 .g-tour-replay {
-  border: 0; background: none; cursor: pointer; padding: 0;
+  border: 0; background: none; cursor: pointer;
+  /* Padded out to a thumb-sized target, pulled back in so the pip row keeps
+     its height. */
+  padding: 9px 4px; margin: -9px 0;
   font: inherit; font-size: 13px; color: var(--color-accent-700);
   text-decoration: underline; text-underline-offset: 3px;
 }
 
 @media (max-width: 720px) {
+  /* A sheet against one edge — whichever is furthest from the highlight, so
+     the card never covers what the step is pointing at (guide.js picks). */
   .g-tour-card {
-    position: fixed; left: 16px; right: 16px; bottom: 16px; top: auto; width: auto;
+    position: fixed; left: 16px; right: 16px; width: auto;
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px)); top: auto;
+    max-height: calc(100vh - 96px); overflow-y: auto;
   }
+  .g-tour-card.is-top { top: 76px; bottom: auto; }
 }
 
 /* ── footer ─────────────────────────────────────────────────────────────── */
@@ -544,30 +600,70 @@ a:hover { color: var(--color-accent-800); }
 .g-footer {
   border-top: 1px solid var(--color-divider); padding: 22px 28px;
   text-align: center; font-size: 13px; color: var(--color-neutral-700);
+  /* Room for the floating ask button, which sits over this corner. */
+  padding-bottom: calc(22px + 56px + env(safe-area-inset-bottom, 0px));
 }
 
 /* ── phones ─────────────────────────────────────────────────────────────── */
 
+/* One breakpoint on purpose. Every layout here is either a single column or a
+   grid with auto-fit minmax(), so the in-between widths take care of
+   themselves; this block handles the things that genuinely need a phone
+   decision — the nav strip, the sidebar, and type scale. */
 @media (max-width: 720px) {
-  .g-header-in { padding: 12px 16px; gap: 12px; }
+  .g-header-in { padding: 10px 16px; gap: 10px; }
   .g-progress { order: 3; margin-left: auto; }
-  .g-nav { order: 4; width: 100%; margin-left: 0; overflow-x: auto; flex-wrap: nowrap; }
-  .g-tab { white-space: nowrap; }
-  .g-main { padding: 36px 16px 64px; }
-  .g-main.is-home { padding-top: 44px; }
-  .g-hero h1 { font-size: 38px; }
+  /* The chapter strip scrolls sideways rather than wrapping to three rows.
+     width:100% is what forces it onto its own line in the wrapping header. */
+  .g-nav {
+    order: 4; width: 100%; margin-left: 0; flex-wrap: nowrap;
+    overflow-x: auto; overscroll-behavior-x: contain;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+  }
+  .g-nav::-webkit-scrollbar { display: none; }
+  .g-tab { white-space: nowrap; flex-shrink: 0; }
+  .g-main { padding: 30px 16px 56px; }
+  .g-main.is-home { padding-top: 40px; }
+  .g-hero h1 { font-size: 34px; }
   .g-hero p { font-size: 17px; }
-  .g-chapter-h1 { font-size: 31px; }
+  .g-chapter-h1 { font-size: 29px; }
+  .g-h2 { font-size: 23px; }
+  .g-h2-sm, .g-round-ask, .g-quick-t { font-size: 20px; }
+  .g-statement { font-size: 19px; padding: 22px 20px; }
   .g-home-cards { margin-top: 40px; }
   .g-myth { grid-template-columns: 1fr; }
   .g-myth-side { border-right: 0; border-bottom: 1px solid var(--color-divider); }
   .g-round-wrap { grid-template-columns: 1fr; }
   .g-run { position: static; }
   .g-iv { grid-template-columns: 1fr; gap: 8px; }
-  .g-round, .g-quick, .g-done, .g-type-detail { padding: 22px 20px; }
-  .g-story-head { padding: 16px 18px; }
+  .g-round, .g-quick, .g-done, .g-type-detail, .g-plan-body { padding: 22px 20px; }
+  .g-story-head { padding: 16px 18px; gap: 14px; }
   .g-story-body { padding: 0 18px 20px; }
+  .g-plan-head { padding: 18px 20px; }
   .g-slot { padding: 12px 18px; gap: 14px; }
-  .g-opt { border-radius: var(--radius-md); flex-wrap: wrap; }
-  .g-opt-badge { margin-left: 0; }
+  /* Pill options don't survive three lines of wrapped text, so square them
+     off. And a grid, not wrapping flex: the verdict badge inline was
+     squeezing the answer into a four-word column beside it. Here it drops
+     under the text, sized to its own content. */
+  .g-opt {
+    border-radius: var(--radius-md); padding: 13px 16px;
+    display: grid; grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 12px; align-items: baseline;
+  }
+  .g-opt-badge { grid-column: 2; justify-self: start; margin-left: 0; }
+  .g-feedback { margin: 8px 0 2px; padding: 13px 16px; }
+  .g-lesson { border-radius: var(--radius-md); padding: 12px 16px; }
+  .g-done-actions .btn { flex: 1 1 auto; }
+  .g-brief { padding: 22px 20px; }
+  .g-brief-t { font-size: 19px; }
+  .g-closing p { font-size: 19px; }
+  .g-footer { padding-left: 16px; padding-right: 16px; }
+}
+
+/* Narrow phones (iPhone SE and friends) — the last few things that still
+   crowd at 360px. */
+@media (max-width: 400px) {
+  .g-types { grid-template-columns: 1fr 1fr; }
+  .g-ask-btn { padding: 10px 15px 10px 10px; font-size: 13px; }
+  .g-cta-lg { width: 100%; }
 }
