@@ -270,14 +270,6 @@
     ],
   };
 
-  // Where the guide hands you off. The guide is the only surface that needs no
-  // account, so every chapter ends somewhere real inside the rest of the site.
-  const NEXT_STEPS = [
-    { href: "/arena", title: "Practice for real", sub: "25 cases, five PM tracks, a live AI interviewer that grades you." },
-    { href: "/referrals", title: "Find your way in", sub: "Turn your own contacts into a ranked list of who can refer you." },
-    { href: "/recruiter", title: "Hiring instead?", sub: "The recruiter copilot: interview AI/DS candidates without being one." },
-  ];
-
   const CHIP = {
     best: { label: "Strong call", bg: "var(--color-accent-2-200)", color: "var(--color-accent-2-800)" },
     ok: { label: "Defensible", bg: "var(--color-neutral-200)", color: "var(--color-neutral-800)" },
@@ -351,18 +343,6 @@
       const o = r.options[S.picks[i]] || r.options[0];
       return { n: i + 1, choice: o.text, chip: CHIP[o.verdict] };
     });
-
-  const nextStepsHTML = (kicker, lede) => `
-    <section class="g-dark g-next">
-      <div class="g-next-t">${esc(kicker)}</div>
-      <div class="g-next-s">${esc(lede)}</div>
-      <div class="g-next-grid">
-        ${NEXT_STEPS.map((n) => `
-          <a class="g-next-card" href="${n.href}" data-exit="${n.href}">
-            <b>${esc(n.title)}</b><span>${esc(n.sub)}</span>
-          </a>`).join("")}
-      </div>
-    </section>`;
 
   // ── screens ───────────────────────────────────────────────────────────────
 
@@ -588,10 +568,6 @@
         }).join("")}
       </div>
 
-      ${done ? nextStepsHTML(
-        "You just ran a quarter. Want the version that talks back?",
-        "This case had three options per round. A real interview has none — you have to produce the structure yourself, out loud, while someone probes it.") : ""}
-
       <button class="btn btn-primary" ${act("go-skills")}>Next: the skill map →</button>`;
     },
 
@@ -681,10 +657,6 @@
         </div>` : ""}
       </div>
 
-      ${nextStepsHTML(
-        "You've read the job. Now go do it.",
-        "Everything below is on this site, free, and picks up exactly where this guide stops.")}
-
       <div class="g-closing">
         <p>The best PMs weren't anointed. They just started acting like one before anyone gave them the title — and eventually, someone did.</p>
         <button class="btn btn-secondary" style="margin-top:10px;" ${act("go-home")}>← Back to the start</button>
@@ -765,8 +737,6 @@
   };
 
   document.addEventListener("click", (e) => {
-    const exit = e.target.closest("[data-exit]");
-    if (exit) { track("exit_clicked", { to: exit.dataset.exit, from: S.screen }); return; }
     const node = e.target.closest("[data-act]");
     if (!node) return;
     const fn = ACTIONS[node.dataset.act];

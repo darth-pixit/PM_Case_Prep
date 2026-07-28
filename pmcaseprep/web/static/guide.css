@@ -434,25 +434,8 @@ a:hover { color: var(--color-accent-800); }
 .g-closing { max-width: 640px; }
 .g-closing p { font-family: var(--font-heading); font-size: 21px; line-height: 1.4; }
 
-/* ── next steps + footer ────────────────────────────────────────────────── */
+/* ── footer ─────────────────────────────────────────────────────────────── */
 
-/* The bridge from "I get what this job is" to the rest of the package. The
-   guide is the only surface someone can finish without an account, so it has
-   to hand them somewhere to go. */
-.g-next { padding: 30px 34px; margin: 0 0 28px; }
-.g-next-t { font-family: var(--font-heading); font-size: 20px; margin-bottom: 6px; color: var(--color-accent-300); }
-.g-next-s { font-size: 14.5px; color: var(--color-neutral-300); max-width: 640px; margin-bottom: 18px; }
-.g-next-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 12px; }
-.g-next-card {
-  display: block; text-decoration: none;
-  background: color-mix(in srgb, var(--color-neutral-100) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-neutral-100) 22%, transparent);
-  border-radius: var(--radius-md); padding: 16px 18px; color: var(--color-neutral-100);
-  transition: background 0.15s;
-}
-.g-next-card:hover { background: color-mix(in srgb, var(--color-neutral-100) 20%, transparent); color: var(--color-neutral-100); }
-.g-next-card b { display: block; font-size: 15px; margin-bottom: 3px; }
-.g-next-card span { font-size: 13px; color: var(--color-neutral-300); }
 .g-footer {
   border-top: 1px solid var(--color-divider); padding: 22px 28px;
   text-align: center; font-size: 13px; color: var(--color-neutral-700);

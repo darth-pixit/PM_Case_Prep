@@ -313,6 +313,8 @@ def test_experiment_pages_served(tmp_path, monkeypatch):
         ("/arena", "Case Arena"),
         ("/recruiter", "Recruiter Copilot"),
         ("/referrals", "Referral Paths"),
+        ("/prep", "Prep Engine"),
+        ("/prep-ds", "Data Science"),
     ):
         r = client.get(path)
         assert r.status_code == 200 and marker in r.text, path
@@ -320,9 +322,11 @@ def test_experiment_pages_served(tmp_path, monkeypatch):
     assert "archetypes" in guide
 
 
-def test_field_guide_is_self_contained_and_cross_linked(tmp_path, monkeypatch):
-    """The guide is the one page with no login and no model spend, so it has
-    to (a) stand alone and (b) hand visitors on to the rest of the site."""
+def test_field_guide_is_self_contained(tmp_path, monkeypatch):
+    """Like every other experiment, the guide stands alone: it must carry its
+    own assets and analytics namespace, and link to no other surface (see the
+    'each experiment should be self-contained' rule that stripped the
+    cross-experiment footers)."""
     client, webapp = _client(tmp_path, monkeypatch)
     if client is None:
         return
@@ -340,12 +344,22 @@ def test_field_guide_is_self_contained_and_cross_linked(tmp_path, monkeypatch):
         assert f"{chapter}:" in js, chapter
     assert js.count('verdict: "best"') == 8  # 6 case rounds + 2 quick-fires
 
-    # Every surface points at every other one — the guide is the front door,
-    # so a dead end here costs the whole funnel.
+    # No doors out of the guide, and no door in from another experiment.
+    for other in ("/arena", "/recruiter", "/referrals", "/prep", "/prep-ds"):
+        assert f'"{other}"' not in html and f'"{other}"' not in js, other
     for page in ("arena.html", "recruiter.html", "referrals.html"):
-        assert '"/guide"' in (static / page).read_text(), page
-    for target in ("/arena", "/recruiter", "/referrals"):
-        assert target in html, target
+        assert "/guide" not in (static / page).read_text(), page
+
+
+def test_prep_rounds_endpoint_is_open_and_track_scoped(tmp_path, monkeypatch):
+    client, _ = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    ds = client.get("/api/prep/rounds?track=ds").json()
+    assert ds["ok"] and len(ds["rounds"]) >= 5
+    assert all(r["name"] and r["example_questions"] for r in ds["rounds"])
+    pm = client.get("/api/prep/rounds?track=pm").json()
+    assert pm["ok"] and pm["rounds"] == []  # the PM loop map lives in the arena
 
 
 if __name__ == "__main__":
