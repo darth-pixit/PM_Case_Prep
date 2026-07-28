@@ -309,6 +309,7 @@ def test_experiment_pages_served(tmp_path, monkeypatch):
     if client is None:
         return
     for path, marker in (
+        ("/guide", "The Field Guide"),
         ("/arena", "Case Arena"),
         ("/recruiter", "Recruiter Copilot"),
         ("/referrals", "Referral Paths"),
@@ -317,6 +318,34 @@ def test_experiment_pages_served(tmp_path, monkeypatch):
         assert r.status_code == 200 and marker in r.text, path
     guide = client.get("/api/recruiter/guide").json()
     assert "archetypes" in guide
+
+
+def test_field_guide_is_self_contained_and_cross_linked(tmp_path, monkeypatch):
+    """The guide is the one page with no login and no model spend, so it has
+    to (a) stand alone and (b) hand visitors on to the rest of the site."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    html = client.get("/guide").text
+    assert "/static/guide.css" in html and "/static/guide.js" in html
+    # It leans on the shared analytics/login plumbing like every other page.
+    assert "/static/shared.js" in html
+
+    static = webapp.STATIC_DIR
+    js = (static / "guide.js").read_text()
+    # Its own PostHog namespace, so guide funnels never mix with the others.
+    assert 'PMCP.experiment("guide")' in js
+    # All six chapters plus the playable case survived the port.
+    for chapter in ("role", "types", "decisions", "cases", "skills", "breakin"):
+        assert f"{chapter}:" in js, chapter
+    assert js.count('verdict: "best"') == 8  # 6 case rounds + 2 quick-fires
+
+    # Every surface points at every other one — the guide is the front door,
+    # so a dead end here costs the whole funnel.
+    for page in ("arena.html", "recruiter.html", "referrals.html"):
+        assert '"/guide"' in (static / page).read_text(), page
+    for target in ("/arena", "/recruiter", "/referrals"):
+        assert target in html, target
 
 
 if __name__ == "__main__":

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>The PM Field Guide — PM Case Prep</title>
+  <meta name="description" content="What a product manager actually does, the six flavors of the job, five legendary product calls, and a case you play — read it in 5 minutes, dig for 30." />
+  <link rel="stylesheet" href="/static/guide.css" />
+</head>
+<body>
+  <!-- The one surface that needs no account, no mic, and no model spend: it's
+       the front door for someone who doesn't yet know what a PM is. The shell
+       is static; guide.js renders the active chapter into <main>. -->
+  <header class="g-header">
+    <div class="g-header-in">
+      <button class="g-brand" data-act="go-home" aria-label="Back to the start">
+        <span class="g-mark">PM</span>
+        <span class="g-brand-name">The Field Guide</span>
+      </button>
+      <nav class="g-nav" id="nav" aria-label="Chapters"></nav>
+      <div class="g-progress" id="progress">1/7 explored</div>
+    </div>
+  </header>
+
+  <main class="g-main is-home" id="main">
+    <noscript>
+      <p style="max-width:640px;margin:0 auto;">The Field Guide is an interactive read —
+      please enable JavaScript. Everything else on the site works too:
+      <a href="/arena">practice cases</a>, the <a href="/recruiter">recruiter copilot</a>,
+      and <a href="/referrals">referral paths</a>.</p>
+    </noscript>
+  </main>
+
+  <footer class="g-footer">
+    The PM Field Guide · read it in 5 minutes, dig for 30
+    <div style="margin-top:8px;">
+      Also on this site: <a href="/arena" data-exit="/arena">Case Arena</a>
+      · <a href="/recruiter" data-exit="/recruiter">Recruiter copilot</a>
+      · <a href="/referrals" data-exit="/referrals">Referral paths</a>
+    </div>
+  </footer>
+
+  <script src="/static/shared.js?v=1"></script>
+  <script src="/static/guide.js?v=1"></script>
+</body>
+</html>
