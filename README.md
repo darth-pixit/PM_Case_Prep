@@ -102,16 +102,25 @@ audit nulls extracted metrics whose numbers aren't in the source, downgrades
 unit under `unverifiedClaims` for explicit user confirmation.
 
 **The JD is optional.** Paste one and the model decodes that specific opening;
-leave it empty and the engine builds the **role-family target** instead —
-you're usually prepping for a role, not only for one posting. Without a JD it
-invents no employer (`company` stays empty) and requires *every* competency in
-the track's taxonomy at equal weight, because there's no basis to rank one
-above another; each `evidence` line says so plainly, so nothing downstream can
-mistake it for a quote from a real posting. Optional seniority / archetype
-pickers sharpen the framing, and anything off-ladder falls back to the track
-default. The path costs **no model call** — there's no text to read — and the
-result is an ordinary `TargetProfile`, so the heatmap, stories, grill room and
-learning plan all run unchanged.
+leave it empty and you prep for a **generic PM role** instead — you're usually
+prepping for a role, not only for one posting. Without a JD the engine invents
+no employer (`company` stays empty) and requires *every* competency in the
+track's taxonomy at equal weight, because there's no basis to rank one above
+another; each `evidence` line says so plainly, so nothing downstream can
+mistake it for a quote from a real posting.
+
+The one thing it will optionally ask is the **role category** — AI PM, Growth
+PM, Platform, 0-to-1, Data, Core (and the DS equivalents on `/prep-ds`) — for
+candidates who know it. That list is a closed set served by
+`/api/prep/role-categories`, so the picker can never offer a value the server
+would discard, and anything off-list falls back to the plain generic role.
+Seniority is deliberately **never asked**: without a posting there's no honest
+way to pick a rung, so the schema's required field takes the track's middle
+default and no prose claims a level.
+
+The path costs **no model call** — there's no text to read — and the result is
+an ordinary `TargetProfile`, so the heatmap, stories, grill room and learning
+plan all run unchanged.
 
 The engine is **track-aware** (`prep_tracks.py`): `/prep` runs the PM track,
 `/prep-ds` runs Data Science on the same loop with its own 12-competency

@@ -375,18 +375,39 @@ def test_extract_target_without_a_jd_needs_no_model(tmp_path, monkeypatch):
     t = d["target"]
     # A real target the heatmap can consume, with nothing invented.
     assert t["company"] == "" and t["track"] == "pm"
-    assert t["seniority"] == "PM" and t["archetype"] == "General"
+    assert t["archetype"] == "General" and t["roleTitle"] == "Product manager"
     assert len(t["requiredCompetencies"]) == 12
     assert all(rc["weight"] == 3 for rc in t["requiredCompetencies"])
 
-    # Hints are honoured; the DS page gets the DS ladder and taxonomy.
+    # The one optional question is honoured, on both tracks.
+    r = client.post(
+        "/api/prep/extract-target", json={"text": "", "track": "pm", "archetype": "AI"}
+    )
+    assert r.json()["target"]["roleTitle"] == "AI product manager"
     r = client.post(
         "/api/prep/extract-target",
-        json={"text": "", "track": "ds", "seniority": "Staff", "archetype": "ML & Modeling"},
+        json={"text": "", "track": "ds", "archetype": "ML & Modeling"},
     )
     t = r.json()["target"]
-    assert t["track"] == "ds" and t["seniority"] == "Staff"
-    assert t["archetype"] == "ML & Modeling"
+    assert t["track"] == "ds" and t["archetype"] == "ML & Modeling"
+
+
+def test_role_categories_endpoint_matches_what_the_server_accepts(tmp_path, monkeypatch):
+    """The picker is served, not mirrored in JS, precisely so it can't offer a
+    category the server would silently discard. Pin that contract."""
+    client, _ = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    from pmcaseprep.prep_engine import generic_target
+
+    for track in ("pm", "ds"):
+        d = client.get(f"/api/prep/role-categories?track={track}").json()
+        assert d["ok"] and len(d["categories"]) >= 5
+        for c in d["categories"]:
+            assert c["value"] and c["label"]
+            # Every offered value survives the server's own validation.
+            assert generic_target(track, archetype=c["value"]).archetype == c["value"]
+        assert d["categories"][0]["value"] == "General"  # generic is the default
 
 
 def test_prep_rounds_endpoint_is_open_and_track_scoped(tmp_path, monkeypatch):

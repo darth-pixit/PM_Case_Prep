@@ -317,17 +317,31 @@ def test_generic_target_invents_no_employer():
     assert "No specific opening" in t.unwrittenPain
 
 
-def test_generic_target_takes_hints_but_never_trusts_them():
-    t = generic_target("pm", seniority="Director", archetype="Growth")
-    assert t.seniority == "Director" and t.archetype == "Growth"
-    assert "Growth" in t.roleTitle
+def test_generic_target_takes_a_role_category_but_never_trusts_it():
+    """The role category is the ONE optional question — and it's a closed
+    list, so anything else quietly becomes the plain generic role."""
+    t = generic_target("pm", archetype="AI")
+    assert t.archetype == "AI" and t.roleTitle == "AI product manager"
 
-    # An off-ladder rung (including one borrowed from the OTHER track) falls
-    # back to the track default rather than reaching the Literal and raising.
-    for bogus in ("Staff", "Emperor", "", None):
-        assert generic_target("pm", seniority=bogus).seniority == "PM"
-    assert generic_target("ds", seniority="APM").seniority == "Mid"
-    assert generic_target("ds").archetype == "General"
+    for bogus in ("Emperor", "ML & Modeling", "<script>", "", None):
+        g = generic_target("pm", archetype=bogus)
+        assert g.archetype == "General", bogus
+        # A generic role names no category, in the title or the prose.
+        assert g.roleTitle == "Product manager"
+        assert "General" not in g.unwrittenPain
+
+    assert generic_target("ds", archetype="ML & Modeling").archetype == "ML & Modeling"
+    assert generic_target("ds", archetype="AI").archetype == "General"  # PM's list
+
+
+def test_generic_target_never_claims_a_seniority():
+    """We don't ask for a rung without a posting, so no prose may imply one —
+    the schema's required field just takes the track's middle default."""
+    for track_key, default in (("pm", "PM"), ("ds", "Mid")):
+        t = generic_target(track_key)
+        assert t.seniority == default
+        blob = t.unwrittenPain + t.roleTitle + t.requiredCompetencies[0].evidence
+        assert default not in blob
 
 
 def test_generic_target_feeds_the_heatmap_unchanged():

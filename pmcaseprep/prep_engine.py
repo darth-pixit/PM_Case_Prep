@@ -559,9 +559,7 @@ def extract_units(
 
 
 def generic_target(
-    track_key: str = "pm",
-    seniority: Optional[str] = None,
-    archetype: Optional[str] = None,
+    track_key: str = "pm", archetype: Optional[str] = None
 ) -> TargetProfile:
     """The target to prep against when there is NO job description.
 
@@ -577,30 +575,40 @@ def generic_target(
       and not from a posting, so nothing downstream can mistake it for a
       quote from a real JD.
 
-    `seniority` and `archetype` are optional hints from the page; anything
-    off-ladder falls back to the track's default rather than being trusted.
-    This costs no model call — there is no text to read.
+    `archetype` is the ONE optional question we're willing to ask — the role
+    category (AI PM, Growth PM, …) when the candidate happens to know it.
+    Anything outside the track's own list is ignored rather than trusted, so
+    the fallback is always the plain generic role. We deliberately do NOT ask
+    for seniority: without a posting we have no honest way to pick a rung, so
+    the schema's required field takes the track's middle default and no prose
+    claims a level.
+
+    Costs no model call — there is no text to read.
     """
     tr = track_config(track_key)
-    rung = seniority if seniority in tr["seniority"] else tr["default_seniority"]
-    flavour = (archetype or "").strip() or tr["default_archetype"]
-    evidence = (
-        f"No job description — core competency for {rung} {tr['role_noun']} roles."
-    )
+    flavour = (archetype or "").strip()
+    if flavour not in tr["archetype_options"]:
+        flavour = tr["default_archetype"]
+    generic = flavour == tr["default_archetype"]
+    described = tr["role_noun"] if generic else f"{flavour} {tr['role_noun']}"
     return sanitize_target(
         TargetProfile(
             company="",
-            roleTitle=f"{flavour} {tr['role_noun']}".strip(),
-            seniority=rung,
+            roleTitle=described[:1].upper() + described[1:],
+            seniority=tr["default_seniority"],
             archetype=flavour,
             requiredCompetencies=[
-                RequiredCompetency(competency=c, weight=3, evidence=evidence)
+                RequiredCompetency(
+                    competency=c,
+                    weight=3,
+                    evidence=f"No job description — core competency for {described} roles.",
+                )
                 for c in tr["taxonomy"]
             ],
             unwrittenPain=(
-                f"No specific opening: preparing for {rung} {tr['role_noun']} "
-                "roles in general, so treat every competency as equally likely "
-                "to be tested."
+                f"No specific opening: preparing for {described} roles in "
+                "general, so treat every competency as equally likely to be "
+                "tested."
             ),
             companyValues=[],
         ),

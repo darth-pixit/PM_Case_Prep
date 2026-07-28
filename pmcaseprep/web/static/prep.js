@@ -64,25 +64,6 @@
       "business-impact": "Business impact",
     },
   };
-  // The rung + flavour pickers shown when NO JD is pasted. Mirrors the
-  // ladders in prep_tracks.py the same way TRACK_LABELS mirrors the taxonomy.
-  // The server re-validates and falls back to the track default, so a stale
-  // copy here degrades to "General" rather than to a wrong target.
-  const ROLE_HINTS = {
-    pm: {
-      seniority: ["APM", "PM", "Senior", "Group", "Director"],
-      archetype: ["General", "Growth", "Platform", "0-to-1", "Data", "AI", "Core"],
-      defaultSeniority: "PM",
-    },
-    ds: {
-      seniority: ["Junior", "Mid", "Senior", "Staff", "Principal", "Lead"],
-      archetype: [
-        "General", "Product Analytics", "Experimentation", "ML & Modeling",
-        "GenAI & LLM", "Platform & Infra", "Decision Science",
-      ],
-      defaultSeniority: "Mid",
-    },
-  };
   // label() resolves BOTH tracks (shared units carry mixed tags); COMPS is
   // THIS page's taxonomy — the editor's checkboxes and the chips it shows.
   const LABELS = Object.assign({}, TRACK_LABELS.pm, TRACK_LABELS.ds);
@@ -106,23 +87,23 @@
     el.style.color = bad ? "var(--bad)" : "";
   }
 
-  // --- No-JD role hints ------------------------------------------------------
-  // Populated once; only relevant while the JD box is empty, so the row hides
-  // itself the moment a JD is pasted (the posting decides seniority/flavour).
-  (function initRoleHints() {
-    const hints = ROLE_HINTS[TRACK];
-    const fill = (id, values) => {
-      $(id).innerHTML = values
-        .map((v) => `<option value="${esc(v)}">${esc(v)}</option>`)
-        .join("");
-    };
-    fill("hintSeniority", hints.seniority);
-    fill("hintArchetype", hints.archetype);
-    // Land on the track's own default rung, not whichever happens to be first.
-    $("hintSeniority").value = hints.defaultSeniority;
+  // --- No-JD role category ---------------------------------------------------
+  // The ONE optional question the no-JD path asks. Options come from the
+  // server's own closed list, so the picker can't offer a value the server
+  // would reject; if that fetch fails we simply never show the row and the
+  // build falls back to the plain generic role. Only relevant while the JD
+  // box is empty — a pasted posting decides the category itself.
+  (async function initRoleCategory() {
     const sync = () => { $("roleHint").hidden = !!$("jdText").value.trim(); };
     $("jdText").addEventListener("input", sync);
-    sync();
+    $("roleHint").hidden = true;
+    try {
+      const d = await api(`role-categories?track=${TRACK}`);
+      $("hintArchetype").innerHTML = d.categories
+        .map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`)
+        .join("");
+      sync();
+    } catch { /* generic role it is */ }
   })();
 
   // --- Auth + bank load ------------------------------------------------------
@@ -225,7 +206,6 @@
       const calls = [api("extract-target", {
         text: jd, track: TRACK,
         // Ignored server-side when a JD is present — the posting wins.
-        seniority: $("hintSeniority").value,
         archetype: $("hintArchetype").value,
       })];
       if (cv) calls.push(api("extract-units", { text: cv, track: TRACK }));

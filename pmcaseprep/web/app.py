@@ -80,6 +80,7 @@ from ..prep_engine import (
     transcript_stats,
 )
 from ..prep_tracks import rounds_for
+from ..prep_tracks import track as track_config
 from ..recruiter_kb import recruiter_guide, recruiter_system_prompt
 from ..resources import resources_for
 from ..skill_graph import SkillGraph
@@ -849,9 +850,11 @@ async def prep_extract_target(request: Request) -> JSONResponse:
 
     The JD is OPTIONAL. With one, the model decodes the specific opening.
     Without one, we build the track's role-family target instead — same
-    shape, so the heatmap and everything after it work identically — from
-    optional `seniority` / `archetype` hints. That path costs no model call,
-    so it isn't rate-limited into the model budget either."""
+    shape, so the heatmap and everything after it work identically. The only
+    thing we'll optionally ask for is `archetype`, the role category (AI PM,
+    Growth PM, …); off-list values fall back to the plain generic role, and
+    seniority is never asked. That path costs no model call, so it isn't
+    rate-limited into the model budget either."""
     email, err = _prep_gate(request)
     if err is not None:
         return err
@@ -860,9 +863,7 @@ async def prep_extract_target(request: Request) -> JSONResponse:
     track = _prep_track(data or {})
     if not text:
         result = generic_target(
-            track,
-            seniority=str((data or {}).get("seniority") or "").strip() or None,
-            archetype=str((data or {}).get("archetype") or "").strip() or None,
+            track, archetype=str((data or {}).get("archetype") or "").strip() or None
         )
     else:
         result = await _prep_model_call(extract_target, text, PREP_MODEL, track)
@@ -1312,6 +1313,25 @@ async def prep_rounds(track: str = "pm") -> JSONResponse:
     family actually faces). Static curated data straight from the recruiter
     KB — browsable without login, like the recruiter's field guide."""
     return JSONResponse({"ok": True, "rounds": rounds_for("ds" if track == "ds" else "pm")})
+
+
+@app.get("/api/prep/role-categories")
+async def prep_role_categories(track: str = "pm") -> JSONResponse:
+    """The role categories the no-JD path will accept, with display labels.
+
+    Served rather than mirrored in JS so the picker can never drift from the
+    closed list the server validates against — an option the page offers is
+    by construction one the server honours."""
+    tr = track_config("ds" if track == "ds" else "pm")
+    return JSONResponse(
+        {
+            "ok": True,
+            "categories": [
+                {"value": v, "label": lab}
+                for v, lab in zip(tr["archetype_options"], tr["archetype_labels"])
+            ],
+        }
+    )
 
 
 @app.post("/api/prep/grill-map")

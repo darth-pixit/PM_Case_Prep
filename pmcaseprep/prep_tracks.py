@@ -66,10 +66,23 @@ TRACKS: dict[str, dict] = {
         "taxonomy": PM_TAXONOMY,
         "seniority": ("APM", "PM", "Senior", "Group", "Director"),
         "archetypes": "Growth / Platform / 0-to-1 / Data / AI / Core",
-        # Used only when there is NO job description: the rung and flavour to
-        # assume so the role-family target stays honest instead of guessing.
+        # Used only when there is NO job description. `archetype_options` is
+        # the closed list the page may offer and the server will accept — the
+        # role category is the one optional question we ask; anything else
+        # falls back to the plain generic role. The rung is NEVER asked: with
+        # no posting there's no honest way to pick one, so the schema's
+        # required field just takes this middle default.
         "default_seniority": "PM",
         "default_archetype": "General",
+        "archetype_options": (
+            "General", "AI", "Growth", "Platform", "0-to-1", "Data", "Core",
+        ),
+        # Display labels for those options, in the same order.
+        "archetype_labels": (
+            "Generic PM (no specific track)", "AI PM", "Growth PM",
+            "Platform / Technical PM", "0-to-1 PM", "Data PM",
+            "Core / Generalist PM",
+        ),
         "extract_context": (
             "The candidate is a product manager: launches, growth pushes, "
             "fixes, strategy calls, conflicts, and research efforts are all "
@@ -97,6 +110,15 @@ TRACKS: dict[str, dict] = {
         ),
         "default_seniority": "Mid",
         "default_archetype": "General",
+        "archetype_options": (
+            "General", "Product Analytics", "Experimentation", "ML & Modeling",
+            "GenAI & LLM", "Platform & Infra", "Decision Science",
+        ),
+        "archetype_labels": (
+            "Generic data scientist (no specific track)", "Product Analytics DS",
+            "Experimentation DS", "ML & Modeling DS", "GenAI & LLM DS",
+            "Platform & Infra DS", "Decision Science DS",
+        ),
         "extract_context": (
             "The candidate is a data scientist: analyses, models, pipelines, "
             "experiments, dashboards, and publications are all candidate "
