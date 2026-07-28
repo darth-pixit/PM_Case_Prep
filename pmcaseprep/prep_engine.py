@@ -558,6 +558,56 @@ def extract_units(
     return sanitize_units(raw, cv_text, taxonomy=tr["taxonomy"])
 
 
+def generic_target(
+    track_key: str = "pm",
+    seniority: Optional[str] = None,
+    archetype: Optional[str] = None,
+) -> TargetProfile:
+    """The target to prep against when there is NO job description.
+
+    The JD is optional by design — you prep for a role, not only for one
+    opening. Everything downstream (heatmap, stories, grill map, learning
+    plan) reads a TargetProfile, so rather than special-casing the no-JD path
+    through the whole engine we build an honest profile here:
+
+    - no company is invented (the field stays empty),
+    - every competency in the track's taxonomy is required at equal weight,
+      because without a JD we have no basis to rank one above another,
+    - each `evidence` string says plainly that it came from the role family
+      and not from a posting, so nothing downstream can mistake it for a
+      quote from a real JD.
+
+    `seniority` and `archetype` are optional hints from the page; anything
+    off-ladder falls back to the track's default rather than being trusted.
+    This costs no model call — there is no text to read.
+    """
+    tr = track_config(track_key)
+    rung = seniority if seniority in tr["seniority"] else tr["default_seniority"]
+    flavour = (archetype or "").strip() or tr["default_archetype"]
+    evidence = (
+        f"No job description — core competency for {rung} {tr['role_noun']} roles."
+    )
+    return sanitize_target(
+        TargetProfile(
+            company="",
+            roleTitle=f"{flavour} {tr['role_noun']}".strip(),
+            seniority=rung,
+            archetype=flavour,
+            requiredCompetencies=[
+                RequiredCompetency(competency=c, weight=3, evidence=evidence)
+                for c in tr["taxonomy"]
+            ],
+            unwrittenPain=(
+                f"No specific opening: preparing for {rung} {tr['role_noun']} "
+                "roles in general, so treat every competency as equally likely "
+                "to be tested."
+            ),
+            companyValues=[],
+        ),
+        track_key=tr["key"],
+    )
+
+
 def extract_target(
     client: Any, jd_text: str, model: str, track_key: str = "pm"
 ) -> TargetProfile:

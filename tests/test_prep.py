@@ -23,6 +23,7 @@ from pmcaseprep.prep_engine import (  # noqa: E402
     TargetProfile,
     audit_story,
     fill_prompt,
+    generic_target,
     load_prompt,
     sanitize_heatmap,
     sanitize_target,
@@ -287,3 +288,52 @@ def test_prompts_state_the_no_fabrication_rule():
 def test_fill_prompt_rejects_missing_placeholder():
     with pytest.raises(KeyError):
         fill_prompt("no tokens here", TAXONOMY="x")
+
+
+# --- The JD is optional -------------------------------------------------------
+
+def test_generic_target_covers_the_whole_track_taxonomy():
+    """No JD means no basis to rank one competency above another, so the
+    role-family target requires all of them at equal weight — and the shape
+    stays a real TargetProfile so the heatmap needs no special case."""
+    from pmcaseprep.prep_tracks import track as track_config
+
+    for track_key in ("pm", "ds"):
+        t = generic_target(track_key)
+        taxonomy = set(track_config(track_key)["taxonomy"])
+        assert {rc.competency for rc in t.requiredCompetencies} == taxonomy
+        assert {rc.weight for rc in t.requiredCompetencies} == {3}
+        assert t.track == track_key
+
+
+def test_generic_target_invents_no_employer():
+    """The whole point of the no-JD path is honesty: it must never conjure a
+    company, and its evidence must not read like a quote from a real posting."""
+    t = generic_target("pm")
+    assert t.company == ""
+    assert t.companyValues == []
+    for rc in t.requiredCompetencies:
+        assert "No job description" in rc.evidence
+    assert "No specific opening" in t.unwrittenPain
+
+
+def test_generic_target_takes_hints_but_never_trusts_them():
+    t = generic_target("pm", seniority="Director", archetype="Growth")
+    assert t.seniority == "Director" and t.archetype == "Growth"
+    assert "Growth" in t.roleTitle
+
+    # An off-ladder rung (including one borrowed from the OTHER track) falls
+    # back to the track default rather than reaching the Literal and raising.
+    for bogus in ("Staff", "Emperor", "", None):
+        assert generic_target("pm", seniority=bogus).seniority == "PM"
+    assert generic_target("ds", seniority="APM").seniority == "Mid"
+    assert generic_target("ds").archetype == "General"
+
+
+def test_generic_target_feeds_the_heatmap_unchanged():
+    """The no-JD target must survive the same sanitizer the real pipeline
+    runs, so nothing downstream can tell the two apart structurally."""
+    t = generic_target("pm")
+    cells = sanitize_heatmap([], t, [])
+    assert len(cells) == len(t.requiredCompetencies)
+    assert all(c.strength == "red" for c in cells)  # no units -> nothing covered

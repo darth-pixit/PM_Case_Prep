@@ -66,6 +66,10 @@ TRACKS: dict[str, dict] = {
         "taxonomy": PM_TAXONOMY,
         "seniority": ("APM", "PM", "Senior", "Group", "Director"),
         "archetypes": "Growth / Platform / 0-to-1 / Data / AI / Core",
+        # Used only when there is NO job description: the rung and flavour to
+        # assume so the role-family target stays honest instead of guessing.
+        "default_seniority": "PM",
+        "default_archetype": "General",
         "extract_context": (
             "The candidate is a product manager: launches, growth pushes, "
             "fixes, strategy calls, conflicts, and research efforts are all "
@@ -91,6 +95,8 @@ TRACKS: dict[str, dict] = {
             "Product Analytics / Experimentation / ML & Modeling / "
             "GenAI & LLM / Platform & Infra / Decision Science"
         ),
+        "default_seniority": "Mid",
+        "default_archetype": "General",
         "extract_context": (
             "The candidate is a data scientist: analyses, models, pipelines, "
             "experiments, dashboards, and publications are all candidate "

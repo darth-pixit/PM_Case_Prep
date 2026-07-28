@@ -68,6 +68,7 @@ from ..prep_engine import (
     extract_target,
     extract_units,
     gap_sprint,
+    generic_target,
     grill_map,
     interviewer_twin,
     learning_plan,
@@ -844,17 +845,29 @@ async def prep_extract_units(request: Request) -> JSONResponse:
 
 @app.post("/api/prep/extract-target")
 async def prep_extract_target(request: Request) -> JSONResponse:
-    """JD -> TargetProfile, saved as an application (campaign) row."""
+    """JD -> TargetProfile, saved as an application (campaign) row.
+
+    The JD is OPTIONAL. With one, the model decodes the specific opening.
+    Without one, we build the track's role-family target instead — same
+    shape, so the heatmap and everything after it work identically — from
+    optional `seniority` / `archetype` hints. That path costs no model call,
+    so it isn't rate-limited into the model budget either."""
     email, err = _prep_gate(request)
     if err is not None:
         return err
     data = await _prep_body(request)
     text = _prep_text(data or {})
+    track = _prep_track(data or {})
     if not text:
-        return JSONResponse({"ok": False, "error": "paste the JD first"}, status_code=400)
-    result = await _prep_model_call(extract_target, text, PREP_MODEL, _prep_track(data or {}))
-    if isinstance(result, JSONResponse):
-        return result
+        result = generic_target(
+            track,
+            seniority=str((data or {}).get("seniority") or "").strip() or None,
+            archetype=str((data or {}).get("archetype") or "").strip() or None,
+        )
+    else:
+        result = await _prep_model_call(extract_target, text, PREP_MODEL, track)
+        if isinstance(result, JSONResponse):
+            return result
     bank = _bank()
     try:
         tid = bank.save_target(email, result.model_dump(), [])

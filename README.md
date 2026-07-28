@@ -28,7 +28,7 @@ bleed into each other:
 | `/arena` | **Case Arena** — 5 PM tracks × 5 cases each, pick-your-case | **required at start** | `experiment=arena`, `arena_*` events |
 | `/recruiter` | **Recruiter Copilot** — hiring for AI/DS without being an expert | required for chat; field guide open | `experiment=recruiter`, `recruiter_*` events |
 | `/referrals` | **Referral Paths** — closeness-ranked referral map from your own data exports, plus multiplayer job-hunt pods | solo: none (all client-side) · pods: required | `experiment=referrals`, `referrals_*` events |
-| `/prep` | **Prep Engine** — a compounding story bank: CV + JD → coverage heatmap, pressure-tested STAR stories, grill room, learning plan, mock loop, debrief write-back | **required** (bank follows the account) | `experiment=prep`, `prep_*` events |
+| `/prep` | **Prep Engine** — a compounding story bank: CV (+ optional JD) → coverage heatmap, pressure-tested STAR stories, grill room, learning plan, mock loop, debrief write-back | **required** (bank follows the account) | `experiment=prep`, `prep_*` events |
 | `/prep-ds` | **Prep Engine · Data Science** — the same engine on the DS track: DS taxonomy (SQL, stats, ML, experimentation, GenAI…), DS-tuned prompts, researched loop map | **required** (loop map open) | `experiment=prep-ds`, `prep-ds_*` events |
 
 Every PostHog event carries an `experiment` super property, so per-experiment
@@ -100,6 +100,18 @@ pack. Truthfulness is enforced in code, not just prompts: a deterministic
 audit nulls extracted metrics whose numbers aren't in the source, downgrades
 "green" cells that cite no real unit, and flags story numbers found in no
 unit under `unverifiedClaims` for explicit user confirmation.
+
+**The JD is optional.** Paste one and the model decodes that specific opening;
+leave it empty and the engine builds the **role-family target** instead —
+you're usually prepping for a role, not only for one posting. Without a JD it
+invents no employer (`company` stays empty) and requires *every* competency in
+the track's taxonomy at equal weight, because there's no basis to rank one
+above another; each `evidence` line says so plainly, so nothing downstream can
+mistake it for a quote from a real posting. Optional seniority / archetype
+pickers sharpen the framing, and anything off-ladder falls back to the track
+default. The path costs **no model call** — there's no text to read — and the
+result is an ordinary `TargetProfile`, so the heatmap, stories, grill room and
+learning plan all run unchanged.
 
 The engine is **track-aware** (`prep_tracks.py`): `/prep` runs the PM track,
 `/prep-ds` runs Data Science on the same loop with its own 12-competency

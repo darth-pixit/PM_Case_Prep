@@ -351,6 +351,44 @@ def test_field_guide_is_self_contained(tmp_path, monkeypatch):
         assert "/guide" not in (static / page).read_text(), page
 
 
+def test_extract_target_without_a_jd_needs_no_model(tmp_path, monkeypatch):
+    """The JD is optional. Posting no text must return a usable role-family
+    target rather than a 400 — and must do it WITHOUT a model call, which
+    this test proves by leaving the engine unconfigured: any attempt to reach
+    Anthropic here would fail the request instead of returning ok."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    monkeypatch.setattr(webapp, "PREP_DB", str(tmp_path / "prep.db"))
+    monkeypatch.setattr(webapp, "PREP_MODEL", "no-such-model")
+
+    r = client.post("/api/auth/email/request", json={"email": "p@example.com"})
+    code = r.json().get("dev_code")
+    assert client.post(
+        "/api/auth/email/verify", json={"email": "p@example.com", "code": code}
+    ).json()["ok"]
+
+    r = client.post("/api/prep/extract-target", json={"text": "", "track": "pm"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["ok"] and d["targetId"]
+    t = d["target"]
+    # A real target the heatmap can consume, with nothing invented.
+    assert t["company"] == "" and t["track"] == "pm"
+    assert t["seniority"] == "PM" and t["archetype"] == "General"
+    assert len(t["requiredCompetencies"]) == 12
+    assert all(rc["weight"] == 3 for rc in t["requiredCompetencies"])
+
+    # Hints are honoured; the DS page gets the DS ladder and taxonomy.
+    r = client.post(
+        "/api/prep/extract-target",
+        json={"text": "", "track": "ds", "seniority": "Staff", "archetype": "ML & Modeling"},
+    )
+    t = r.json()["target"]
+    assert t["track"] == "ds" and t["seniority"] == "Staff"
+    assert t["archetype"] == "ML & Modeling"
+
+
 def test_prep_rounds_endpoint_is_open_and_track_scoped(tmp_path, monkeypatch):
     client, _ = _client(tmp_path, monkeypatch)
     if client is None:

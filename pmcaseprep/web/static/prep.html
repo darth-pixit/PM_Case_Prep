@@ -38,10 +38,16 @@
             <textarea id="cvText" rows="10" placeholder="e.g. Led checkout revamp at Acme (team of 6). Cut drop-off 18%. Also: the failed loyalty launch I killed after 2 sprints…"></textarea>
           </div>
           <div>
-            <h3>Job description</h3>
-            <p class="hint">Paste the JD. The engine reads between the lines for the
-            unwritten pain behind the hire.</p>
-            <textarea id="jdText" rows="10" placeholder="Paste the full job description here…"></textarea>
+            <h3>Job description <span class="pill">optional</span></h3>
+            <p class="hint">Paste a JD and the engine reads between the lines for the
+            unwritten pain behind the hire. No JD? Leave it empty and prep for the
+            role in general — pick a rung and flavour below, or neither.</p>
+            <textarea id="jdText" rows="10" placeholder="Paste the full job description here — or leave this empty to prep for the role in general…"></textarea>
+            <!-- Only meaningful without a JD: with one, the posting decides. -->
+            <div class="preset-row" id="roleHint" style="margin-top:0.6rem">
+              <select id="hintSeniority" aria-label="Seniority"></select>
+              <select id="hintArchetype" aria-label="Role flavour"></select>
+            </div>
           </div>
         </div>
         <div class="prep-actions">
