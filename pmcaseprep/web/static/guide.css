@@ -485,6 +485,60 @@ a:hover { color: var(--color-accent-800); }
   }
 }
 
+/* ── first-run walkthrough (chapter 4) ──────────────────────────────────── */
+
+/* Chapter 4 is the only screen you *operate* rather than read, so it gets a
+   short coach-mark tour the first time. Dimmer + a cut-out ring around the
+   thing being described, so the pointer is unambiguous without arrows. */
+/* Transparent on purpose: it only catches the click-outside-to-dismiss. The
+   dimming is the RING's huge spread shadow, which is what cuts the highlighted
+   element out of the dark. Dimming here too would grey out the very thing the
+   step is pointing at. */
+.g-tour-veil { position: fixed; inset: 0; z-index: 70; }
+.g-tour-ring {
+  position: absolute; z-index: 71; pointer-events: none;
+  border-radius: var(--radius-md);
+  outline: 3px solid var(--color-accent);
+  outline-offset: 4px;
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--color-neutral-900) 55%, transparent);
+}
+.g-tour-card {
+  position: absolute; z-index: 72;
+  width: min(330px, calc(100vw - 32px));
+  background: var(--color-neutral-100); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg); padding: 18px 20px;
+}
+.g-tour-step {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--color-accent-700); margin-bottom: 6px;
+}
+.g-tour-t { font-family: var(--font-heading); font-size: 17px; margin-bottom: 6px; }
+.g-tour-b { font-size: 14.5px; color: var(--color-neutral-800); }
+.g-tour-actions {
+  display: flex; align-items: center; gap: 10px; margin-top: 16px;
+}
+.g-tour-dots { display: flex; gap: 5px; margin-right: auto; }
+.g-tour-dot {
+  width: 7px; height: 7px; border-radius: 999px; background: var(--color-neutral-300);
+}
+.g-tour-dot.is-on { background: var(--color-accent); }
+.g-tour-skip {
+  border: 0; background: none; cursor: pointer; padding: 4px;
+  font: inherit; font-size: 13px; color: var(--color-neutral-700);
+}
+.g-tour-skip:hover { color: var(--color-text); }
+.g-tour-replay {
+  border: 0; background: none; cursor: pointer; padding: 0;
+  font: inherit; font-size: 13px; color: var(--color-accent-700);
+  text-decoration: underline; text-underline-offset: 3px;
+}
+
+@media (max-width: 720px) {
+  .g-tour-card {
+    position: fixed; left: 16px; right: 16px; bottom: 16px; top: auto; width: auto;
+  }
+}
+
 /* ── footer ─────────────────────────────────────────────────────────────── */
 
 .g-footer {

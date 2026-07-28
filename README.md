@@ -59,9 +59,22 @@ separate from the dark app shell the other pages share, because this page is
 editorial and they're tools. Content lives in one `CONTENT` object in
 `web/static/guide.js` so copy edits never touch render code. Like every other
 experiment it is **self-contained** — it links to no other surface, so its
-funnel measures the guide and nothing else. The prose is deliberately written
-for someone with no tech background: no jargon goes unexplained, and where a
-term is unavoidable it's said in plain words first.
+funnel measures the guide and nothing else.
+
+**The guide keeps the real vocabulary on purpose.** Cart abandonment, funnel,
+segmenting, A/B test, sprint — a reader who finishes it should have *learned*
+those words, not been protected from them. Two features carry that load
+instead of dumbed-down prose: an explainer on any word, and a walkthrough of
+the one screen you operate rather than read.
+
+**A walkthrough on "You're the PM."** Every other chapter you just read;
+chapter 4 you play — you pick, you lock in, you carry choices forward, and the
+select-to-explain gesture is invisible until someone points it out. So the
+first visit gets four short coach marks (the brief, picking an option, the
+explainer, your running log), shown once, remembered in `localStorage`, and
+replayable any time from the "How this page works" link next to the round
+counter. A step whose target isn't on screen is skipped rather than pointing
+at nothing.
 
 **"What does this mean?"** Select any word or phrase anywhere in the guide and
 a chip offers to explain it; the popover also takes a typed question. This is
