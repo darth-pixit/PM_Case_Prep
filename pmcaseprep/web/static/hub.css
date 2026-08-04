@@ -185,6 +185,27 @@ details.fold > .fold-body { padding: 0 0.9rem 0.8rem; }
 .prep-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.6rem; }
 .prep-actions { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.8rem; }
 
+/* Attach a CV / JD file. The real <input type=file> is hidden and driven by
+   its <label for>, so the control matches the rest of the UI instead of the
+   browser's native widget — but it stays a real focusable input, so keyboard
+   and screen-reader users get the normal file-picker behaviour. */
+.attach-row { display: flex; align-items: center; gap: 0.55rem; margin-top: 0.5rem;
+  flex-wrap: wrap; }
+.attach-row input[type="file"] { position: absolute; width: 1px; height: 1px;
+  opacity: 0; pointer-events: none; }
+.attach {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px; padding: 0.3rem 0.8rem; font-size: 0.82rem; cursor: pointer;
+  white-space: nowrap; transition: border-color 0.15s, color 0.15s;
+}
+.attach:hover { border-color: var(--accent); color: var(--accent); }
+/* :has() because the label precedes the input in the DOM — a sibling
+   combinator only looks forward, so it could never reach the label. */
+.attach-row:has(input[type="file"]:focus-visible) .attach {
+  outline: 2px solid var(--accent); outline-offset: 2px; color: var(--accent);
+}
+.attach-row .hint { margin: 0; font-size: 0.8rem; min-width: 0; overflow-wrap: anywhere; }
+
 .unit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.7rem; margin-top: 0.6rem; }
 .unit { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 0.7rem 0.8rem; font-size: 0.88rem; }
 .unit.fail { border-color: var(--warn); }

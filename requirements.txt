@@ -10,6 +10,15 @@ fastapi>=0.110
 uvicorn[standard]>=0.27
 websockets>=12.0
 
+# CV / JD file attach on /prep and /prep-ds. python-multipart is REQUIRED, not
+# optional: FastAPI raises at import time on any route with an UploadFile
+# parameter if it's missing, so leaving it out takes the whole app down rather
+# than just the upload endpoint. pypdf and python-docx do the extraction —
+# both pure Python, so the offline tests cover the real code path.
+python-multipart>=0.0.9
+pypdf>=4.0
+python-docx>=1.1
+
 # Shared login (all experiments): verifies "Sign in with Google" ID tokens
 # server-side. The [requests] extra is REQUIRED, not optional: token
 # verification imports google.auth.transport.requests, which needs the

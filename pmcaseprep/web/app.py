@@ -36,7 +36,14 @@ except ImportError:
     pass
 
 import anthropic
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    File,
+    Request,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -57,8 +64,10 @@ from ..grader import grade, weighted_result
 from ..interviewer import Interviewer
 from ..models import Case
 from ..prep_bank import BankFull, PrepBank
+from ..prep_files import MAX_UPLOAD_BYTES, UnsupportedFile, extract_text
 from ..prep_engine import (
     CoverageCell,
+    PrepTruncated,
     Story,
     TargetProfile,
     craft_story,
@@ -914,10 +923,75 @@ def _prep_units(data: dict) -> list | None:
 
 
 async def _prep_model_call(fn, *args) -> JSONResponse | object:
+    """Run one engine call off the event loop and turn any failure into an
+    honest, actionable message.
+
+    This used to collapse every exception into "the engine hit a snag", which
+    told the user nothing and told us nothing either: a missing API key, a
+    rate limit, and an oversized CV all looked identical from the browser, and
+    the only way to tell them apart was to read the Render logs. The classes
+    below are the ones with genuinely different fixes — the user shortens
+    their input, waits, or the operator checks the key — so they get to say
+    which one happened. Anything unrecognized still falls through to the
+    generic message with the real exception logged server-side only.
+    """
     try:
         return await asyncio.to_thread(fn, anthropic.Anthropic(), *args)
+    except PrepTruncated as exc:
+        # The one failure the user can fix themselves.
+        print(f"prep engine truncated: {exc}", flush=True)
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": (
+                    "that's more text than the engine can read in one pass — "
+                    "trim it to the most recent roles and try again"
+                ),
+            },
+            status_code=400,
+        )
+    except anthropic.RateLimitError:
+        print("prep engine rate limited", flush=True)
+        return JSONResponse(
+            {"ok": False, "error": "the engine is busy — wait a moment and retry"},
+            status_code=429,
+        )
+    except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
+        # Operator problem, not a user problem — say so rather than inviting
+        # a retry that cannot possibly work.
+        print(f"prep engine auth failure: {exc!r}", flush=True)
+        return JSONResponse(
+            {
+                "ok": False,
+                "error": "the engine isn't configured right now — this one's on us",
+            },
+            status_code=503,
+        )
+    except anthropic.APIConnectionError as exc:
+        print(f"prep engine connection error: {exc!r}", flush=True)
+        return JSONResponse(
+            {"ok": False, "error": "couldn't reach the engine — try that again"},
+            status_code=504,
+        )
+    except anthropic.APIStatusError as exc:
+        # Log the status and the API's own error type: without these two the
+        # generic branch below is undebuggable from the logs alone.
+        print(
+            f"prep engine api error: status={exc.status_code} "
+            f"type={getattr(exc, 'type', None)!r} {exc!r}",
+            flush=True,
+        )
+        if exc.status_code >= 500:
+            return JSONResponse(
+                {"ok": False, "error": "the engine is overloaded — try again shortly"},
+                status_code=503,
+            )
+        return JSONResponse(
+            {"ok": False, "error": "the engine rejected that request — try again"},
+            status_code=502,
+        )
     except Exception as exc:  # noqa: BLE001
-        print(f"prep engine model error: {exc!r}", flush=True)
+        print(f"prep engine model error: {type(exc).__name__}: {exc!r}", flush=True)
         return JSONResponse(
             {"ok": False, "error": "the engine hit a snag — try that again"},
             status_code=502,
@@ -943,6 +1017,55 @@ def _prep_track(data: dict) -> str:
     """The requesting page's role family. Anything unrecognized degrades to
     the original PM track — never an error."""
     return "ds" if str(data.get("track") or "").strip() == "ds" else "pm"
+
+
+@app.post("/api/prep/upload")
+async def prep_upload(
+    request: Request, file: UploadFile = File(...)
+) -> JSONResponse:
+    """CV or JD file -> the plain text that goes in the paste box.
+
+    Deliberately does NOT extract units or decode a role: it fills the
+    textarea and stops, so the user reads what we got out of their PDF before
+    spending a model call on it. That keeps the one lossy step (PDF -> text)
+    visible and editable instead of buried inside a build that either works or
+    says "no units found".
+
+    Costs no model call, so it takes the cheap sqlite budget rather than the
+    prep model budget — attaching a file shouldn't eat a build.
+    """
+    email, err = _prep_bank_gate(request)
+    if err is not None:
+        return err
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        mb = MAX_UPLOAD_BYTES // (1024 * 1024)
+        return JSONResponse(
+            {"ok": False, "error": f"that file is over {mb}MB — attach a smaller one"},
+            status_code=413,
+        )
+    try:
+        text = await asyncio.to_thread(extract_text, file.filename or "", data)
+    except UnsupportedFile as exc:
+        # UnsupportedFile messages are written for the user and name the fix.
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as exc:  # noqa: BLE001
+        print(f"prep upload failed: {type(exc).__name__}: {exc!r}", flush=True)
+        return JSONResponse(
+            {"ok": False, "error": "couldn't read that file — paste the text instead"},
+            status_code=400,
+        )
+    # Trim to the same cap the paste box is held to, and say so rather than
+    # letting the tail vanish silently.
+    clipped = text[:PREP_MAX_CHARS]
+    return JSONResponse(
+        {
+            "ok": True,
+            "text": clipped,
+            "chars": len(clipped),
+            "truncated": len(text) > len(clipped),
+        }
+    )
 
 
 @app.post("/api/prep/extract-units")

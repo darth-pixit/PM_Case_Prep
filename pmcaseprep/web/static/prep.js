@@ -87,6 +87,46 @@
     el.style.color = bad ? "var(--bad)" : "";
   }
 
+  // --- Attach a CV / JD file -------------------------------------------------
+  // The file lands in the textarea, and stops there. Extraction from a PDF is
+  // the one lossy step in the whole flow, so the user sees exactly what we got
+  // and can fix it BEFORE spending a build on it — rather than discovering a
+  // two-column layout came out scrambled three screens later. It also means
+  // attach and paste share one code path downstream: the build only ever reads
+  // the textarea.
+  function wireAttach(inputId, areaId, msgId, label) {
+    const picker = $(inputId);
+    const area = $(areaId);
+    if (!picker || !area) return;
+    picker.addEventListener("change", async () => {
+      const file = picker.files && picker.files[0];
+      if (!file) return;
+      msg(msgId, "Reading " + file.name + "…");
+      const form = new FormData();
+      form.append("file", file);
+      try {
+        const r = await fetch("/api/prep/upload", { method: "POST", body: form });
+        const d = await r.json().catch(() => ({}));
+        if (!d.ok) throw new Error(d.error || "couldn't read that file");
+        area.value = d.text;
+        area.dispatchEvent(new Event("input", { bubbles: true }));
+        msg(msgId, d.truncated
+          ? label + " added — it was long, so the tail was trimmed. Check it reads right."
+          : label + " added (" + d.chars.toLocaleString() + " chars). Check it reads right.");
+        x.track("prep_file_attached", {
+          kind: label.toLowerCase(), chars: d.chars, truncated: !!d.truncated,
+        });
+      } catch (e) {
+        msg(msgId, e.message, true);
+        x.track("prep_file_failed", { kind: label.toLowerCase(), error: e.message });
+      }
+      // Let the same file be re-picked after an edit or a failure.
+      picker.value = "";
+    });
+  }
+  wireAttach("cvFile", "cvText", "cvFileMsg", "CV");
+  wireAttach("jdFile", "jdText", "jdFileMsg", "JD");
+
   // --- No-JD role category ---------------------------------------------------
   // The ONE optional question the no-JD path asks. Options come from the
   // server's own closed list, so the picker can't offer a value the server
