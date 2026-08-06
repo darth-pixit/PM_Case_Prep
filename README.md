@@ -14,9 +14,9 @@ clarify  ->  solve (candidate drives)  ->  graduated hints on demand
          ->  rubric-graded scorecard  ->  longitudinal skill graph
 ```
 
-## Four experiments, one deploy
+## Seven experiments, one deploy
 
-The site runs **four separate experiments on one Render service, one domain,
+The site runs **seven separate experiments on one Render service, one domain,
 one database, and one login system** — but each experiment has its own page,
 its own user experience, and its own analytics namespace, so results never
 bleed into each other:
@@ -24,9 +24,12 @@ bleed into each other:
 | Route | Experiment | Login | Analytics namespace |
 |---|---|---|---|
 | `/` | **Tutor** — the original single-case interview (unchanged) | optional, at scorecard | `experiment=tutor` |
+| `/guide` | **The PM Field Guide** — a six-chapter explainer of the job, with a case you play | **none** — nothing to sign up for | `experiment=guide`, `guide_*` events |
 | `/arena` | **Case Arena** — 5 PM tracks × 5 cases each, pick-your-case | **required at start** | `experiment=arena`, `arena_*` events |
 | `/recruiter` | **Recruiter Copilot** — hiring for AI/DS without being an expert | required for chat; field guide open | `experiment=recruiter`, `recruiter_*` events |
 | `/referrals` | **Referral Paths** — closeness-ranked referral map from your own data exports, plus multiplayer job-hunt pods | solo: none (all client-side) · pods: required | `experiment=referrals`, `referrals_*` events |
+| `/prep` | **Prep Engine** — a compounding story bank: CV (+ optional JD) → coverage heatmap, pressure-tested STAR stories, grill room, learning plan, mock loop, debrief write-back | **required** (bank follows the account) | `experiment=prep`, `prep_*` events |
+| `/prep-ds` | **Prep Engine · Data Science** — the same engine on the DS track: DS taxonomy (SQL, stats, ML, experimentation, GenAI…), DS-tuned prompts, researched loop map | **required** (loop map open) | `experiment=prep-ds`, `prep-ds_*` events |
 
 Every PostHog event carries an `experiment` super property, so per-experiment
 dashboards are one filter away while a single (free-tier) PostHog project and
@@ -39,6 +42,71 @@ with Google" (a Google-signed ID token verified server-side — set
 so there is nothing to forget and no reset flow to build. Both doors land on
 the same `users` table the tutor already used, and anonymous work done before
 signing in merges into the account.
+
+**The PM Field Guide** (`/guide`) is the only surface that costs nothing to
+serve: no login, no mic, no model call. It's the top of the funnel — someone
+who doesn't yet know what a PM *is* reads six chapters (the role, the six
+flavors of PM, five legendary product calls, a playable case, the skill map,
+breaking in) and comes out knowing whether they want to practice at all.
+Chapter 4 is a **six-round case you play**: one brief (cart abandonment at
+70%), three options a round, immediate feedback on each pick, a running log of
+your calls, and at the end your run against the ideal one plus "what's easy to
+miss". Every chapter is a real URL (`/guide#decisions`), so chapters are
+shareable and the back button works. It was designed in
+[Claude Design](https://claude.ai/design) and ported to vanilla HTML/CSS/JS —
+its "Organic" design tokens live in `web/static/guide.css`, deliberately
+separate from the dark app shell the other pages share, because this page is
+editorial and they're tools. Content lives in one `CONTENT` object in
+`web/static/guide.js` so copy edits never touch render code. Like every other
+experiment it is **self-contained** — it links to no other surface, so its
+funnel measures the guide and nothing else.
+
+**The guide keeps the real vocabulary on purpose.** Cart abandonment, funnel,
+segmenting, A/B test, sprint — a reader who finishes it should have *learned*
+those words, not been protected from them. Two features carry that load
+instead of dumbed-down prose: an explainer on any word, and a walkthrough of
+the one screen you operate rather than read.
+
+**A walkthrough on "You're the PM."** Every other chapter you just read;
+chapter 4 you play. Exactly **two** coach marks on the first visit, because
+only two things there aren't self-evident: that picking an option opens up the
+reasoning behind it, and that a word explainer is one tap away (that step
+shows a worked example — *funnel* — and a test pins the term it quotes to a
+real glossary entry, so the demo can't drift from what the box answers). Shown
+once, remembered in `localStorage`, replayable from the "How this page works"
+link next to the round counter. The card is placed on whichever side of the
+highlight has room, so it never covers the thing it's describing.
+
+**"Explain a word."** A button on every chapter opens a box you type any word
+into — a floating card on desktop, a full-height sheet on a phone with the
+field at the *top*, since a bottom-anchored box is exactly what the on-screen
+keyboard covers. Starter chips (`/api/guide/terms`) are all glossary hits by
+construction, so tapping one is instant and free. This was originally a
+select-the-word gesture; selection is awkward on a phone — the OS handles
+fight anything floated next to them — so the gesture is gone and the
+affordance is visible instead.
+
+`/api/guide/explain` is the **one model endpoint with no login**: its readers
+are exactly the people who don't have an account, and a sign-in wall in front
+of the word *funnel* would defeat the page. It carries its own cost controls
+instead:
+
+- `guide_glossary.py` is a **curated plain-English glossary** that answers
+  first, with no model call at all. It covers the guide's own vocabulary by
+  construction, since we write the copy. Keys are normalized (lowercased,
+  depluralized, de-gerunded), so `Funnels`, `funnel,` and `FUNNEL` all hit one
+  entry however someone types it.
+- Stray everyday words (`changes`, `everyone`, `the`) hit a **stopword list**
+  and are turned away *before* the model — otherwise every idle "why does
+  everyone say ship" would be a paid call. It's checked after the glossary, so
+  terms that are also ordinary words (`ship`, `default`, `margin`, `spec`)
+  still get explained.
+- Only genuine misses reach the model, and that's **Haiku** with a 200-token
+  ceiling, capped input, same-origin + visitor-cookie checks, and **both** a
+  per-IP and a global hourly limit (`PMCP_GUIDE_HOURLY_PER_IP`,
+  `PMCP_GUIDE_HOURLY_TOTAL`) so rotating IPs can't run up a bill. `PMCP_MODEL`
+  deliberately does **not** override `PMCP_GUIDE_MODEL`, so pointing the global
+  override at Opus can't silently make this expensive.
 
 **The arena's case bank** lives in `cases/arena/` (the tutor's bank at
 `cases/` is untouched): 25 original cases across the five highest-hiring PM
@@ -66,6 +134,77 @@ whom, who invited whom, and who also shows up in your phone/IG/FB. Buckets
 rank accordingly ("they owe you one", "referral talk already happened",
 "inner circle", recruiters/senior people flagged as ⚡ doors). Names never
 touch the server in solo mode.
+
+**The Prep Engine** (`pmcaseprep/prep_engine.py`, `prep_bank.py`,
+`/api/prep/*`) is the behavioral-storytelling wedge: paste a CV / brain-dump
+and a JD, and it (1) atomizes real work into **achievement units**
+(competencies from a closed 12-item taxonomy, provenance quote,
+`metric: null` when the source had no number), (2) decodes the role into a
+**TargetProfile** including the *unwritten pain* behind the hire, (3) scores
+a red/amber/green **coverage heatmap**, and (4) drafts **STAR stories** in
+30-second / 2-minute / deep-dive versions — exportable as one markdown prep
+pack. Truthfulness is enforced in code, not just prompts: a deterministic
+audit nulls extracted metrics whose numbers aren't in the source, downgrades
+"green" cells that cite no real unit, and flags story numbers found in no
+unit under `unverifiedClaims` for explicit user confirmation.
+
+**The JD is optional.** Paste one and the model decodes that specific opening;
+leave it empty and you prep for a **generic PM role** instead — you're usually
+prepping for a role, not only for one posting. Without a JD the engine invents
+no employer (`company` stays empty) and requires *every* competency in the
+track's taxonomy at equal weight, because there's no basis to rank one above
+another; each `evidence` line says so plainly, so nothing downstream can
+mistake it for a quote from a real posting.
+
+The one thing it will optionally ask is the **role category** — AI PM, Growth
+PM, Platform, 0-to-1, Data, Core (and the DS equivalents on `/prep-ds`) — for
+candidates who know it. That list is a closed set served by
+`/api/prep/role-categories`, so the picker can never offer a value the server
+would discard, and anything off-list falls back to the plain generic role.
+Seniority is deliberately **never asked**: without a posting there's no honest
+way to pick a rung, so the schema's required field takes the track's middle
+default and no prose claims a level.
+
+The path costs **no model call** — there's no text to read — and the result is
+an ordinary `TargetProfile`, so the heatmap, stories, grill room and learning
+plan all run unchanged.
+
+The engine is **track-aware** (`prep_tracks.py`): `/prep` runs the PM track,
+`/prep-ds` runs Data Science on the same loop with its own 12-competency
+taxonomy (SQL & wrangling, statistics, ML fundamentals, experiment design,
+ML system design, GenAI/LLM fluency…), its own seniority ladder, DS-tuned
+extraction/grilling prompts, and a researched **loop map** of the rounds DS
+interviews actually run (from the recruiter KB, free to browse). The genome
+is deliberately shared across tracks: re-extraction UNIONS competency tags
+instead of replacing them, each page shows its own track's tags and
+preserves the other's on edit, and applications are listed per track.
+
+The moat is the **story bank** (`prep_bank.py`, SQLite next to the skill
+graph on the persistent disk): the genome MERGES on every re-extraction
+(dedupe by title + provenance — no duplicates), units are editable in place,
+and each JD becomes a saved **application** on a campaign dashboard that
+re-tunes instantly — same genome, new heatmap. On top of the loop sit the
+pressure layers: **Devil's Advocate** (adversarial attack rounds that judge
+your answers held/cracked until YOU mark the story solid), the **grill
+room** — a one-call **grill sheet** that pre-interrogates EVERY unit in the
+genome (the exhaustive CV prep: each unit's nastiest fair questions plus
+the trap each one hunts, cached per application) and a **deep-dive project
+grill** that takes ONE project through rotating interrogation angles
+(drill-down, trade-off, failure, constraint-twist, ownership, impact,
+rigor), judges each answer held/cracked, and keeps a running weak-spot
+list — **Gap-to-Sprint** (every red cell can become a concrete 2-week
+become-qualified plan — close the gap, never spin it), **suggested
+learnings** (a prioritized study plan from the JD + heatmap whose links are
+allowlisted to the repo's hand-verified resource pools — an invented URL
+cannot survive the sanitizer, and skipped gaps are back-filled with curated
+picks), an **Interviewer Twin** built ONLY from public signals the user
+pastes themselves (nothing fetched, nothing stored), an adaptive **mock
+interview** that probes the heatmap's weakest competencies and ends in a
+scorecard, a **delivery self-check** (browser dictation + computed
+pace/fillers, model-judged structure), and a **debrief write-back** that
+mines a real interview's notes into lessons plus DRAFT units the user must
+explicitly confirm into the bank. All fourteen LLM prompts live in
+`/prompts/*.md` — editable without touching code.
 
 **Pods** (`pmcaseprep/web/pods.py`, `/api/pods/*`) are the opt-in multiplayer
 layer: friends job-hunting together pool (1) who can refer directly where

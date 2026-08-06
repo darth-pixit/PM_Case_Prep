@@ -4,6 +4,7 @@ no real Google/Resend/Anthropic calls."""
 
 from __future__ import annotations
 
+import re
 import sys
 import time
 from pathlib import Path
@@ -309,14 +310,242 @@ def test_experiment_pages_served(tmp_path, monkeypatch):
     if client is None:
         return
     for path, marker in (
+        ("/guide", "The Field Guide"),
         ("/arena", "Case Arena"),
         ("/recruiter", "Recruiter Copilot"),
         ("/referrals", "Referral Paths"),
+        ("/prep", "Prep Engine"),
+        ("/prep-ds", "Data Science"),
     ):
         r = client.get(path)
         assert r.status_code == 200 and marker in r.text, path
     guide = client.get("/api/recruiter/guide").json()
     assert "archetypes" in guide
+
+
+def test_field_guide_is_self_contained(tmp_path, monkeypatch):
+    """Like every other experiment, the guide stands alone: it must carry its
+    own assets and analytics namespace, and link to no other surface (see the
+    'each experiment should be self-contained' rule that stripped the
+    cross-experiment footers)."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    html = client.get("/guide").text
+    assert "/static/guide.css" in html and "/static/guide.js" in html
+    # It leans on the shared analytics/login plumbing like every other page.
+    assert "/static/shared.js" in html
+
+    static = webapp.STATIC_DIR
+    js = (static / "guide.js").read_text()
+    # Its own PostHog namespace, so guide funnels never mix with the others.
+    assert 'PMCP.experiment("guide")' in js
+    # All six chapters plus the playable case survived the port.
+    for chapter in ("role", "types", "decisions", "cases", "skills", "breakin"):
+        assert f"{chapter}:" in js, chapter
+    assert js.count('verdict: "best"') == 8  # 6 case rounds + 2 quick-fires
+
+    # No doors out of the guide, and no door in from another experiment.
+    for other in ("/arena", "/recruiter", "/referrals", "/prep", "/prep-ds"):
+        assert f'"{other}"' not in html and f'"{other}"' not in js, other
+    for page in ("arena.html", "recruiter.html", "referrals.html"):
+        assert "/guide" not in (static / page).read_text(), page
+
+
+def test_extract_target_without_a_jd_needs_no_model(tmp_path, monkeypatch):
+    """The JD is optional. Posting no text must return a usable role-family
+    target rather than a 400 — and must do it WITHOUT a model call, which
+    this test proves by leaving the engine unconfigured: any attempt to reach
+    Anthropic here would fail the request instead of returning ok."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    monkeypatch.setattr(webapp, "PREP_DB", str(tmp_path / "prep.db"))
+    monkeypatch.setattr(webapp, "PREP_MODEL", "no-such-model")
+
+    r = client.post("/api/auth/email/request", json={"email": "p@example.com"})
+    code = r.json().get("dev_code")
+    assert client.post(
+        "/api/auth/email/verify", json={"email": "p@example.com", "code": code}
+    ).json()["ok"]
+
+    r = client.post("/api/prep/extract-target", json={"text": "", "track": "pm"})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["ok"] and d["targetId"]
+    t = d["target"]
+    # A real target the heatmap can consume, with nothing invented.
+    assert t["company"] == "" and t["track"] == "pm"
+    assert t["archetype"] == "General" and t["roleTitle"] == "Product manager"
+    assert len(t["requiredCompetencies"]) == 12
+    assert all(rc["weight"] == 3 for rc in t["requiredCompetencies"])
+
+    # The one optional question is honoured, on both tracks.
+    r = client.post(
+        "/api/prep/extract-target", json={"text": "", "track": "pm", "archetype": "AI"}
+    )
+    assert r.json()["target"]["roleTitle"] == "AI product manager"
+    r = client.post(
+        "/api/prep/extract-target",
+        json={"text": "", "track": "ds", "archetype": "ML & Modeling"},
+    )
+    t = r.json()["target"]
+    assert t["track"] == "ds" and t["archetype"] == "ML & Modeling"
+
+
+def test_role_categories_endpoint_matches_what_the_server_accepts(tmp_path, monkeypatch):
+    """The picker is served, not mirrored in JS, precisely so it can't offer a
+    category the server would silently discard. Pin that contract."""
+    client, _ = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    from pmcaseprep.prep_engine import generic_target
+
+    for track in ("pm", "ds"):
+        d = client.get(f"/api/prep/role-categories?track={track}").json()
+        assert d["ok"] and len(d["categories"]) >= 5
+        for c in d["categories"]:
+            assert c["value"] and c["label"]
+            # Every offered value survives the server's own validation.
+            assert generic_target(track, archetype=c["value"]).archetype == c["value"]
+        assert d["categories"][0]["value"] == "General"  # generic is the default
+
+
+def test_guide_explain_answers_from_the_glossary_without_login_or_model(tmp_path, monkeypatch):
+    """The guide's word-explainer is the one OPEN model endpoint, so the free
+    glossary path must work with no account at all — and must not touch the
+    model. PMCP_GUIDE_MODEL points at nothing here: a model call would 502."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    monkeypatch.setattr(webapp, "GUIDE_MODEL", "no-such-model")
+    client.get("/guide")  # uid cookie, no login
+
+    for term in ("funnel", "Funnels", "FUNNEL,", "segmenting", "A/B test", "cart abandonment"):
+        r = client.post("/api/guide/explain", json={"term": term})
+        assert r.status_code == 200, term
+        d = r.json()
+        assert d["ok"] and d["source"] == "glossary", term
+        assert d["plain"] and d["example"], term
+
+    # Nothing to explain is a 400, not a wasted model call.
+    assert client.post("/api/guide/explain", json={"term": "   "}).status_code == 400
+
+    # Stray everyday words are turned away before the model, not sent to it —
+    # a fake GUIDE_MODEL means any model call here would 502.
+    for filler in ("changes", "everyone", "the", "what you know"):
+        d = client.post("/api/guide/explain", json={"term": filler}).json()
+        assert d["ok"] and d["found"] is False, filler
+
+    # …but a term that is ALSO an everyday word is still explained properly.
+    for real in ("ship", "default", "margin", "spec"):
+        d = client.post("/api/guide/explain", json={"term": real}).json()
+        assert d["ok"] and d.get("source") == "glossary", real
+
+
+def test_guide_explain_guards_the_open_model_path(tmp_path, monkeypatch):
+    """Being login-free, the fallback leans on its other guards: same-origin,
+    a visitor cookie, and rate limits. A glossary miss with no cookie must not
+    reach the model."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    monkeypatch.setattr(webapp, "GUIDE_MODEL", "no-such-model")
+
+    # A foreign page can't drive it, even for a glossary word.
+    r = client.post(
+        "/api/guide/explain",
+        json={"term": "funnel"},
+        headers={"origin": "https://evil.example"},
+    )
+    assert r.status_code == 403
+
+    # No visitor cookie -> the miss is refused before any model call.
+    r = client.post("/api/guide/explain", json={"term": "zzz not a real term"})
+    assert r.status_code == 403
+
+    # With a cookie, the limiter still stands in front of the model.
+    client.get("/guide")
+    monkeypatch.setattr(webapp, "GUIDE_EXPLAIN", webapp.SlidingLimit(0, 3600))
+    r = client.post("/api/guide/explain", json={"term": "zzz not a real term"})
+    assert r.status_code == 429
+
+
+def test_guide_word_help_is_a_typed_box_not_a_text_selection(tmp_path, monkeypatch):
+    """The explainer used to appear when you selected a word. Text selection is
+    genuinely awkward on a phone — the OS handles fight anything floated next
+    to them — so the gesture is gone entirely. What's left is a button that is
+    always on screen and a field you type into.
+
+    The starter chips under that field must every one be a glossary hit, so
+    tapping one is instant and can never cost a model call."""
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    js = (webapp.STATIC_DIR / "guide.js").read_text()
+    css = (webapp.STATIC_DIR / "guide.css").read_text()
+    for gone in ("getSelection", "mouseup", "touchend", "selectionchange", '"g-ask"'):
+        assert gone not in js, gone
+    assert ".g-ask {" not in css and ".g-pop" not in css
+    assert "g-ask-btn" in js and "Explain a word" in js
+
+    d = client.get("/api/guide/terms").json()
+    assert d["ok"] and len(d["terms"]) >= 5
+    # A fake model means any chip that missed the glossary would 502 here.
+    monkeypatch.setattr(webapp, "GUIDE_MODEL", "no-such-model")
+    client.get("/guide")
+    for term in d["terms"]:
+        got = client.post("/api/guide/explain", json={"term": term}).json()
+        assert got["ok"] and got["source"] == "glossary", term
+
+
+def test_guide_walkthrough_is_two_steps_with_a_real_example(tmp_path, monkeypatch):
+    """Two pop-ups, not four: what happens when you pick an option, and where
+    the word explainer lives. The second one shows a worked example, so the
+    term it quotes has to be a genuine glossary entry rather than invented
+    copy that could drift away from what the box actually answers."""
+    from pmcaseprep.guide_glossary import lookup
+
+    client, webapp = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    js = (webapp.STATIC_DIR / "guide.js").read_text()
+    steps = js.split("first-run walkthrough")[1].split("const STEPS = [")[1].split("\n    ];")[0]
+    targets = re.findall(r'sel:\s*"([^"]+)"', steps)
+    assert targets == [".g-round .g-opts", ".g-ask-btn"]
+    term = re.search(r'term:\s*"([^"]+)"', steps).group(1)
+    assert lookup(term) is not None, term
+
+
+def test_guide_glossary_entries_are_plain_english():
+    """The whole point is explaining jargon to someone who has none, so an
+    entry must not lean on the guide's other jargon to do it."""
+    from pmcaseprep.guide_glossary import GLOSSARY, lookup, normalize, terms
+
+    assert len(terms()) >= 25
+    for entry in GLOSSARY.values():
+        assert entry["plain"] and entry["example"]
+        assert len(entry["plain"]) > 40, entry["term"]
+        # The FIRST sentence has to stand on its own, so it may not lean on the
+        # term itself. Later sentences may ("it's called a funnel because…"),
+        # which explains the name rather than dodging the definition.
+        opener = normalize(entry["plain"].split(".")[0]).split(" ")
+        head = normalize(entry["term"]).split(" ")[0]
+        assert head not in opener, entry["term"]
+    # Normalization folds the shapes a text selection actually produces.
+    assert lookup("Funnels") is lookup("funnel") is lookup("  FUNNEL,  ")
+    assert lookup("nonsense term here") is None
+
+
+def test_prep_rounds_endpoint_is_open_and_track_scoped(tmp_path, monkeypatch):
+    client, _ = _client(tmp_path, monkeypatch)
+    if client is None:
+        return
+    ds = client.get("/api/prep/rounds?track=ds").json()
+    assert ds["ok"] and len(ds["rounds"]) >= 5
+    assert all(r["name"] and r["example_questions"] for r in ds["rounds"])
+    pm = client.get("/api/prep/rounds?track=pm").json()
+    assert pm["ok"] and pm["rounds"] == []  # the PM loop map lives in the arena
 
 
 if __name__ == "__main__":

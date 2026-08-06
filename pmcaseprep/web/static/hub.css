@@ -160,8 +160,6 @@ details.fold > .fold-body { padding: 0 0.9rem 0.8rem; }
   border-radius: 999px; padding: 0.1rem 0.55rem; font-size: 0.76rem; color: var(--muted); }
 .notice { border-left: 3px solid var(--accent); padding: 0.5rem 0.8rem; background: var(--panel-2);
   border-radius: 0 8px 8px 0; margin: 0.6rem 0; font-size: 0.9rem; }
-.footer-nav { margin-top: 2.5rem; color: var(--muted); font-size: 0.84rem; }
-.footer-nav a { color: var(--accent); text-decoration: none; }
 
 /* --- Referrals v2: sources board, closeness chips, pods -------------------- */
 .src-board { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
@@ -182,7 +180,97 @@ details.fold > .fold-body { padding: 0 0.9rem 0.8rem; }
 .who-row { display: flex; align-items: baseline; gap: 0.7rem; padding: 0.4rem 0;
   border-top: 1px solid var(--border); flex-wrap: wrap; }
 .who-row:first-child { border-top: 0; }
+
+/* --- Prep Engine (/prep): inputs, unit cards, the heatmap ------------------- */
+.prep-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.6rem; }
+.prep-actions { display: flex; align-items: center; gap: 0.8rem; margin-top: 0.8rem; }
+
+/* Attach a CV / JD file. The real <input type=file> is hidden and driven by
+   its <label for>, so the control matches the rest of the UI instead of the
+   browser's native widget — but it stays a real focusable input, so keyboard
+   and screen-reader users get the normal file-picker behaviour. */
+.attach-row { display: flex; align-items: center; gap: 0.55rem; margin-top: 0.5rem;
+  flex-wrap: wrap; }
+.attach-row input[type="file"] { position: absolute; width: 1px; height: 1px;
+  opacity: 0; pointer-events: none; }
+.attach {
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+  border-radius: 999px; padding: 0.3rem 0.8rem; font-size: 0.82rem; cursor: pointer;
+  white-space: nowrap; transition: border-color 0.15s, color 0.15s;
+}
+.attach:hover { border-color: var(--accent); color: var(--accent); }
+/* :has() because the label precedes the input in the DOM — a sibling
+   combinator only looks forward, so it could never reach the label. */
+.attach-row:has(input[type="file"]:focus-visible) .attach {
+  outline: 2px solid var(--accent); outline-offset: 2px; color: var(--accent);
+}
+.attach-row .hint { margin: 0; font-size: 0.8rem; min-width: 0; overflow-wrap: anywhere; }
+
+.unit-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.7rem; margin-top: 0.6rem; }
+.unit { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 0.7rem 0.8rem; font-size: 0.88rem; }
+.unit.fail { border-color: var(--warn); }
+.unit small { color: var(--muted); display: block; margin: 0.15rem 0 0.3rem; }
+.unit p { margin: 0.3rem 0; }
+.unit .metric { font-size: 0.82rem; }
+.unit .nometric { color: var(--muted); font-style: italic; }
+.unit details summary { color: var(--muted); font-size: 0.78rem; cursor: pointer; margin-top: 0.3rem; }
+.unit blockquote { margin: 0.3rem 0 0; padding-left: 0.6rem; border-left: 2px solid var(--border); color: var(--muted); font-size: 0.8rem; }
+
+/* The hero screen: red/amber/green must read at a glance. */
+table.hm { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+table.hm th { color: var(--muted); font-weight: 500; font-size: 0.76rem; text-transform: uppercase; text-align: left; }
+table.hm th, table.hm td { padding: 0.55rem 0.5rem; border-top: 1px solid var(--border); vertical-align: top; }
+table.hm tr:first-child th { border-top: 0; }
+table.hm td.w { color: var(--accent); letter-spacing: 0.12em; white-space: nowrap; }
+.hm-cell { display: inline-block; border-radius: 999px; padding: 0.12rem 0.7rem; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; }
+.hm-cell.green { background: rgba(74, 222, 128, 0.14); color: var(--good); border: 1px solid var(--good); }
+.hm-cell.amber { background: rgba(251, 191, 36, 0.12); color: var(--warn); border: 1px solid var(--warn); }
+.hm-cell.red { background: rgba(248, 113, 113, 0.12); color: var(--bad); border: 1px solid var(--bad); }
+.gap { font-size: 0.82rem; color: var(--muted); display: block; max-width: 34ch; }
+
+.story-body { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 0.8rem 1rem; white-space: pre-wrap; margin: 0.4rem 0 0.8rem; }
+.claims { border-left: 3px solid var(--warn); background: rgba(251, 191, 36, 0.07); border-radius: 0 8px 8px 0; padding: 0.6rem 0.9rem; margin: 0.6rem 0; font-size: 0.88rem; }
+.claims ul { margin: 0.35rem 0 0; padding-left: 1.2rem; }
+
+/* v1/v2: bank editing, applications dashboard, devil's advocate, verdicts */
+.unit-act { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+.unit-form { display: flex; flex-direction: column; gap: 0.4rem; }
+.unit-form input, .unit-form textarea { font-size: 0.85rem; }
+.unit-form label.pill { cursor: pointer; user-select: none; }
+.unit-form label.pill.on, .pill.on { border-color: var(--good); color: var(--good); }
+.app-row { display: flex; align-items: center; gap: 0.7rem; padding: 0.55rem 0.2rem;
+  border-top: 1px solid var(--border); flex-wrap: wrap; }
+.app-row:first-child { border-top: 0; }
+.app-row .who { flex: 1; min-width: 200px; }
+.app-row .who small { display: block; }
+.app-row .act { display: flex; gap: 0.35rem; }
+.hm-mini { font-size: 0.85rem; letter-spacing: 0.06em; }
+.hm-mini .g { color: var(--good); font-style: normal; }
+.hm-mini .a { color: var(--warn); font-style: normal; }
+.hm-mini .r { color: var(--bad); font-style: normal; }
+.pill.solid { border-color: var(--good); color: var(--good); }
+.pill.held { border-color: var(--good); color: var(--good); }
+.pill.cracked { border-color: var(--bad); color: var(--bad); }
+.attack { border-left: 2px solid var(--border); padding: 0.4rem 0 0.4rem 0.8rem; margin: 0.5rem 0; }
+.attack textarea { margin-top: 0.35rem; }
+
+/* v3: grill room, learning plan, loop map */
+.attack .w { color: var(--accent); letter-spacing: 0.12em; white-space: nowrap; font-size: 0.8rem; margin-left: 0.4rem; }
+.attack ul { margin: 0.35rem 0 0.2rem; padding-left: 1.2rem; }
+.attack a { color: var(--accent); }
+details.round { border-top: 1px solid var(--border); padding: 0.45rem 0.2rem; }
+details.round:first-child { border-top: 0; }
+details.round > summary { cursor: pointer; }
+details.round > summary::marker { color: var(--muted); }
+details.round p, details.round ul { margin: 0.4rem 0 0.2rem; font-size: 0.88rem; }
+details.round ul { padding-left: 1.2rem; }
+
 @media (max-width: 560px) {
   .auth-email { flex-direction: column; }
   .msg { max-width: 100%; }
+  .prep-inputs { grid-template-columns: 1fr; }
+  /* Thumbs, not cursors: the compact variants are comfortable to click and
+     fiddly to tap, so they get their height back on a phone. */
+  .chip { padding: 0.55rem 0.9rem; }
+  .btn.small { padding: 0.5rem 0.8rem; }
 }
