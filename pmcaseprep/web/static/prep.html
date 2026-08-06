@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Prep Engine — true stories, tuned to the role</title>
-  <link rel="stylesheet" href="/static/hub.css" />
+  <link rel="stylesheet" href="/static/hub.css?v=2" />
 </head>
 <body>
   <div class="wrap">
@@ -36,6 +36,11 @@
             merges into your bank; it never duplicates. Numbers you actually have; the
             engine will never add ones you don't.</p>
             <textarea id="cvText" rows="10" placeholder="e.g. Led checkout revamp at Acme (team of 6). Cut drop-off 18%. Also: the failed loyalty launch I killed after 2 sprints…"></textarea>
+            <div class="attach-row">
+              <label class="attach" for="cvFile">Attach CV file</label>
+              <input type="file" id="cvFile" accept=".pdf,.docx,.txt,.md,.markdown,.rtf" />
+              <span class="hint" id="cvFileMsg"></span>
+            </div>
           </div>
           <div>
             <h3>Job description <span class="pill">optional</span></h3>
@@ -43,6 +48,11 @@
             unwritten pain behind the hire. No JD? Leave it empty and prep for the
             role in general — optionally narrow it to a role category below.</p>
             <textarea id="jdText" rows="10" placeholder="Paste the full job description here — or leave this empty to prep for the role in general…"></textarea>
+            <div class="attach-row">
+              <label class="attach" for="jdFile">Attach JD file</label>
+              <input type="file" id="jdFile" accept=".pdf,.docx,.txt,.md,.markdown,.rtf" />
+              <span class="hint" id="jdFileMsg"></span>
+            </div>
             <!-- Only meaningful without a JD: with one, the posting decides. -->
             <div class="preset-row" id="roleHint" style="margin-top:0.6rem">
               <label class="hint" for="hintArchetype">Role category (optional)</label>
@@ -180,6 +190,6 @@
     </div>
   </div>
   <script src="/static/shared.js?v=1"></script>
-  <script src="/static/prep.js?v=3"></script>
+  <script src="/static/prep.js?v=4"></script>
 </body>
 </html>

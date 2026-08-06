@@ -105,6 +105,23 @@ matters:
   `load_prompt()`/`fill_prompt()` (raises on a missing `<PLACEHOLDER>`). Never
   inline a prompt in code. Tests pin the load-bearing guardrail phrases inside
   the prompt files — edit wording freely, keep those phrases.
+- **Every model call goes through `_parse()` and must set `thinking`.** This is
+  load-bearing, not style. Omitting `thinking` used to mean "no thinking"; on
+  `claude-sonnet-5` / `claude-opus-5` (and `PREP_MODEL` defaults to Sonnet 5) it
+  means *adaptive* thinking, and `max_tokens` caps thinking and the JSON
+  **together**. A long CV then spends the budget reasoning, the JSON truncates
+  mid-object, `messages.parse()` raises, and the browser shows "the engine hit a
+  snag" — which is exactly how `/prep-ds` broke. `_thinking_for()` disables
+  thinking for the extraction/scoring calls and takes `adaptive=True` for the
+  few that want a beat of thought (storycraft, grading, sequencing); Fable and
+  Mythos omit the field entirely because an explicit `disabled` is a 400 there.
+  Adding a call site? Route it through `_parse()` and give it real headroom —
+  `PREP_MAX_CHARS` is 24 000, so extraction output is large.
+- **`POST /api/prep/upload`** (`prep_files.py`) turns an attached CV/JD — PDF,
+  DOCX, RTF, or text — into the string the paste box holds, and stops there.
+  Deliberately no model call and no auto-build: PDF→text is the one lossy step
+  in the flow, so the user reads and fixes it *before* spending a build. It
+  takes the cheap sqlite budget, not the prep model budget.
 - **Truthfulness is enforced in code, not just prompts**: deterministic audits
   run on every model response — `sanitize_units` nulls extracted metrics whose
   digits aren't in the source text, `sanitize_heatmap` downgrades "green" cells

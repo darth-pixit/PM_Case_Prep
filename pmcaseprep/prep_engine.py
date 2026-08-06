@@ -538,6 +538,72 @@ def _taxonomy_str(taxonomy: Optional[tuple[str, ...]] = None) -> str:
     return ", ".join(taxonomy if taxonomy is not None else TAXONOMY)
 
 
+class PrepTruncated(RuntimeError):
+    """The model ran out of output budget before finishing its JSON.
+
+    Its own class because it is the one engine failure with a *user* fix
+    (shorten the input) rather than an operator fix, so the web layer can say
+    so instead of showing the generic error.
+    """
+
+
+def _thinking_for(model: str, adaptive: bool = False) -> Optional[dict]:
+    """The `thinking` setting for a model call — never left to default.
+
+    Most calls in this module are the same shape: read some text, emit JSON
+    against a fixed schema. There is no multi-step reasoning to do, so thinking
+    buys nothing there — and leaving it unset actively breaks the call on
+    current models. Omitting `thinking` used to mean "no thinking"; on
+    claude-sonnet-5 and claude-opus-5 it means ADAPTIVE thinking, and
+    `max_tokens` caps the thinking and the JSON *together*. A long CV then
+    spends the budget reasoning, the JSON truncates mid-object, and
+    messages.parse() raises — which is what reaches the browser as "the engine
+    hit a snag".
+
+    So we always say what we want, and `adaptive=True` is how a call that
+    genuinely wants a beat of thought (storycraft) asks for it explicitly
+    rather than by omission. Fable/Mythos are the exception in the other
+    direction: thinking is always on there and an explicit
+    {"type": "disabled"} is a 400, so for those we omit the field entirely.
+    """
+    lowered = model.lower()
+    if "fable" in lowered or "mythos" in lowered:
+        return None
+    return {"type": "adaptive"} if adaptive else {"type": "disabled"}
+
+
+def _parse(
+    client: Any,
+    *,
+    model: str,
+    prompt: str,
+    output_format: type,
+    max_tokens: int,
+    adaptive: bool = False,
+    system: Optional[list[dict]] = None,
+) -> Any:
+    """Every structured call goes through here, so the thinking setting and the
+    truncation check can never drift apart across the fourteen call sites."""
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+        "output_format": output_format,
+    }
+    thinking = _thinking_for(model, adaptive)
+    if thinking is not None:
+        kwargs["thinking"] = thinking
+    if system is not None:
+        kwargs["system"] = system
+    resp = client.messages.parse(**kwargs)
+    # Belt and braces: a schema loose enough to validate a short answer can
+    # still have been cut off. Don't hand back a half-read CV as if it were
+    # the whole thing.
+    if getattr(resp, "stop_reason", None) == "max_tokens":
+        raise PrepTruncated(f"{output_format.__name__} hit max_tokens ({max_tokens})")
+    return resp.parsed_output
+
+
 def extract_units(
     client: Any, cv_text: str, model: str, track_key: str = "pm"
 ) -> list[AchievementUnit]:
@@ -548,13 +614,16 @@ def extract_units(
         TAXONOMY=_taxonomy_str(tr["taxonomy"]),
         CV_OR_BRAINDUMP=cv_text,
     )
-    resp = client.messages.parse(
+    # The heaviest call in the engine: one object per achievement, each one
+    # quoting its source line back verbatim, for a CV up to PREP_MAX_CHARS.
+    parsed = _parse(
+        client,
         model=model,
-        max_tokens=8000,
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=ExtractedUnits,
+        max_tokens=16000,
     )
-    raw = [u.model_dump() for u in resp.parsed_output.units]
+    raw = [u.model_dump() for u in parsed.units]
     return sanitize_units(raw, cv_text, taxonomy=tr["taxonomy"])
 
 
@@ -628,13 +697,14 @@ def extract_target(
         ARCHETYPES=tr["archetypes"],
         JOB_DESCRIPTION=jd_text,
     )
-    resp = client.messages.parse(
+    parsed = _parse(
+        client,
         model=model,
-        max_tokens=3000,
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=TargetProfile,
+        max_tokens=6000,
     )
-    return sanitize_target(resp.parsed_output, track_key=tr["key"])
+    return sanitize_target(parsed, track_key=tr["key"])
 
 
 def score_coverage(
@@ -647,13 +717,14 @@ def score_coverage(
             [rc.model_dump() for rc in target.requiredCompetencies]
         ),
     )
-    resp = client.messages.parse(
+    parsed = _parse(
+        client,
         model=model,
-        max_tokens=4000,
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=Heatmap,
+        max_tokens=8000,
     )
-    raw = [c.model_dump() for c in resp.parsed_output.cells]
+    raw = [c.model_dump() for c in parsed.cells]
     return sanitize_heatmap(raw, target, units)
 
 
@@ -670,14 +741,17 @@ def craft_story(
         COMPETENCY=competency,
         REFERENCED_UNITS_JSON=json.dumps([u.model_dump() for u in units]),
     )
-    resp = client.messages.parse(
+    parsed = _parse(
+        client,
         model=model,
-        max_tokens=5000,
-        thinking={"type": "adaptive"},  # storycraft benefits from a beat of thought
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=Story,
+        # Storycraft benefits from a beat of thought, so this one keeps
+        # adaptive thinking — and gets the headroom to pay for it.
+        adaptive=True,
+        max_tokens=12000,
     )
-    return audit_story(resp.parsed_output, units)
+    return audit_story(parsed, units)
 
 
 # --- v1: Devil's Advocate (pressure-test until solid) -------------------------
@@ -708,14 +782,15 @@ def devils_advocate(
         UNITS_JSON=json.dumps([u.model_dump() for u in units]),
         EXCHANGES_JSON=json.dumps(exchanges),
     )
-    resp = client.messages.parse(
+    parsed = _parse(
+        client,
         model=model,
-        max_tokens=3000,
-        thinking={"type": "adaptive"},  # judging answers fairly needs care
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=AttackRound,
+        adaptive=True,  # judging answers fairly needs care
+        max_tokens=8000,
     )
-    return sanitize_attack_round(resp.parsed_output, len(exchanges))
+    return sanitize_attack_round(parsed, len(exchanges))
 
 
 # --- v2: Gap-to-Sprint (red cell -> 2-week credibility plan) ------------------
@@ -730,13 +805,13 @@ def gap_sprint(
         GAP_ACTION=gap_action or "no evidence yet",
         TARGET_JSON=json.dumps(target.model_dump()),
     )
-    resp = client.messages.parse(
+    sprint = _parse(
+        client,
         model=model,
-        max_tokens=3000,
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=GapSprint,
+        max_tokens=6000,
     )
-    sprint = resp.parsed_output
     if not sprint.milestones:
         raise ValueError("sprint came back without milestones")
     return sprint
@@ -760,13 +835,13 @@ def interviewer_twin(
         SIGNALS=signals,
         TARGET_JSON=json.dumps(target.model_dump()),
     )
-    resp = client.messages.parse(
+    twin = _parse(
+        client,
         model=model,
-        max_tokens=3000,
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=InterviewerTwin,
+        max_tokens=6000,
     )
-    twin = resp.parsed_output
     twin.predictedQuestions = twin.predictedQuestions[:8]
     return twin
 
@@ -794,18 +869,27 @@ def mock_reply(
 ) -> str:
     """One interviewer turn. The transcript lives in the browser; the system
     prompt (stable across the whole mock) is cached like the recruiter's."""
-    resp = client.messages.create(
-        model=model,
-        max_tokens=600,  # real interviewers ask short questions
-        system=[
+    # 600 tokens is the right size for an interviewer's question, but it is
+    # only safe as a ceiling once thinking is off: with thinking left to
+    # default, a Claude 5 model spends the whole 600 reasoning and the reply
+    # comes back empty. Keep the question short by instruction, not by a
+    # budget the model has to share.
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "max_tokens": 2000,
+        "system": [
             {
                 "type": "text",
                 "text": mock_system(target, cells),
                 "cache_control": {"type": "ephemeral"},
             }
         ],
-        messages=messages,
-    )
+        "messages": messages,
+    }
+    thinking = _thinking_for(model)
+    if thinking is not None:
+        kwargs["thinking"] = thinking
+    resp = client.messages.create(**kwargs)
     return "".join(b.text for b in resp.content if b.type == "text").strip()
 
 
@@ -817,14 +901,14 @@ def mock_scorecard(
         TARGET_JSON=json.dumps(target.model_dump()),
         TRANSCRIPT=transcript,
     )
-    resp = client.messages.parse(
+    return _parse(
+        client,
         model=model,
-        max_tokens=3000,
-        thinking={"type": "adaptive"},  # grading deserves the careful path
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=MockScorecard,
+        adaptive=True,  # grading deserves the careful path
+        max_tokens=8000,
     )
-    return resp.parsed_output
 
 
 # --- v2: debrief -> write-back ------------------------------------------------
@@ -843,13 +927,13 @@ def debrief_insights(
         TARGET_JSON=json.dumps(target.model_dump()),
         NOTES=notes,
     )
-    resp = client.messages.parse(
+    insights = _parse(
+        client,
         model=model,
-        max_tokens=4000,
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=DebriefInsights,
+        max_tokens=8000,
     )
-    insights = resp.parsed_output
     insights.suggestedUnits = sanitize_units(
         [u.model_dump() for u in insights.suggestedUnits],
         source=notes,
@@ -910,13 +994,14 @@ def grill_map(
         TARGET_JSON=json.dumps(target.model_dump()),
         UNITS_JSON=json.dumps([u.model_dump() for u in units]),
     )
-    resp = client.messages.parse(
+    parsed = _parse(
+        client,
         model=model,
-        max_tokens=8000,
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=GrillMap,
+        max_tokens=12000,
     )
-    return sanitize_grill_map([r.model_dump() for r in resp.parsed_output.rows], units)
+    return sanitize_grill_map([r.model_dump() for r in parsed.rows], units)
 
 
 def project_grill(
@@ -940,14 +1025,15 @@ def project_grill(
         UNITS_JSON=json.dumps([u.model_dump() for u in units]),
         EXCHANGES_JSON=json.dumps(exchanges),
     )
-    resp = client.messages.parse(
+    parsed = _parse(
+        client,
         model=model,
-        max_tokens=3000,
-        thinking={"type": "adaptive"},  # judging answers fairly needs care
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=GrillRound,
+        adaptive=True,  # judging answers fairly needs care
+        max_tokens=8000,
     )
-    return sanitize_grill_round(resp.parsed_output, len(exchanges))
+    return sanitize_grill_round(parsed, len(exchanges))
 
 
 # --- v3: the learning plan (suggested learnings from JD + heatmap) ------------
@@ -1040,14 +1126,15 @@ def learning_plan(
         UNITS_SUMMARY_JSON=json.dumps(units_summary),
         RESOURCES_JSON=json.dumps(resource_pool(tr["key"])),
     )
-    resp = client.messages.parse(
+    parsed = _parse(
+        client,
         model=model,
-        max_tokens=6000,
-        thinking={"type": "adaptive"},  # sequencing a study plan deserves a beat
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=LearningPlan,
+        adaptive=True,  # sequencing a study plan deserves a beat
+        max_tokens=12000,
     )
-    return sanitize_learning_plan(resp.parsed_output, target, cells, tr["key"])
+    return sanitize_learning_plan(parsed, target, cells, tr["key"])
 
 
 # --- v1: delivery self-check (rehearse one answer aloud) ----------------------
@@ -1080,10 +1167,10 @@ def delivery_check(
         QUESTION=question,
         TRANSCRIPT=transcript,
     )
-    resp = client.messages.parse(
+    return _parse(
+        client,
         model=model,
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}],
+        prompt=prompt,
         output_format=DeliveryCheck,
+        max_tokens=4000,
     )
-    return resp.parsed_output
